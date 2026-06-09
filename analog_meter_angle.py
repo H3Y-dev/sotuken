@@ -7,6 +7,8 @@
   4. 針をOpenCVで自動検出して角度を表示
 """
 
+#初プッシュしてみるよーーー☆
+
 import cv2
 import numpy as np
 import tkinter as tk
