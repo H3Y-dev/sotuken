@@ -6,7 +6,7 @@
   3. 基準となる0の目盛り方向をクリック
   4. 針をOpenCVで自動検出して角度を表示
 """
-
+#kippeikukndayo
 import cv2
 import numpy as np
 import tkinter as tk
