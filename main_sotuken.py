@@ -18,6 +18,31 @@ import re
 import shutil
 
 
+def _preprocess_for_ocr(img):
+    """OCR用前処理: CLAHE でコントラスト均等化 → ガウシアンブラー → 大津二値化"""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    return thresh
+
+
+def _rotate_crop(crop, angle):
+    """切り出し画像を端がクリッピングされないよう回転する"""
+    h, w = crop.shape[:2]
+    cx, cy = w / 2, h / 2
+    angle_rad = np.radians(angle)
+    new_w = int(abs(w * np.cos(angle_rad)) + abs(h * np.sin(angle_rad)))
+    new_h = int(abs(w * np.sin(angle_rad)) + abs(h * np.cos(angle_rad)))
+    M = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
+    M[0, 2] += (new_w - w) / 2
+    M[1, 2] += (new_h - h) / 2
+    return cv2.warpAffine(crop, M, (new_w, new_h),
+                          flags=cv2.INTER_CUBIC,
+                          borderMode=cv2.BORDER_REPLICATE)
+
+
 class MeterAngleDetector:
     def __init__(self, root):
         self.root = root
@@ -297,48 +322,79 @@ class MeterAngleDetector:
             if tess_cmd:
                 pytesseract.pytesseract.tesseract_cmd = tess_cmd
 
-            # 前処理: 2倍拡大 → 暗背景なら反転 → Otsu 2値化
-            scale = 2
-            gray_ocr = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            enlarged = cv2.resize(gray_ocr, None, fx=scale, fy=scale,
-                                  interpolation=cv2.INTER_CUBIC)
-            is_dark_bg = float(np.mean(gray_ocr)) < 128
-            prep = cv2.bitwise_not(enlarged) if is_dark_bg else enlarged
-            blurred = cv2.GaussianBlur(prep, (5, 5), 0)
-            _, thresh = cv2.threshold(blurred, 0, 255,
-                                      cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            pil_img = Image.fromarray(thresh)
+            # ── 前処理: CLAHE + ガウシアンブラー + 大津二値化 ──
+            # ocr_meter.py の手法を使用。明るさのムラに強くノイズを減らせる。
+            thresh = _preprocess_for_ocr(img)
 
-            data = pytesseract.image_to_data(
-                pil_img,
-                output_type=pytesseract.Output.DICT,
-                lang="eng",
-                config="--psm 11",
-            )
+            # ── モルフォロジー処理: 文字の画素を繋げて輪郭として検出しやすくする ──
+            kn = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            dilated = cv2.dilate(thresh, kn, iterations=1)
+            kn_s = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kn_s)
+
+            # ── 輪郭検出 ──
+            contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL,
+                                            cv2.CHAIN_APPROX_SIMPLE)
+
+            # 画像サイズに応じたフィルター閾値（固定値だと解像度が違う画像で失敗するため）
+            ih, iw = img.shape[:2]
+            min_w = max(15, int(iw * 0.02))
+            min_h = max(10, int(ih * 0.02))
+            max_w = int(iw * 0.25)
+            max_h = int(ih * 0.25)
 
             zero_direct = []
-            best_hits = {}  # val → (conf, bx, by)  同一値は高信頼度のみ残す
+            best_hits = {}  # val → (bx, by)
 
-            for i, text in enumerate(data["text"]):
-                t = text.strip()
-                if not t:
+            ocr_config = r'--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789'
+
+            for cnt in contours:
+                rx, ry, rw, rh = cv2.boundingRect(cnt)
+
+                # サイズフィルター
+                if rw < min_w or rh < min_h or rw > max_w or rh > max_h:
                     continue
-                conf = int(data["conf"][i])
-                bx = (data["left"][i] + data["width"][i] // 2) // scale
-                by = (data["top"][i] + data["height"][i] // 2) // scale
+                # アスペクト比フィルター（数字らしい形かチェック）
+                aspect = rw / rh
+                if aspect > 5.0 or aspect < 0.2:
+                    continue
 
-                if t == "0":
-                    zero_direct.append((bx, by))
+                # ── 傾き補正 ──
+                # 円形メーターの数字は位置によって傾いているため、
+                # メーター中心との角度から補正量を計算して回転させる。
+                # 12時方向(極角90°)の文字を基準(補正0°)とする。
+                cnt_cx = rx + rw // 2
+                cnt_cy = ry + rh // 2
+                dx = cnt_cx - cx
+                dy = cy - cnt_cy  # 画像y軸は下向きなので反転
+                polar = np.degrees(np.arctan2(dy, dx))
+                correction = 90.0 - polar
 
-                nums = re.findall(r"\d+", t)
-                if nums and conf > 40:
-                    val = int(nums[0])
-                    if 1 <= val <= 9999:
-                        if val not in best_hits or conf > best_hits[val][0]:
-                            best_hits[val] = (conf, bx, by)
+                margin = 10
+                ymin = max(0, ry - margin)
+                ymax = min(ih, ry + rh + margin)
+                xmin = max(0, rx - margin)
+                xmax = min(iw, rx + rw + margin)
+                cropped = thresh[ymin:ymax, xmin:xmax]
 
-            numeric_hits = [(val, bx, by)
-                            for val, (_, bx, by) in best_hits.items()]
+                # 回転補正 → 2倍拡大 → OCR
+                corrected = _rotate_crop(cropped, correction)
+                scaled = cv2.resize(corrected, None, fx=2.0, fy=2.0,
+                                    interpolation=cv2.INTER_CUBIC)
+                text_raw = pytesseract.image_to_string(
+                    scaled, config=ocr_config).strip()
+                text = re.sub(r'[^0-9]', '', text_raw)
+                if not text:
+                    continue
+
+                val = int(text)
+                if val == 0:
+                    zero_direct.append((cnt_cx, cnt_cy))
+                elif 1 <= val <= 9999:
+                    if val not in best_hits:
+                        best_hits[val] = (cnt_cx, cnt_cy)
+
+            numeric_hits = [(val, bx, by) for val, (bx, by) in best_hits.items()]
 
             # OCRで読めた最大の数値を「最大目盛り」として採用
             if numeric_hits:
