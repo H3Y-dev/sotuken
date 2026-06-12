@@ -31,6 +31,31 @@ def preprocess(img):
     return thresh
 
 
+def rotate_crop(crop, angle):
+    """
+    画像を指定した角度だけ回転させる。
+    回転後に端が切れないよう、画像サイズを自動で広げる。
+
+    angle: 回転角度（度）。正の値 = 反時計回り
+    """
+    h, w = crop.shape[:2]
+    cx, cy = w / 2, h / 2
+
+    # 回転後に必要な画像サイズを計算（三角関数で求める）
+    angle_rad = np.radians(angle)
+    new_w = int(abs(w * np.cos(angle_rad)) + abs(h * np.sin(angle_rad)))
+    new_h = int(abs(w * np.sin(angle_rad)) + abs(h * np.cos(angle_rad)))
+
+    # 回転行列を作成し、中心がずれないよう平行移動を加える
+    M = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
+    M[0, 2] += (new_w - w) / 2
+    M[1, 2] += (new_h - h) / 2
+
+    return cv2.warpAffine(crop, M, (new_w, new_h),
+                          flags=cv2.INTER_CUBIC,
+                          borderMode=cv2.BORDER_REPLICATE)
+
+
 def draw_debug_contours(img, contours):
     """
     検出した全輪郭を色分けして描画し、デバッグ画像として保存・表示する。
@@ -102,6 +127,12 @@ def main():
         return
 
     output_img = img.copy()
+    img_h, img_w = img.shape[:2]
+
+    # ★【追加】メーター中心座標（円形メーターは画像中心に近似）
+    # もし認識がズレる場合は、実際のメーター中心ピクセル座標に手動で修正する
+    meter_cx = img_w // 2
+    meter_cy = img_h // 2
 
     # 前処理（改善1・2が適用される）
     thresh = preprocess(img)
@@ -127,6 +158,10 @@ def main():
     draw_debug_contours(img, contours)
 
     print("--- OCR処理（フィルター通過分のみ）---")
+
+    # OCRで認識した数値を (数値, x, y, w, h) の形で蓄積し、後で最大値を特定する
+    ocr_results = []
+
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
 
@@ -143,42 +178,69 @@ def main():
         if aspect_ratio > 5.0 or aspect_ratio < 0.2:
             continue
 
-        print(f"塊を発見 -> 座標:({x}, {y}) 幅(w):{w}, 高さ(h):{h}, 縦横比:{aspect_ratio:.1f}")
+        # ★【追加】円形メーターの傾き補正
+        # 目盛りの数字は円周上に並ぶため、位置によって回転している。
+        # 例：右側（3時方向）の「120」「130」は約90°傾いている。
+        #
+        # 考え方：
+        #   - 輪郭の中心とメーター中心の角度（極角）を計算する
+        #   - 12時方向（極角90°）の文字は傾き0°（そのまま読める）
+        #   - 3時方向（極角0°）の文字は時計回りに90°傾いているので、
+        #     -90°回転させると正立する
+        #   - 補正角度 = 90° - 極角  という式で統一的に計算できる
+        cnt_cx = x + w // 2
+        cnt_cy = y + h // 2
+        dx = cnt_cx - meter_cx
+        dy = meter_cy - cnt_cy   # 画像のy軸は下向きなので反転する
+        polar_angle = np.degrees(np.arctan2(dy, dx))  # -180〜180 の範囲
+        text_correction = 90.0 - polar_angle
+
+        print(f"塊を発見 -> 座標:({x}, {y}) w={w} h={h} 極角={polar_angle:.1f}° 補正={text_correction:.1f}°")
 
         # 切り出しマージン
         margin = 10
         ymin = max(0, y - margin)
-        ymax = min(img.shape[0], y + h + margin)
+        ymax = min(img_h, y + h + margin)
         xmin = max(0, x - margin)
-        xmax = min(img.shape[1], x + w + margin)
+        xmax = min(img_w, x + w + margin)
 
         cropped = thresh[ymin:ymax, xmin:xmax]
+
+        # ★【追加】傾き補正：位置から計算した角度で回転させる
+        corrected = rotate_crop(cropped, text_correction)
 
         # ★【改善5: 画像を2倍に拡大してからOCRにかける】
         # Tesseractは文字が小さいと誤認識しやすい（推奨は文字高さ30px以上）。
         # 2倍に拡大するだけで認識率が大幅に向上することが多い。
         # INTER_CUBIC は拡大時に画質を保ちやすい補間方式。
         scale = 2.0
-        cropped_resized = cv2.resize(cropped, None, fx=scale, fy=scale,
+        cropped_resized = cv2.resize(corrected, None, fx=scale, fy=scale,
                                      interpolation=cv2.INTER_CUBIC)
 
         # ★【改善6: --oem 1 で LSTM エンジンを明示的に使う】
-        # Tesseract には古いエンジン（Legacy）と新しいエンジン（LSTM）がある。
-        # --oem 1 = LSTM のみ使用（より高精度。デフォルトの --oem 3 より安定することが多い）
-        # --psm 7 = 1行のテキストとして認識（元と同じ）
-        custom_config = r'--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789km/h'
+        # whitelist は数字のみ（温度計の目盛りは数字だけ）
+        custom_config = r'--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789'
         text_raw = pytesseract.image_to_string(cropped_resized, config=custom_config).strip()
 
-        # ★【改善7: 正規表現で数字・単位以外の文字を除去する】
-        # OCRが余計な記号（スペース、改行、句読点など）を返すことがある。
-        # 正規表現で「数字・k・m・/・h 以外」を全て取り除くことで、きれいな結果を得る。
-        text = re.sub(r'[^0-9km/h]', '', text_raw)
+        # ★【改善7: 正規表現で数字以外を除去する】
+        text = re.sub(r'[^0-9]', '', text_raw)
 
-        if text and text not in ['/', 'l', 'I', '|']:
+        if text:
             print(f"  └ 【OCR成功】: {text}  (元テキスト: '{text_raw}')")
+            ocr_results.append((int(text), x, y, w, h))
             cv2.rectangle(output_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(output_img, text, (x, y - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+    # ★【追加】認識した数値の中から最大値を特定して青枠で強調表示する
+    if ocr_results:
+        max_val, mx, my, mw, mh = max(ocr_results, key=lambda r: r[0])
+        print(f"\n★ 最大値: {max_val}")
+        cv2.rectangle(output_img, (mx, my), (mx + mw, my + mh), (255, 0, 0), 3)
+        cv2.putText(output_img, f"MAX:{max_val}", (mx, my - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+    else:
+        print("\n数値を認識できませんでした。")
 
     cv2.imshow("Step3: OCR結果", output_img)
     cv2.waitKey(0)
