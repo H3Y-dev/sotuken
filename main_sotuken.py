@@ -19,12 +19,43 @@ import shutil
 
 
 def _preprocess_for_ocr(img):
-    """OCR用前処理: CLAHE でコントラスト均等化 → ガウシアンブラー → 大津二値化"""
+    """輪郭検出用二値化: CLAHE + ガウシアンブラー + 大津二値化。
+
+    adaptive threshold は blockSize の近傍に背景・リム・目盛りが混在すると
+    盤面全体を白塗りにする誤検出を起こすため、グローバル大津に戻した。
+    """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    light_bg = float(np.mean(gray)) >= 128
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    gray = clahe.apply(gray)
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    equalized = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(equalized, (3, 3), 0)
     _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if light_bg:
+        thresh = cv2.bitwise_not(thresh)
+    return thresh
+
+
+def _preprocess_crop_for_ocr(crop_img):
+    """OCRクロップ用前処理: 元画像クロップを2倍拡大してアダプティブ二値化。
+
+    輪郭検出後の各クロップに対して局所的に前処理することで、
+    グローバル二値化の失敗が個々の文字認識に波及しない。
+    """
+    gray = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY) if len(crop_img.shape) == 3 else crop_img.copy()
+    light_bg = float(np.mean(gray)) >= 128
+    h, w = gray.shape
+    scaled = cv2.resize(gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+    blurred = cv2.GaussianBlur(scaled, (3, 3), 0)
+    # blockSize はクロップサイズに比例させ、奇数に丸める
+    block = max(11, (min(scaled.shape[:2]) // 3) | 1)
+    thresh = cv2.adaptiveThreshold(
+        blurred, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        blockSize=block, C=10
+    )
+    if light_bg:
+        thresh = cv2.bitwise_not(thresh)
     return thresh
 
 
@@ -322,12 +353,15 @@ class MeterAngleDetector:
             if tess_cmd:
                 pytesseract.pytesseract.tesseract_cmd = tess_cmd
 
-            # ── 前処理: CLAHE + ガウシアンブラー + 大津二値化 ──
-            # ocr_meter.py の手法を使用。明るさのムラに強くノイズを減らせる。
+            # ── 輪郭検出用二値化: CLAHE + 大津 ──
             thresh = _preprocess_for_ocr(img)
+            cv2.imwrite("debug_thresh_raw.jpg", thresh)  # 二値化直後を保存
 
-            # ── モルフォロジー処理: 文字の画素を繋げて輪郭として検出しやすくする ──
-            kn = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            # ── モルフォロジー処理: 文字ストロークを繋げる ──
+            # opening は「1」などの細い縦棒を消してしまうため使用しない。
+            # thresh の段階で数字はすでに個別分離されているので
+            # 3x3 dilation（旧 5x5 から縮小）で同一文字内のギャップだけ埋める。
+            kn = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
             dilated = cv2.dilate(thresh, kn, iterations=1)
             kn_s = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
             closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kn_s)
@@ -347,6 +381,13 @@ class MeterAngleDetector:
             best_hits = {}  # val → (bx, by)
 
             ocr_config = r'--oem 1 --psm 7 -c tessedit_char_whitelist=0123456789'
+
+            # ── デバッグ用: 検出した数字を画像に描いて保存する ──
+            debug_img = img.copy()
+            print("\n========== OCRデバッグ ==========")
+            print(f"中心: ({cx}, {cy}) / 検出輪郭数: {len(contours)}")
+            print(f"サイズ条件: 幅{min_w}〜{max_w}px, 高さ{min_h}〜{max_h}px")
+            print("-" * 60)
 
             for cnt in contours:
                 rx, ry, rw, rh = cv2.boundingRect(cnt)
@@ -375,15 +416,27 @@ class MeterAngleDetector:
                 ymax = min(ih, ry + rh + margin)
                 xmin = max(0, rx - margin)
                 xmax = min(iw, rx + rw + margin)
-                cropped = thresh[ymin:ymax, xmin:xmax]
+                # 元画像からクロップ（二値化前）して局所前処理を適用
+                cropped = img[ymin:ymax, xmin:xmax]
 
-                # 回転補正 → 2倍拡大 → OCR
+                # 回転補正 → 局所アダプティブ二値化(2倍拡大込み) → OCR
                 corrected = _rotate_crop(cropped, correction)
-                scaled = cv2.resize(corrected, None, fx=2.0, fy=2.0,
-                                    interpolation=cv2.INTER_CUBIC)
+                preprocessed = _preprocess_crop_for_ocr(corrected)
                 text_raw = pytesseract.image_to_string(
-                    scaled, config=ocr_config).strip()
+                    preprocessed, config=ocr_config).strip()
                 text = re.sub(r'[^0-9]', '', text_raw)
+
+                # ── デバッグ: この輪郭の結果をコンソールと画像に出す ──
+                # 認識できた=緑枠, 認識できなかった=赤枠
+                ok = bool(text)
+                box_color = (0, 200, 0) if ok else (0, 0, 255)
+                cv2.rectangle(debug_img, (rx, ry), (rx + rw, ry + rh), box_color, 2)
+                label = text if ok else "?"
+                cv2.putText(debug_img, label, (rx, ry - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
+                print(f"位置({rx:4d},{ry:4d}) サイズ{rw:3d}x{rh:3d} "
+                      f"補正{correction:6.1f}° → 生'{text_raw}' → 値'{text}'")
+
                 if not text:
                     continue
 
@@ -395,6 +448,17 @@ class MeterAngleDetector:
                         best_hits[val] = (cnt_cx, cnt_cy)
 
             numeric_hits = [(val, bx, by) for val, (bx, by) in best_hits.items()]
+
+            # ── デバッグ: 検出結果のまとめを出力＆画像保存 ──
+            print("-" * 60)
+            detected_vals = sorted(v for v, _, _ in numeric_hits)
+            print(f"読めた数字: {detected_vals}")
+            print(f"「0」直接検出: {len(zero_direct)}個")
+            cv2.imwrite("debug_ocr.jpg", debug_img)
+            cv2.imwrite("debug_binary.jpg", closed)  # 二値化後（白=検出対象）
+            print("→ 検出結果を debug_ocr.jpg に保存しました")
+            print("→ 二値化画像を debug_binary.jpg に保存しました")
+            print("=" * 33 + "\n")
 
             # OCRで読めた最大の数値を「最大目盛り」として採用
             if numeric_hits:
@@ -415,11 +479,18 @@ class MeterAngleDetector:
                 return
 
             # ── パス2: 他の数値から線形外挿 ──
-            if len(numeric_hits) < 3:
-                self.status_var.set("⚠️ OCRで「0」を検出できず。手動でクリックしてください")
+            # 「0」が印刷されていないメーター（例: 10から始まる温度計）でも、
+            # 読めた数字の角度から回帰直線を引いて「値=0 の角度」を逆算する。
+            # 2点あれば直線は引けるので、条件を 3個 → 2個 に緩和。
+            if len(numeric_hits) < 2:
+                self.status_var.set(
+                    f"⚠️ 数字を{len(numeric_hits)}個しか読めず0を計算できません。手動でクリックしてください")
                 messagebox.showwarning(
                     "OCR失敗",
-                    "「0」の目盛りを自動検出できませんでした。\n手動でクリックしてください。"
+                    f"数字を{len(numeric_hits)}個しか認識できませんでした。\n"
+                    "（0の位置を計算するには2個以上必要です）\n\n"
+                    "debug_ocr.jpg を見て、どの数字が認識できたか確認してください。\n"
+                    "手動でクリックして続けることもできます。"
                 )
                 return
 
@@ -490,6 +561,12 @@ class MeterAngleDetector:
 
             self.zero_point = (zx, zy)
             self.click_step = 3
+
+            # ── デバッグ: 外挿で求めた0の位置を出力 ──
+            print(f"外挿に使った数字: {sorted(fit_v)}")
+            print(f"計算した0の位置: ({zx}, {zy})  角度={math.degrees(zero_angle):.1f}°")
+            print("（debug_ocr.jpg の緑枠＝認識成功 を確認してください）\n")
+
             self.status_var.set("🔍 自動検出完了（線形外挿）、針を検出中...")
             self.root.update()
             self._detect_and_show()
