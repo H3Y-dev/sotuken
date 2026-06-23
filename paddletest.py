@@ -4,6 +4,7 @@ from PIL import Image
 
 # 1. 画像を読み込んでグレースケール（白黒）化
 # ※実際の画像ファイル名に合わせて変更してください（例: 'meter_image.jpg'）
+#コミットてすと
 image_path = 'rega1311_12_W1920_H836.jpg' 
 img = cv2.imread(image_path)
 
