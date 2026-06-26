@@ -1,16 +1,18 @@
 """
-アナログメーター針角度検出プログラム
+アナログメーター針角度検出・数値変換プログラム
 使い方:
   1. プログラムを起動して画像ファイルを選択
   2. 針の中心点をクリック
-  3. 基準となる0の目盛り方向をクリック
-  4. 針をOpenCVで自動検出して角度を表示
+  3. 0（最小値）の目盛り方向をクリック
+  4. フルスケール（最大値）の目盛り方向をクリック
+  5. 最小値・最大値をダイアログで入力
+  6. 針をOpenCVで自動検出して角度と数値を表示
 """
 
 import cv2
 import numpy as np
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import math
 
@@ -18,16 +20,20 @@ import math
 class MeterAngleDetector:
     def __init__(self, root):
         self.root = root
-        self.root.title("アナログメーター 角度検出")
+        self.root.title("アナログメーター 角度検出・数値変換")
         self.root.configure(bg="#1e1e2e")
 
         self.image_original = None   # OpenCV用 (BGR)
         self.image_display = None    # 表示用 (PIL)
         self.photo = None
 
-        self.center_point = None     # 針の中心点
-        self.zero_point = None       # 0の目盛り点
-        self.click_step = 0          # 0=中心待ち, 1=0目盛り待ち, 2=完了
+        self.center_point = None      # 針の中心点
+        self.zero_point = None        # 0（最小値）の目盛り点
+        self.fullscale_point = None   # フルスケール（最大値）の目盛り点
+        self.val_min = 0.0            # メーター最小値
+        self.val_max = 100.0          # メーター最大値
+        # 0=中心待ち, 1=ゼロ点待ち, 2=フルスケール点待ち, 3=完了
+        self.click_step = 0
 
         self.canvas_width = 800
         self.canvas_height = 600
@@ -43,7 +49,7 @@ class MeterAngleDetector:
         header.pack(fill=tk.X)
 
         tk.Label(
-            header, text="📐 アナログメーター 角度検出",
+            header, text="📐 アナログメーター 角度検出・数値変換",
             font=("Helvetica", 16, "bold"),
             fg="#cdd6f4", bg="#313244"
         ).pack(side=tk.LEFT, padx=16)
@@ -107,7 +113,7 @@ class MeterAngleDetector:
         )
         if not path:
             return
-        img = cv2.imread(path)
+        img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             messagebox.showerror("エラー", "画像を読み込めませんでした")
             return
@@ -117,6 +123,9 @@ class MeterAngleDetector:
     def reset(self):
         self.center_point = None
         self.zero_point = None
+        self.fullscale_point = None
+        self.val_min = 0.0
+        self.val_max = 100.0
         self.click_step = 0
         self.angle_var.set("")
         if self.image_original is not None:
@@ -172,12 +181,30 @@ class MeterAngleDetector:
         if self.click_step == 0:
             self.center_point = (ix, iy)
             self.click_step = 1
-            self.status_var.set("📍 Step 2: 0の目盛り方向をクリックしてください")
+            self.status_var.set("📍 Step 2: 0（最小値）の目盛り方向をクリックしてください")
             self._draw_markers()
 
         elif self.click_step == 1:
             self.zero_point = (ix, iy)
             self.click_step = 2
+            self.status_var.set("📍 Step 3: フルスケール（最大値）の目盛り方向をクリックしてください")
+            self._draw_markers()
+
+        elif self.click_step == 2:
+            self.fullscale_point = (ix, iy)
+            val_min = simpledialog.askfloat(
+                "最小値入力", "メーターの最小値を入力してください:",
+                initialvalue=0.0, parent=self.root)
+            if val_min is None:
+                return
+            val_max = simpledialog.askfloat(
+                "最大値入力", "メーターの最大値を入力してください:",
+                initialvalue=100.0, parent=self.root)
+            if val_max is None:
+                return
+            self.val_min = val_min
+            self.val_max = val_max
+            self.click_step = 3
             self.status_var.set("🔍 針を検出中...")
             self.root.update()
             self._detect_and_show()
@@ -189,12 +216,21 @@ class MeterAngleDetector:
             cv2.drawMarker(overlay, self.center_point, (0, 255, 100),
                            cv2.MARKER_CROSS, 30, 2)
             cv2.circle(overlay, self.center_point, 8, (0, 255, 100), -1)
+        if self.zero_point:
+            cv2.drawMarker(overlay, self.zero_point, (100, 220, 255),
+                           cv2.MARKER_CROSS, 20, 2)
+            cv2.circle(overlay, self.zero_point, 8, (100, 220, 255), -1)
+        if self.fullscale_point:
+            cv2.drawMarker(overlay, self.fullscale_point, (180, 100, 255),
+                           cv2.MARKER_CROSS, 20, 2)
+            cv2.circle(overlay, self.fullscale_point, 8, (180, 100, 255), -1)
         self._render(overlay)
 
-    # ── 針検出 & 角度表示 ────────────────────────────────────
+    # ── 針検出 & 角度・数値表示 ───────────────────────────────
     def _detect_and_show(self):
         cx, cy = self.center_point
         zx, zy = self.zero_point
+        fsx, fsy = self.fullscale_point
         img = self.image_original.copy()
         h, w = img.shape[:2]
 
@@ -215,22 +251,27 @@ class MeterAngleDetector:
         needle_line = None
         best_score = -1
 
+        # 中心点から直線までの距離の許容閾値（画像短辺の3%）
+        center_pass_thresh = min(h, w) * 0.03
+
         if lines is not None:
             for line in lines:
                 x1, y1, x2, y2 = line[0]
 
-                # 中心点に近い端点を持つ直線を優先
-                d1 = math.hypot(x1 - cx, y1 - cy)
-                d2 = math.hypot(x2 - cx, y2 - cy)
-                min_d = min(d1, d2)
+                # --- C案: 中心点を「通過」する直線のみを候補にする ---
+                # 点(cx,cy)から直線(x1,y1)-(x2,y2)への垂直距離
+                dx, dy = x2 - x1, y2 - y1
+                line_len = math.hypot(dx, dy)
+                if line_len == 0:
+                    continue
+                dist_to_center = abs(dy * cx - dx * cy + x2 * y1 - y2 * x1) / line_len
+                if dist_to_center > center_pass_thresh:
+                    continue  # 中心を通らない直線は除外
 
-                # 直線の長さ
-                length = math.hypot(x2 - x1, y2 - y1)
-
-                # スコア: 中心に近いほど・長いほど優先
-                score = length / (min_d + 1)
-                if score > best_score:
-                    best_score = score
+                # 直線の長さでスコア（中心を通る前提なので長いほど針らしい）
+                length = line_len
+                if length > best_score:
+                    best_score = length
                     needle_line = line[0]
 
         # --- 針の先端方向を決める ---
@@ -238,27 +279,76 @@ class MeterAngleDetector:
             x1, y1, x2, y2 = needle_line
             d1 = math.hypot(x1 - cx, y1 - cy)
             d2 = math.hypot(x2 - cx, y2 - cy)
-            # 中心から遠い方が先端
-            if d1 > d2:
-                tip_x, tip_y = x1, y1
-            else:
-                tip_x, tip_y = x2, y2
 
-            # 針ベクトル (中心→先端)
-            needle_vec = np.array([tip_x - cx, tip_y - cy], dtype=float)
-            # 基準ベクトル (中心→0目盛り)
+            # --- 線分の「向き」から針方向を確定（端点位置に依存しない）---
+            # 線分方向ベクトル（中心→遠端側に合わせる）
+            ndx, ndy = float(x2 - x1), float(y2 - y1)
+            far_x, far_y = (x1, y1) if d1 > d2 else (x2, y2)
+            if (far_x - cx) * ndx + (far_y - cy) * ndy < 0:
+                ndx, ndy = -ndx, -ndy  # 先端側へ向きを反転
+            n_len = math.hypot(ndx, ndy)
+            ndx, ndy = ndx / n_len, ndy / n_len  # 単位ベクトル
+
+            # エッジ画像を中心から針方向にスキャンして実際の先端を探す
+            # 一定ピクセル以上エッジが途切れたら先端を過ぎたと判断して停止
+            gap_thresh = max(8, int(min(h, w) * 0.025))
+            max_scan   = int(min(h, w) * 0.60)
+            tip_x, tip_y = far_x, far_y  # デフォルト（旧来の端点）
+            consecutive_empty = 0
+            for r in range(3, max_scan):
+                px = int(cx + ndx * r + 0.5)
+                py = int(cy + ndy * r + 0.5)
+                if not (0 <= px < w and 0 <= py < h):
+                    break
+                if edges[py, px] > 0:
+                    tip_x, tip_y = px, py
+                    consecutive_empty = 0
+                else:
+                    consecutive_empty += 1
+                    if consecutive_empty > gap_thresh:
+                        break  # 針の先端を過ぎた
+
+            # 表示用: 針とゼロ基準の間の角度（dot積、0〜180°）
             zero_vec = np.array([zx - cx, zy - cy], dtype=float)
+            cos_a = np.dot([ndx, ndy], zero_vec) / (np.linalg.norm(zero_vec) + 1e-9)
+            abs_angle = math.degrees(math.acos(np.clip(cos_a, -1.0, 1.0)))
 
-            # 内角 (0〜180°)
-            cos_a = np.dot(needle_vec, zero_vec) / (
-                np.linalg.norm(needle_vec) * np.linalg.norm(zero_vec) + 1e-9
-            )
-            cos_a = np.clip(cos_a, -1.0, 1.0)
-            angle_deg = math.degrees(math.acos(cos_a))
+            # --- 2点キャリブレーション: atan2 + 方向自動選択 ---
+            # 各点の絶対角度（atan2はimage座標そのまま使用）
+            theta_zero   = math.atan2(zy  - cy, zx  - cx)
+            theta_full   = math.atan2(fsy - cy, fsx - cx)
+            theta_needle = math.atan2(ndy, ndx)  # 線分の向きから直接計算
+            two_pi = 2 * math.pi
 
-            # 符号付き角度 (外積のZ成分で方向判定)
-            cross_z = needle_vec[0] * zero_vec[1] - needle_vec[1] * zero_vec[0]
-            signed_angle = angle_deg if cross_z >= 0 else -angle_deg
+            def _arc_ratio(th_pt, th_from, th_to, cw):
+                """th_from→th_toをcw方向で進んだとき、th_ptが何割の位置か。"""
+                if cw:
+                    span   = (th_to   - th_from) % two_pi
+                    offset = (th_pt   - th_from) % two_pi
+                else:
+                    span   = (th_from - th_to)   % two_pi
+                    offset = (th_from - th_pt)   % two_pi
+                return (offset / span) if span > 1e-6 else None
+
+            r_cw  = _arc_ratio(theta_needle, theta_zero, theta_full, cw=True)
+            r_ccw = _arc_ratio(theta_needle, theta_zero, theta_full, cw=False)
+            ok_cw  = r_cw  is not None and 0.0 <= r_cw  <= 1.0
+            ok_ccw = r_ccw is not None and 0.0 <= r_ccw <= 1.0
+
+            if ok_cw and not ok_ccw:
+                ratio = r_cw
+            elif ok_ccw and not ok_cw:
+                ratio = r_ccw
+            elif ok_cw and ok_ccw:
+                # 両方有効: スパンが大きい方（弧が長い＝より合理的）を優先
+                span_cw  = (theta_full - theta_zero) % two_pi
+                span_ccw = (theta_zero - theta_full) % two_pi
+                ratio = r_cw if span_cw >= span_ccw else r_ccw
+            else:
+                ratio = max(0.0, min(1.0, r_cw if r_cw is not None else 0.0))
+
+            value = self.val_min + ratio * (self.val_max - self.val_min)
+            value_valid = True
 
             # ── 結果を画像に描画 ──────────────────────────
             # 検出直線
@@ -266,6 +356,9 @@ class MeterAngleDetector:
 
             # 基準線 (中心 → 0目盛り)
             cv2.line(img, (cx, cy), (zx, zy), (100, 220, 255), 2)
+
+            # フルスケール基準線 (中心 → フルスケール目盛り)
+            cv2.line(img, (cx, cy), (fsx, fsy), (180, 100, 255), 2)
 
             # 中心点
             cv2.circle(img, (cx, cy), 8, (0, 255, 100), -1)
@@ -277,16 +370,25 @@ class MeterAngleDetector:
             cv2.drawMarker(img, (zx, zy), (100, 220, 255),
                            cv2.MARKER_CROSS, 20, 2)
 
+            # フルスケール目盛り点
+            cv2.circle(img, (fsx, fsy), 8, (180, 100, 255), -1)
+            cv2.drawMarker(img, (fsx, fsy), (180, 100, 255),
+                           cv2.MARKER_CROSS, 20, 2)
+
             # 先端点
             cv2.circle(img, (tip_x, tip_y), 6, (255, 80, 80), -1)
 
-            # 角度テキスト (背景付き)
-            angle_text = f"Angle: {abs(signed_angle):.1f} deg"
+            # 結果テキスト (背景付き)
+            if value_valid:
+                result_text = f"Angle: {abs_angle:.1f}deg  Value: {value:.2f}"
+            else:
+                result_text = f"Angle: {abs_angle:.1f}deg"
+
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = max(0.8, min(w, h) / 600)
             thickness = 2
             (tw, th), baseline = cv2.getTextSize(
-                angle_text, font, font_scale, thickness)
+                result_text, font, font_scale, thickness)
 
             tx = min(cx + 10, w - tw - 10)
             ty = max(cy - 20, th + 10)
@@ -300,19 +402,27 @@ class MeterAngleDetector:
                           (tx - 6, ty - th - 6),
                           (tx + tw + 6, ty + baseline + 4),
                           (255, 180, 0), 2)
-            cv2.putText(img, angle_text, (tx, ty),
+            cv2.putText(img, result_text, (tx, ty),
                         font, font_scale, (255, 220, 80), thickness)
 
             # ラベル
             cv2.putText(img, "Center", (cx + 10, cy - 12),
                         font, 0.5, (0, 255, 100), 1)
-            cv2.putText(img, "Zero", (zx + 8, zy - 8),
+            cv2.putText(img, f"Zero ({self.val_min})", (zx + 8, zy - 8),
                         font, 0.5, (100, 220, 255), 1)
+            cv2.putText(img, f"Full ({self.val_max})", (fsx + 8, fsy - 8),
+                        font, 0.5, (180, 100, 255), 1)
 
             self._render(img)
-            self.status_var.set(
-                "✅ 検出完了！リセットして再計測できます")
-            self.angle_var.set(f"🎯 {abs(signed_angle):.1f}°")
+
+            if value_valid:
+                self.status_var.set(
+                    f"✅ 検出完了！  角度: {abs_angle:.1f}°  値: {value:.2f}  "
+                    f"（{self.val_min} ～ {self.val_max}）")
+                self.angle_var.set(f"📊 {value:.2f}  ({abs_angle:.1f}°)")
+            else:
+                self.status_var.set("✅ 検出完了！リセットして再計測できます")
+                self.angle_var.set(f"🎯 {abs_angle:.1f}°")
 
         else:
             # 直線が見つからなかった場合
@@ -324,6 +434,7 @@ class MeterAngleDetector:
             )
             self.click_step = 1
             self.zero_point = None
+            self.fullscale_point = None
             self.status_var.set(
                 "⚠️ 検出失敗。Step 2: 再度 0の目盛りをクリックしてください")
 
