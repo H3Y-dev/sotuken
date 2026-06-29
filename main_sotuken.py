@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import math
+import re
 
 
 class MeterAngleDetector:
@@ -61,6 +62,14 @@ class MeterAngleDetector:
             bg="#89b4fa", fg="#1e1e2e",
             relief=tk.FLAT, padx=12, pady=4, cursor="hand2"
         ).pack(side=tk.RIGHT, padx=16)
+
+        tk.Button(
+            header, text="🔍 自動検出",
+            command=self.auto_detect,
+            font=("Helvetica", 11),
+            bg="#a6e3a1", fg="#1e1e2e",
+            relief=tk.FLAT, padx=12, pady=4, cursor="hand2"
+        ).pack(side=tk.RIGHT, padx=4)
 
         tk.Button(
             header, text="🔄 リセット",
@@ -225,6 +234,248 @@ class MeterAngleDetector:
                            cv2.MARKER_CROSS, 20, 2)
             cv2.circle(overlay, self.fullscale_point, 8, (180, 100, 255), -1)
         self._render(overlay)
+
+    # ── 自動検出（案A: Hough円 + 目盛りアーク分析） ──────────
+    def auto_detect(self):
+        if self.image_original is None:
+            messagebox.showwarning("エラー", "まず画像を開いてください")
+            return
+        self.reset()
+        self.status_var.set("🔍 自動検出中...")
+        self.root.update()
+
+        # Step 1: Hough円でメーター中心を検出
+        result = self._detect_center()
+        if result is None:
+            messagebox.showerror(
+                "中心検出失敗",
+                "メーターの円形フレームを自動検出できませんでした。\n"
+                "手動でクリックして指定してください。"
+            )
+            self.status_var.set("🎯 Step 1: 針の中心点をクリックしてください")
+            return
+
+        center, meter_radius = result
+        self.center_point = center
+        self.click_step = 1
+        self._draw_markers()
+
+        # Step 2: 目盛りアーク分析でゼロ・フルスケール点を検出
+        zero_pt, full_pt = self._detect_scale_range(center, meter_radius)
+        if zero_pt is None:
+            messagebox.showwarning(
+                "目盛り検出失敗",
+                "目盛りの角度範囲を自動検出できませんでした。\n"
+                "Step 2, 3 を手動でクリックしてください。"
+            )
+            self.status_var.set("📍 Step 2: 0（最小値）の目盛り方向をクリックしてください")
+            return
+
+        self.zero_point = zero_pt
+        self.fullscale_point = full_pt
+        self.click_step = 2
+        self._draw_markers()
+        self.root.update()
+
+        # Step 3: OCRでスケール値を自動検出（失敗時は手動入力にフォールバック）
+        self.status_var.set("🔍 OCRでスケール値を検出中...")
+        self.root.update()
+        ocr_result = self._detect_scale_values(center, meter_radius)
+
+        if ocr_result is not None:
+            v_min, v_max = ocr_result
+            use_ocr = messagebox.askyesno(
+                "スケール値の自動検出",
+                f"OCRで以下のスケール値を検出しました:\n"
+                f"  最小値: {v_min}\n"
+                f"  最大値: {v_max}\n\n"
+                f"この値を使用しますか？（「いいえ」で手動入力）"
+            )
+            if not use_ocr:
+                ocr_result = None
+
+        if ocr_result is None:
+            v_min = simpledialog.askfloat(
+                "最小値入力", "メーターの最小値を入力してください:",
+                initialvalue=0.0, parent=self.root)
+            if v_min is None:
+                return
+            v_max = simpledialog.askfloat(
+                "最大値入力", "メーターの最大値を入力してください:",
+                initialvalue=100.0, parent=self.root)
+            if v_max is None:
+                return
+
+        self.val_min = v_min
+        self.val_max = v_max
+        self.click_step = 3
+        self.status_var.set("🔍 針を検出中...")
+        self.root.update()
+        self._detect_and_show()
+
+    def _detect_scale_values(self, center, meter_radius):
+        """
+        pytesseract OCR でメーター盤面の数値ラベルを読み取り (val_min, val_max) を返す。
+        アルゴリズム:
+          1. メーター円の外接矩形をクロップ
+          2. グレースケール → Otsu二値化で文字を強調
+          3. 数字のみモードでOCR
+          4. 抽出した数値群の最小・最大を返す
+        Tesseract 未インストールまたは検出失敗時は None を返す。
+        """
+        try:
+            import pytesseract
+        except ImportError:
+            return None
+
+        cx, cy = center
+        img = self.image_original
+        h, w = img.shape[:2]
+
+        # メーター円の外接矩形でクロップ
+        x0 = max(0, cx - meter_radius)
+        y0 = max(0, cy - meter_radius)
+        x1 = min(w, cx + meter_radius)
+        y1 = min(h, cy + meter_radius)
+        crop = img[y0:y1, x0:x1]
+
+        # 前処理: グレースケール → Otsu二値化
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 0, 255,
+                                  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # 数字のみ認識（PSM 11: スパース文字列モード）
+        config = r'--psm 11 --oem 3 -c tessedit_char_whitelist=0123456789.'
+        text = pytesseract.image_to_string(binary, config=config)
+
+        # テキストから数値を抽出
+        numbers = []
+        for token in re.findall(r'\b\d+\.?\d*\b', text):
+            try:
+                numbers.append(float(token))
+            except ValueError:
+                pass
+
+        if len(numbers) < 2:
+            return None
+
+        val_min = min(numbers)
+        val_max = max(numbers)
+        if val_min >= val_max:
+            return None
+
+        return val_min, val_max
+
+    def _detect_center(self):
+        """HoughCirclesでメーター外周円を検出し (center_xy, radius) を返す。失敗時はNone。"""
+        gray = cv2.cvtColor(self.image_original, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+        h, w = self.image_original.shape[:2]
+        min_r = int(min(h, w) * 0.20)
+        max_r = int(min(h, w) * 0.55)
+
+        circles = cv2.HoughCircles(
+            blurred, cv2.HOUGH_GRADIENT,
+            dp=1.2, minDist=min(h, w) // 2,
+            param1=100, param2=30,
+            minRadius=min_r, maxRadius=max_r
+        )
+        if circles is None:
+            return None
+
+        circles = np.round(circles[0]).astype(int)
+        cx, cy, r = max(circles, key=lambda c: c[2])  # 最大半径の円を採用
+        return (int(cx), int(cy)), int(r)
+
+    def _detect_scale_range(self, center, meter_radius):
+        """
+        新プラン: ギャップ最小値中心検出 + 外側走査方式
+        ① 目盛りリング（83〜90%）を接線方向フィルタで抽出
+           outer を90%に絞りベゼル辺縁（95〜100%付近の円弧）を除外
+        ② 1°ヒストグラムの最小値角度 = ギャップ中心を特定
+        ③ ギャップ中心から両方向へ走査し、密度が閾値を超える最初の角度を検出
+           → 時計回り方向: フルスケール端, 反時計回り方向: ゼロ端
+        閾値比較方式の連続ギャップ検出と異なり、
+        ギャップ内のノイズ（ベゼル弧・文字残像）に左右されない。
+        """
+        cx, cy = center
+        img = self.image_original
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), 50, 150)
+
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        grad_angle = np.degrees(np.arctan2(sobely, sobelx)) % 360
+
+        # outer を 97%→90% に縮めてベゼル辺縁の円弧エッジを除外
+        inner_r = int(meter_radius * 0.83)
+        outer_r = int(meter_radius * 0.90)
+        mask = np.zeros(edges.shape, dtype=np.uint8)
+        cv2.circle(mask, (cx, cy), outer_r, 255, -1)
+        cv2.circle(mask, (cx, cy), inner_r, 0, -1)
+        masked_edges = cv2.bitwise_and(edges, mask)
+
+        ys, xs = np.where(masked_edges > 0)
+        if len(xs) < 50:
+            return None, None
+
+        pix_ang = np.degrees(np.arctan2(
+            ys.astype(float) - cy,
+            xs.astype(float) - cx
+        )) % 360
+
+        # 接線方向フィルタ: 目盛り線（放射状）のエッジ勾配は放射角±90°
+        g_ang = grad_angle[ys, xs]
+        diff = np.abs((g_ang - pix_ang - 90) % 180)
+        diff = np.minimum(diff, 180 - diff)
+        filtered_angles = pix_ang[diff < 30]
+
+        if len(filtered_angles) < 30:
+            return None, None
+
+        hist = np.zeros(360, dtype=float)
+        for a in filtered_angles:
+            hist[int(a) % 360] += 1
+        hist_smooth = np.convolve(hist, np.ones(9) / 9.0, mode='same')
+
+        # ギャップ中心 = ヒストグラム最小値の角度
+        # 閾値ベース連続ギャップ検出と異なりギャップ内ノイズに左右されない
+        gap_center = int(np.argmin(hist_smooth))
+
+        # 平均密度の60%を「目盛りあり」判定閾値とする
+        threshold = hist_smooth.mean() * 0.60
+
+        # 時計回り（角度減少）に走査してフルスケール端を検出
+        full_angle = (gap_center - 5) % 360
+        for delta in range(5, 180):
+            angle = (gap_center - delta) % 360
+            if hist_smooth[angle] > threshold:
+                full_angle = angle
+                break
+
+        # 反時計回り（角度増加）に走査してゼロ端を検出
+        zero_angle = (gap_center + 5) % 360
+        for delta in range(5, 180):
+            angle = (gap_center + delta) % 360
+            if hist_smooth[angle] > threshold:
+                zero_angle = angle
+                break
+
+        # ギャップ幅の妥当性チェック（15°未満は誤検出とみなす）
+        gap_size = (zero_angle - full_angle) % 360
+        if gap_size < 15:
+            return None, None
+
+        tick_r = (inner_r + outer_r) // 2
+        zero_pt = (
+            int(cx + tick_r * math.cos(math.radians(zero_angle))),
+            int(cy + tick_r * math.sin(math.radians(zero_angle)))
+        )
+        full_pt = (
+            int(cx + tick_r * math.cos(math.radians(full_angle))),
+            int(cy + tick_r * math.sin(math.radians(full_angle)))
+        )
+        return zero_pt, full_pt
 
     # ── 針検出 & 角度・数値表示 ───────────────────────────────
     def _detect_and_show(self):
