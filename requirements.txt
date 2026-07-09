@@ -1,0 +1,20 @@
+# main_sotuken.py と tick_detect/scale_value_detect/vlm_scale_value が
+# 動作に必要とするパッケージ一覧。venv（Python 3.8）向けに固定したバージョン。
+#
+# セットアップ:
+#   venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# VLMによる最小値/最大値の補完にはOllama本体（0.12.7以降）と、
+# `ollama pull qwen3-vl:8b` でのモデル取得が別途必要（ollamaパッケージはOllamaサーバーへのクライアント）。
+
+opencv-contrib-python==4.10.0.84
+numpy==1.24.4
+pillow==10.4.0
+pytesseract==0.3.13
+
+# 0/フルスケール目盛りの自動読み取り（RapidOCR）
+rapidocr==3.9.1
+onnxruntime==1.19.2
+
+# 対応付けの信頼度が低い場合のVLMフォールバック（Ollama経由でQwen3-VLを利用）
+ollama
