@@ -361,6 +361,7 @@ class MeterAngleDetector:
             # メイン画面が「検出中...」のまま無言で固まって見えてしまうため、
             # 何が起きても必ずメインスレッドへ結果（またはエラー）を返す。
             ticks, center, auto_scale, error = [], self.center_point, None, None
+            vlm_reason = ""
             try:
                 # CLAHEでコントラストを強調してから目盛り線を検出する。
                 # 反射・グレアや低コントラストな盤面では元画像のままだと
@@ -386,16 +387,28 @@ class MeterAngleDetector:
                         self.image_original, ticks, center)
                 except Exception:
                     auto_scale = None
+
+                if auto_scale is None:
+                    # 自動検出が全滅した場合のみ、VLM（Ollama）が使える状態か診断する。
+                    # read_min_max等は失敗理由を問わず一律Noneを返す設計なので、
+                    # ここで原因（未起動・モデル未取得等）を切り分けてユーザーに示す。
+                    try:
+                        available, reason = vlm_scale_value.check_availability()
+                        if not available:
+                            vlm_reason = reason
+                    except Exception:
+                        pass
             except Exception as e:
                 error = str(e)
 
             # メインスレッドへ結果を渡す（リセット済みなら無視）
             self.root.after(
-                0, lambda: self._on_ticks_detected(ticks, center, auto_scale, error, request_id))
+                0, lambda: self._on_ticks_detected(
+                    ticks, center, auto_scale, error, vlm_reason, request_id))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_ticks_detected(self, ticks, center, auto_scale, error, request_id):
+    def _on_ticks_detected(self, ticks, center, auto_scale, error, vlm_reason, request_id):
         """目盛り線・目盛り数値検出スレッドの結果をメインスレッドで受け取る"""
         if request_id != self._scale_request_id:
             return  # リセット・新規画像で無効化済み
@@ -415,14 +428,18 @@ class MeterAngleDetector:
             self._show_scale_candidate()
             return
 
+        # 自動でのmin/max判定に失敗している。VLMが原因で使えなかった場合は
+        # その理由を表示する（Ollama未起動・モデル未取得等、環境依存の問題を
+        # 自己診断できるように）。
+        vlm_note = f"　⚠️ VLM補完も利用できません: {vlm_reason}" if vlm_reason else ""
         if ticks:
             self.status_var.set(
                 f"📍 Step 2: 0（最小値）の目盛り方向をクリックしてください "
-                f"（目盛り線を{len(ticks)}本検出、クリック位置は自動でスナップします）")
+                f"（目盛り線を{len(ticks)}本検出、クリック位置は自動でスナップします）{vlm_note}")
         else:
             self.status_var.set(
                 "📍 Step 2: 0（最小値）の目盛り方向をクリックしてください "
-                "（目盛り線を検出できなかったためクリック位置をそのまま使用します）")
+                f"（目盛り線を検出できなかったためクリック位置をそのまま使用します）{vlm_note}")
 
     # ── 目盛り数値の自動検出候補をオーバーレイ表示 ─────────────
     def _show_scale_candidate(self):

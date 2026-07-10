@@ -19,6 +19,35 @@ from PIL import Image
 MODEL_NAME = 'qwen3-vl:8b'
 
 
+def check_availability():
+    """
+    Ollama・Qwen3-VLモデルが利用可能かを簡易チェックする。
+
+    read_min_max()等は失敗時に理由を問わず一律Noneを返す設計
+    （呼び出し側は「OCRだけで十分だった」のか「VLMが使えなかった」のか
+    区別できない）。自動検出全体が失敗したときにこの関数で原因を
+    切り分けられるようにしておく（例: Ollama未起動、モデル未取得、
+    パッケージ未インストールなど、環境ごとに原因が異なるため）。
+
+    戻り値: (True, "") 利用可能な場合。(False, "理由") 利用できない場合。
+    """
+    try:
+        import ollama
+    except ImportError:
+        return False, "ollamaパッケージが見つかりません（pip install ollama が必要）"
+
+    try:
+        models = ollama.list()
+    except Exception as e:
+        return False, f"Ollamaサーバーに接続できません（起動していない可能性）: {e}"
+
+    names = [m.model for m in models.models]
+    if not any(n == MODEL_NAME or n.startswith(MODEL_NAME.split(':')[0] + ':') for n in names):
+        return False, f"モデル{MODEL_NAME}が見つかりません（ollama pull {MODEL_NAME} が必要）"
+
+    return True, ""
+
+
 def read_min_max(img):
     """
     メーター画像から最小値・最大値をVLMに問い合わせる。
