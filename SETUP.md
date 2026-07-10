@@ -140,6 +140,27 @@ Windowsでは、インストーラーがPATH環境変数を更新しても、**�
 4. **最終手段：Windowsを再起動する**
    まれにログインセッション全体の環境変数キャッシュが原因のことがあります。
 
+### 「`ollama run`で"CUDA error: device kernel image is invalid"というエラーが出る」
+
+```
+Error: 500 Internal Server Error: llama-server process has terminated: exit status 0xc0000409...: CUDA error
+CUDA error: device kernel image is invalid
+```
+
+このエラーはPythonコード側の問題ではなく、**GPUの世代とOllamaに同梱されているCUDAカーネルの互換性問題**です。GPUドライバが古い、またはGPUのアーキテクチャがOllamaの対応範囲外の場合に発生します。
+
+1. **まずNVIDIAドライバを最新版に更新する**（最も多い原因）
+   [NVIDIA公式サイト](https://www.nvidia.com/Download/index.aspx)から最新ドライバを入れてPCを再起動し、再度試す
+
+2. **それでも直らない場合は、CPUのみで動かす（回避策）**
+   処理は遅くなりますが動作はします。PowerShellで環境変数を設定：
+   ```powershell
+   [Environment]::SetEnvironmentVariable("OLLAMA_LLM_LIBRARY", "cpu", "User")
+   ```
+   設定後、タスクトレイのOllamaを完全に終了してから再起動（またはPC再起動）し、再度試してください。
+
+3. GPUの世代が古すぎる/新しすぎる等で根本的に非対応の場合、2のCPUモードが唯一の回避策になります
+
 ### その他
 
 - **VLM関連の処理がエラーになる/固まる**：タスクトレイでOllamaが起動しているか確認してください。`ollama list`がエラーなく実行できればサーバーは動いています
