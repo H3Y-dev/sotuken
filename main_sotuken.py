@@ -10,6 +10,11 @@
      （どちらも失敗した場合は手動クリックにフォールバック）
   4. 針をOpenCVで自動検出して角度と数値を表示
 """
+import ctypes
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    pass
 
 import cv2
 import numpy as np
