@@ -27,6 +27,7 @@ import threading
 import tick_detect
 import scale_value_detect
 import vlm_scale_value
+import detection_logger
 
 
 class MeterAngleDetector:
@@ -37,6 +38,7 @@ class MeterAngleDetector:
 
         self.image_raw = None      # ファイルから読み込んだそのままの画像
         self.image_original = None  # 以降の処理に使う画像（VLMでクロップ後の場合あり）
+        self.image_path = None     # 開いた画像ファイルのパス（ログ記録用）
         self.photo = None
 
         self.center_point = None
@@ -46,6 +48,7 @@ class MeterAngleDetector:
         self.val_max = 100.0
         # 0=中心待ち, 1=ゼロ点待ち, 2=フルスケール点待ち, 3=完了
         self.click_step = 0
+        self._last_overlay = None  # 直前に表示したオーバーレイ画像（リサイズ再描画用）
 
         self.auto_center_candidate = None  # (x, y, radius) or None
         self.detected_ticks = []           # PCAで検出した目盛り線のリスト
@@ -212,6 +215,7 @@ class MeterAngleDetector:
             messagebox.showerror("エラー", "画像を読み込めませんでした")
             return
         self.image_raw = img
+        self.image_path = path
         self.reset()
 
     def reset(self):
@@ -274,50 +278,69 @@ class MeterAngleDetector:
         self._start_center_detection()
 
     def _start_center_detection(self):
-        candidate = self._auto_detect_center()
-        if candidate is not None:
-            self.auto_center_candidate = candidate
-            self._show_auto_candidate()
-        else:
-            self.status_var.set("🔍 中心点を推定中...")
-            self._try_center_fallback()
+        self.status_var.set("🔍 中心点を検出中...")
+        hough_candidate = self._auto_detect_center()
+        self._refine_center_candidate(hough_candidate)
 
     # ── Step1: Hough円検出で中心点候補を取得 ─────────────────
     def _auto_detect_center(self):
         return tick_detect.auto_detect_center(self.image_original)
 
-    def _try_center_fallback(self):
+    def _refine_center_candidate(self, hough_candidate):
         """
-        Hough円検出（CLAHE再試行込み）が失敗した場合の救済策。
-        画像中心を仮の起点に目盛り線を探し、その交点から中心を推定する。
-        目盛り検出は重い処理なのでバックグラウンドスレッドで行う。
+        Hough円検出の結果を、目盛り線の交点による推定と突き合わせて補正する。
+        目盛り線は幾何学的に必ず中心を向くため、Houghが反射やリベット等の
+        別の丸い模様を誤検出した場合でも、こちらで実際の中心に近づけられる。
+        Hough自体が失敗した場合は、画像中心を起点に目盛り線から推定する
+        （従来のフォールバックと同等）。目盛り検出は重い処理なので
+        バックグラウンドスレッドで行う。
         """
         request_id = self._scale_request_id
         img = self.image_original
+        h, w = img.shape[:2]
+        seed = (hough_candidate[0], hough_candidate[1]) if hough_candidate is not None \
+            else (w // 2, h // 2)
 
         def worker():
             try:
-                est = tick_detect.estimate_center_from_ticks(img)
+                refined, _ticks = tick_detect.refine_center_iterative(img, seed)
             except Exception:
-                est = None
-            self.root.after(0, lambda: self._on_center_fallback_result(est, request_id))
+                refined = None
+            self.root.after(
+                0, lambda: self._on_center_candidate_ready(hough_candidate, refined, request_id))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_center_fallback_result(self, est, request_id):
+    def _on_center_candidate_ready(self, hough_candidate, refined, request_id):
         if request_id != self._scale_request_id:
             return  # リセット・新規画像で無効化済み
 
-        if est is not None:
-            h, w = self.image_original.shape[:2]
-            r = int(min(h, w) * 0.05)
-            self.auto_center_candidate = (est[0], est[1], r)
-            self._show_auto_candidate(estimated=True)
+        h, w = self.image_original.shape[:2]
+        default_r = int(min(h, w) * 0.05)
+
+        if hough_candidate is not None and refined is not None:
+            hx, hy, r = hough_candidate
+            shift = math.hypot(refined[0] - hx, refined[1] - hy)
+            if shift > min(h, w) * 0.03:
+                # 目盛り線の交点がHoughの結果と大きくズレている
+                # → Houghの誤検出とみなし、目盛り線側を採用する
+                self.auto_center_candidate = (refined[0], refined[1], r)
+                self._show_auto_candidate(source='corrected')
+            else:
+                self.auto_center_candidate = (hx, hy, r)
+                self._show_auto_candidate(source='hough')
+        elif hough_candidate is not None:
+            hx, hy, r = hough_candidate
+            self.auto_center_candidate = (hx, hy, r)
+            self._show_auto_candidate(source='hough')
+        elif refined is not None:
+            self.auto_center_candidate = (refined[0], refined[1], default_r)
+            self._show_auto_candidate(source='ticks')
         else:
             self.status_var.set(
                 "🎯 Step 1: 針の中心点をクリックしてください（自動検出できませんでした）")
 
-    def _show_auto_candidate(self, estimated=False):
+    def _show_auto_candidate(self, source='hough'):
         cx, cy, r = self.auto_center_candidate
         overlay = self.image_original.copy()
         cv2.circle(overlay, (cx, cy), r, (0, 230, 255), 2)
@@ -325,10 +348,14 @@ class MeterAngleDetector:
         cv2.drawMarker(overlay, (cx, cy), (0, 230, 255), cv2.MARKER_CROSS, 28, 2)
         self._render(overlay)
         self.confirm_frame.pack(fill=tk.X, before=self.status_frame)
-        if estimated:
+        if source == 'ticks':
             self.status_var.set(
                 f"🔍 目盛り線から中心点を推定しました ({cx}, {cy})"
                 " — 円検出が失敗したための簡易推定です。確定するか手動で選択してください")
+        elif source == 'corrected':
+            self.status_var.set(
+                f"🔧 円検出の位置を目盛り線の交点で補正しました ({cx}, {cy})"
+                " — 確定するか手動で選択してください")
         else:
             self.status_var.set(
                 f"🔍 中心点の候補を検出しました ({cx}, {cy}) — 確定するか手動で選択してください")
@@ -548,6 +575,7 @@ class MeterAngleDetector:
 
     # ── キャンバスへの描画 ────────────────────────────────────
     def _render(self, overlay=None):
+        self._last_overlay = overlay
         src = overlay if overlay is not None else self.image_original.copy()
 
         cw = self.canvas.winfo_width() or self.canvas_width
@@ -571,8 +599,12 @@ class MeterAngleDetector:
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo)
 
     def on_canvas_resize(self, event):
+        # リサイズ時は直前に表示していたオーバーレイ（目盛り線・中心/ゼロ/フルスケールの
+        # マーカーや検出結果の描画）をそのまま使って再描画する。ここで overlay 無しの
+        # _render() を呼ぶと、表示中のマーカーや針の直線が消えて素の画像に戻ってしまい、
+        # 「ウィンドウをリサイズすると検出位置の表示が不安定になる」ように見えていた。
         if self.image_original is not None:
-            self._render()
+            self._render(self._last_overlay)
 
     # ── マウスクリック処理 ────────────────────────────────────
     def on_canvas_click(self, event):
@@ -784,6 +816,25 @@ class MeterAngleDetector:
                 f"✅ 検出完了！  角度: {abs_angle:.1f}°  値: {value:.2f}  "
                 f"（{self.val_min} ～ {self.val_max}）")
             self.angle_var.set(f"📊 {value:.2f}  ({abs_angle:.1f}°)")
+
+            try:
+                detection_logger.save_detection_log(
+                    self.image_original,
+                    {
+                        "center": [cx, cy],
+                        "zero_point": [zx, zy],
+                        "fullscale_point": [fsx, fsy],
+                        "val_min": self.val_min,
+                        "val_max": self.val_max,
+                        "angle_deg": round(abs_angle, 2),
+                        "value": round(value, 4),
+                        "needle_line": [int(x1), int(y1), int(x2), int(y2)],
+                        "needle_tip": [int(tip_x), int(tip_y)],
+                    },
+                    source_path=self.image_path,
+                )
+            except Exception:
+                pass  # ログ保存の失敗で検出結果表示自体を止めない
 
         else:
             self._draw_markers()

@@ -200,6 +200,30 @@ def detect_scale_ticks(img, center):
         return []
 
 
+def refine_center_iterative(img, seed_center, iterations=2, max_shift_ratio=0.35):
+    """
+    目盛り線の交点による中心推定を、目盛り再検出を挟んで数回繰り返して収束させる。
+    目盛り検出は探索半径(min_dist/max_dist)が中心点に依存するため、
+    起点(seed_center)が大きくずれている（Hough円検出が別の丸い模様を
+    誤検出した場合など）と1回の推定では十分に補正しきれないことがある。
+    1回目は大きなズレも許容し、2回目以降は起点付近に絞って収束させる。
+    戻り値: (center, ticks) のタプル。目盛りが3本未満で推定できない場合は (None, [])。
+    """
+    center = seed_center
+    ticks = []
+    shift_ratio = max_shift_ratio
+    for i in range(max(1, iterations)):
+        ticks = detect_scale_ticks(img, center)
+        if len(ticks) < 3:
+            return (None, [])
+        refined = refine_center_from_ticks(ticks, center, img.shape, max_shift_ratio=shift_ratio)
+        if refined is None:
+            return (center, ticks) if i > 0 else (None, ticks)
+        center = refined
+        shift_ratio = max_shift_ratio * 0.4  # 2周目以降は収束優先で変動を絞る
+    return (center, ticks)
+
+
 def refine_center_from_ticks(ticks, fallback_center, img_shape, max_shift_ratio=0.15):
     """
     検出した目盛り線群の主軸を最小二乗法で交差させ、中心点を再推定する。
