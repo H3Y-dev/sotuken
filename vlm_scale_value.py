@@ -16,7 +16,7 @@ import re
 import cv2
 from PIL import Image
 
-MODEL_NAME = 'qwen3-vl:8b'
+MODEL_NAME = 'qwen3-vl:4b-instruct'
 
 
 def check_availability():
@@ -74,10 +74,11 @@ def read_min_max(img):
             '{"min_value": <number>, "max_value": <number>}'
         )
 
-        # Qwen3-VLは思考モデルで、回答前に内部推論トークンを消費する
+        # 通常版のQwen3-VLは思考モデルで、回答前に内部推論トークンを消費する
         # （think=Falseでもゼロにはならない）。num_predictが小さいと
         # 推論だけで使い切り、肝心のJSON本文が空になってしまうため、
-        # 余裕を持たせている。
+        # 余裕を持たせている。現在使っている-instruct版は思考しないので
+        # この心配は無いが、通常版に戻しても壊れないよう余裕は残しておく。
         res = ollama.chat(
             model=MODEL_NAME,
             messages=[{

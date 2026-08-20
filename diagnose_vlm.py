@@ -36,7 +36,7 @@ def main():
     import vlm_scale_value
     available, reason = vlm_scale_value.check_availability()
     if available:
-        print("OK: Ollamaサーバーに接続でき、qwen3-vl:8bも取得済みです")
+        print(f"OK: Ollamaサーバーに接続でき、{vlm_scale_value.MODEL_NAME}も取得済みです")
     else:
         print(f"NG: {reason}")
         return

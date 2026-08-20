@@ -5,7 +5,7 @@
 #   venv\Scripts\python.exe -m pip install -r requirements.txt
 #
 # VLMによる最小値/最大値の補完にはOllama本体（0.12.7以降）と、
-# `ollama pull qwen3-vl:8b` でのモデル取得が別途必要（ollamaパッケージはOllamaサーバーへのクライアント）。
+# `ollama pull qwen3-vl:4b-instruct` でのモデル取得が別途必要（ollamaパッケージはOllamaサーバーへのクライアント）。
 
 opencv-contrib-python==4.10.0.84
 numpy==1.24.4

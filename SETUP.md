@@ -79,23 +79,24 @@ ollama --version
 ## 4. Qwen3-VLモデルの取得
 
 ```powershell
-ollama pull qwen3-vl:8b
+ollama pull qwen3-vl:4b-instruct
 ```
 
-- ダウンロードサイズ：約6.1GB
-- 8Bモデルで、通常のノートPC（GPU無しでも動作、GPUがあれば高速化）を想定したサイズです
+- ダウンロードサイズ：約3.3GB
+- 4Bモデルで、通常のノートPC（GPU無しでも動作、GPUがあれば高速化）を想定したサイズです
+- `-instruct`は思考プロセスを持たない版です。通常版（`qwen3-vl:8b`等）は回答前に内部推論トークンを消費するため応答が数倍遅くなります
 - 取得できたか確認：
 
 ```powershell
 ollama list
 ```
 
-`qwen3-vl:8b`が表示されていればOKです。
+`qwen3-vl:4b-instruct`が表示されていればOKです。
 
 ### 動作確認（任意）
 
 ```powershell
-ollama run qwen3-vl:8b "こんにちは"
+ollama run qwen3-vl:4b-instruct "こんにちは"
 ```
 
 何かしら応答が返ってくればセットアップ完了です（`Ctrl+D`または`/bye`で終了）。
