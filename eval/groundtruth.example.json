@@ -1,0 +1,17 @@
+[
+  {
+    "image": "images/panel_01.jpg",
+    "true_value": 3.05,
+    "min_value": 0.0,
+    "max_value": 5.0,
+    "tolerance_percent": 2.5,
+    "note": "冷却塔 0.6kW 電流計 / KAWASAKI PSK-100 / JIS C 1102 2.5級 / 角形・円弧目盛り"
+  },
+  {
+    "image": "C:/卒研/eval_images/speedometer_01.jpg",
+    "true_value": 70.0,
+    "min_value": 0.0,
+    "max_value": 180.0,
+    "note": "画像は絶対パスでも指定できる。tolerance_percent を省略すると2.5%が使われる"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "image": "C:/Users/dorum/Downloads/Mobile Devices/20260712_163602.jpg",
+    "true_value": 70.0,
+    "min_value": 0.0,
+    "max_value": 180.0,
+    "note": "【暫定】速度計。真値は目視の概算なので要確認。円形メーター"
+  },
+  {
+    "image": "C:/Users/dorum/Downloads/Mobile Devices/20260712_163614.jpg",
+    "true_value": 70.0,
+    "min_value": 0.0,
+    "max_value": 180.0,
+    "note": "【暫定】上と同じ計器・同じ指示値を別カットで撮影したもの。撮影条件による差を見る用"
+  }
+]
