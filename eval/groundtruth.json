@@ -1,16 +1,93 @@
 [
   {
-    "image": "C:/Users/dorum/Downloads/Mobile Devices/20260712_163602.jpg",
-    "true_value": 70.0,
+    "image": "C:/卒研/images/20260817_134606.jpg",
+    "true_value": null,
     "min_value": 0.0,
-    "max_value": 180.0,
-    "note": "【暫定】速度計。真値は目視の概算なので要確認。円形メーター"
+    "max_value": 15.0,
+    "note": "角形PSK-100 0〜15A(赤30) 冷却水ポンプ1.5kW / 90度回転 / 単体 / 参考:針は5〜6A付近"
   },
   {
-    "image": "C:/Users/dorum/Downloads/Mobile Devices/20260712_163614.jpg",
-    "true_value": 70.0,
+    "image": "C:/卒研/images/20260817_134611.jpg",
+    "true_value": null,
     "min_value": 0.0,
-    "max_value": 180.0,
-    "note": "【暫定】上と同じ計器・同じ指示値を別カットで撮影したもの。撮影条件による差を見る用"
+    "max_value": 5.0,
+    "note": "角形PSK-100 0〜5A(赤10) 冷却塔0.6KW / 90度回転 / 参考:針は3A付近"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134614.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 10.0,
+    "note": "角形PSK-100 0〜10A(赤20) 銘板は「…ター」判読不能 / 90度回転 / 参考:針は2A付近"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134619.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 60.0,
+    "note": "角形PSK-100 0〜60A(赤120) 水冷式パッケージNO.1 12.1KW / 90度回転 / 参考:針は45〜50A付近"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134622.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 75.0,
+    "note": "角形PSK-100 0〜75A(赤150) / 90度回転 / 参考:針は15〜20A付近"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134647.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 100.0,
+    "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃ / 90度回転 / 中心が露出している標準的なケース"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134656.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 100.0,
+    "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134745.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 100.0,
+    "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134728.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 60.0,
+    "note": "扇形 松下電工 超過目盛電流計 0〜60A(30A定格) / 暗背景に白目盛り / 白い指示針と赤い設定針が併存 / 最難関ケース"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134730.jpg",
+    "true_value": null,
+    "min_value": 0.0,
+    "max_value": 60.0,
+    "note": "扇形 松下電工 超過目盛電流計 別カット / 暗背景・赤針あり"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134624.jpg",
+    "true_value": null,
+    "min_value": null,
+    "max_value": null,
+    "note": "【複数メーター】引き画像 0〜75A / 0〜15A / 0〜5A の3台が同時に写る。現在のパイプラインは1画像1メーター前提なので評価対象外。複数対応を実装したら有効化する"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134626.jpg",
+    "true_value": null,
+    "min_value": null,
+    "max_value": null,
+    "note": "【複数メーター】引き画像 0〜5A / 0〜10A の2台。同上"
+  },
+  {
+    "image": "C:/卒研/images/20260817_134628.jpg",
+    "true_value": null,
+    "min_value": null,
+    "max_value": null,
+    "note": "【複数メーター】引き画像 0〜60A / 0〜75A の2台。同上"
   }
 ]

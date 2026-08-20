@@ -83,7 +83,14 @@ def is_within_tolerance(measured, true_value, val_min, val_max,
 
 # ── 集計 ──────────────────────────────────────────────────────
 def summarize(rows):
-    """評価結果の一覧から全体の要約を作る"""
+    """
+    評価結果の一覧から全体の要約を作る。
+
+    真値が未記入（unlabeled）の項目は母数から除く。読み取り失敗と
+    同じ扱いにすると、ラベルを付けていないだけなのに精度が悪いように
+    見えてしまうため。
+    """
+    rows = [r for r in rows if r.get('stage') != 'unlabeled']
     total = len(rows)
     ok_rows = [r for r in rows if r.get('stage') == meter_pipeline.STAGE_OK]
     errors = [r['reference_error'] for r in ok_rows
@@ -130,6 +137,12 @@ def evaluate_entry(entry, base_dir, use_vlm=True):
         'scale_correct': None,
         'elapsed_sec': None,
     }
+
+    # 真値が未記入の項目は評価できない。黙って0点扱いにすると
+    # 「精度が悪い」と誤読してしまうので、未ラベルとして明示的に分ける。
+    if entry.get('true_value') is None:
+        row['stage'] = 'unlabeled'
+        return row
 
     if not os.path.exists(image_path):
         row['stage'] = 'image_not_found'
@@ -246,12 +259,22 @@ def main(argv=None):
 
     rows = []
     for i, entry in enumerate(entries, 1):
-        print('[{}/{}] {} ...'.format(i, len(entries), entry['image']))
+        if entry.get('true_value') is None:
+            print('[{}/{}] {} — 真値が未記入のためスキップ'.format(
+                i, len(entries), entry['image']))
+        else:
+            print('[{}/{}] {} ...'.format(i, len(entries), entry['image']))
         entry.setdefault('tolerance_percent', args.tolerance)
         rows.append(evaluate_entry(entry, base_dir, use_vlm=not args.no_vlm))
 
     summary = summarize(rows)
     print_report(rows, summary, args.tolerance)
+
+    unlabeled = [r for r in rows if r.get('stage') == 'unlabeled']
+    if unlabeled:
+        print('※ 真値が未記入で評価対象外: {} 件'.format(len(unlabeled)))
+        for r in unlabeled:
+            print('    {}  {}'.format(os.path.basename(r['image']), r['note']))
 
     if args.output:
         with open(args.output, 'w', encoding='utf-8') as f:
