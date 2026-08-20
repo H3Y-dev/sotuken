@@ -28,6 +28,7 @@ import tick_detect
 import scale_value_detect
 import vlm_scale_value
 import detection_logger
+import meter_reader
 
 
 class MeterAngleDetector:
@@ -704,101 +705,17 @@ class MeterAngleDetector:
         img = self.image_original.copy()
         h, w = img.shape[:2]
 
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blurred, 50, 150)
+        # 針の検出と値の算出は meter_reader に切り出してある
+        # （GUIを起動しなくても同じ計算を評価スクリプトから呼べるようにするため）
+        reading = meter_reader.compute_reading(
+            self.image_original, self.center_point, self.zero_point,
+            self.fullscale_point, self.val_min, self.val_max)
 
-        lines = cv2.HoughLinesP(
-            edges,
-            rho=1,
-            theta=np.pi / 180,
-            threshold=40,
-            minLineLength=30,
-            maxLineGap=15
-        )
-
-        needle_line = None
-        best_score = -1
-        center_pass_thresh = min(h, w) * 0.03
-
-        if lines is not None:
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                dx, dy = x2 - x1, y2 - y1
-                line_len = math.hypot(dx, dy)
-                if line_len == 0:
-                    continue
-                dist_to_center = abs(dy * cx - dx * cy + x2 * y1 - y2 * x1) / line_len
-                if dist_to_center > center_pass_thresh:
-                    continue
-                if line_len > best_score:
-                    best_score = line_len
-                    needle_line = line[0]
-
-        if needle_line is not None:
-            x1, y1, x2, y2 = needle_line
-            d1 = math.hypot(x1 - cx, y1 - cy)
-            d2 = math.hypot(x2 - cx, y2 - cy)
-
-            ndx, ndy = float(x2 - x1), float(y2 - y1)
-            far_x, far_y = (x1, y1) if d1 > d2 else (x2, y2)
-            if (far_x - cx) * ndx + (far_y - cy) * ndy < 0:
-                ndx, ndy = -ndx, -ndy
-            n_len = math.hypot(ndx, ndy)
-            ndx, ndy = ndx / n_len, ndy / n_len
-
-            gap_thresh = max(8, int(min(h, w) * 0.025))
-            max_scan = int(min(h, w) * 0.60)
-            tip_x, tip_y = far_x, far_y
-            consecutive_empty = 0
-            for r in range(3, max_scan):
-                px = int(cx + ndx * r + 0.5)
-                py = int(cy + ndy * r + 0.5)
-                if not (0 <= px < w and 0 <= py < h):
-                    break
-                if edges[py, px] > 0:
-                    tip_x, tip_y = px, py
-                    consecutive_empty = 0
-                else:
-                    consecutive_empty += 1
-                    if consecutive_empty > gap_thresh:
-                        break
-
-            zero_vec = np.array([zx - cx, zy - cy], dtype=float)
-            cos_a = np.dot([ndx, ndy], zero_vec) / (np.linalg.norm(zero_vec) + 1e-9)
-            abs_angle = math.degrees(math.acos(np.clip(cos_a, -1.0, 1.0)))
-
-            theta_zero   = math.atan2(zy  - cy, zx  - cx)
-            theta_full   = math.atan2(fsy - cy, fsx - cx)
-            theta_needle = math.atan2(ndy, ndx)
-            two_pi = 2 * math.pi
-
-            def _arc_ratio(th_pt, th_from, th_to, cw):
-                if cw:
-                    span   = (th_to   - th_from) % two_pi
-                    offset = (th_pt   - th_from) % two_pi
-                else:
-                    span   = (th_from - th_to)   % two_pi
-                    offset = (th_from - th_pt)   % two_pi
-                return (offset / span) if span > 1e-6 else None
-
-            r_cw  = _arc_ratio(theta_needle, theta_zero, theta_full, cw=True)
-            r_ccw = _arc_ratio(theta_needle, theta_zero, theta_full, cw=False)
-            ok_cw  = r_cw  is not None and 0.0 <= r_cw  <= 1.0
-            ok_ccw = r_ccw is not None and 0.0 <= r_ccw <= 1.0
-
-            if ok_cw and not ok_ccw:
-                ratio = r_cw
-            elif ok_ccw and not ok_cw:
-                ratio = r_ccw
-            elif ok_cw and ok_ccw:
-                span_cw  = (theta_full - theta_zero) % two_pi
-                span_ccw = (theta_zero - theta_full) % two_pi
-                ratio = r_cw if span_cw >= span_ccw else r_ccw
-            else:
-                ratio = max(0.0, min(1.0, r_cw if r_cw is not None else 0.0))
-
-            value = self.val_min + ratio * (self.val_max - self.val_min)
+        if reading is not None:
+            x1, y1, x2, y2 = reading['needle_line']
+            tip_x, tip_y = reading['needle_tip']
+            abs_angle = reading['angle_deg']
+            value = reading['value']
 
             # ── 結果を画像に描画 ──────────────────────────
             cv2.line(img, (x1, y1), (x2, y2), (255, 180, 0), 2)
