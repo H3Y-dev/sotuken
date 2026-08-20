@@ -106,6 +106,68 @@ def read_min_max(img):
         return None
 
 
+def check_needle_overlaps_zero(img):
+    """
+    針が0（最小値）の目盛り・数字に重なっていて隠れているかをVLMに問い合わせる。
+
+    これは座標ではなく「見た目としてそう見えるか」という意味判断なので、
+    モジュールdocstringの役割分担（精密な位置推定は苦手／意味理解は得意）に合う。
+    針が0の目盛りを覆っていると、OCR・目盛り線検出のどちらも0の位置を
+    見落としがちで、かつ見落としの再検証（該当箇所を再OCRして実在確認する
+    仕組み）も同じ理由で必ず失敗してしまう。そのため「見えなくて当然」と
+    判断できる根拠として、この問い合わせ結果を使う。
+
+    判定不能・失敗時はNoneを返す（呼び出し側は判定不能として扱い、
+    通常通り視覚的な裏取りを要求する＝安全側に倒す）。
+    """
+    try:
+        import ollama
+
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        h, w = rgb.shape[:2]
+        max_side = 512
+        if max(h, w) > max_side:
+            scale = max_side / max(h, w)
+            rgb = cv2.resize(rgb, (int(w * scale), int(h * scale)))
+
+        buf = io.BytesIO()
+        Image.fromarray(rgb).save(buf, format='JPEG', quality=85)
+        img_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        prompt = (
+            "Look at this analog meter image. Its needle/pointer is currently "
+            "indicating some value on the scale. "
+            "Is the needle pointing at or very close to the zero (minimum) tick mark, "
+            "such that the needle itself visually overlaps or covers the zero tick "
+            "mark and/or its printed number label, making the zero mark hard to see "
+            "clearly? "
+            "Respond with JSON only, no explanation:\n"
+            '{"overlaps_zero": <true or false>}'
+        )
+
+        res = ollama.chat(
+            model=MODEL_NAME,
+            messages=[{
+                'role': 'user',
+                'content': prompt,
+                'images': [img_b64],
+            }],
+            think=False,
+            options={'num_predict': 150}
+        )
+
+        match = re.search(r'\{.*?\}', res.message.content, re.DOTALL)
+        if not match:
+            return None
+        data = json.loads(match.group())
+        if 'overlaps_zero' not in data:
+            return None
+        return bool(data['overlaps_zero'])
+
+    except Exception:
+        return None
+
+
 def detect_meter_bbox(img):
     """
     画像中のアナログメーター盤面のおおまかな矩形領域をVLMに問い合わせる。

@@ -227,6 +227,84 @@ def locate_value_by_extrapolation(bound, ticks, target_value, max_angle_deg=8.0)
     return (int(round(best_tick['centroid'][0])), int(round(best_tick['centroid'][1])))
 
 
+def _synthesize_tick_point(ticks, center, angle):
+    """
+    angle方向に実在する目盛り線が見つからない場合の最終手段として、
+    他の主目盛りの平均半径を使って座標だけを合成する。
+    針が目盛りに重なって輪郭ごと検出から漏れている（そもそも候補が
+    存在しない）ケースでのみ使う想定。
+    """
+    cx, cy = center
+    major = [t for t in ticks if t['is_major']] or list(ticks)
+    if not major:
+        return None
+    radii = [math.hypot(t['centroid'][0] - cx, t['centroid'][1] - cy) for t in major]
+    r = sum(radii) / len(radii)
+    return (int(round(cx + r * math.cos(angle))), int(round(cy + r * math.sin(angle))))
+
+
+def _make_occlusion_check(img):
+    """
+    「針が0の目盛りに重なっているか」をVLMに問い合わせる関数を返す。
+    呼び出しは重いため、実際に必要になるまで行わず、一度呼んだら
+    結果をキャッシュして使い回す（1回の検出につき最大1回だけ問い合わせる）。
+    """
+    cache = {}
+
+    def check():
+        if 'v' not in cache:
+            try:
+                cache['v'] = vlm_scale_value.check_needle_overlaps_zero(img)
+            except Exception:
+                cache['v'] = None
+        return bool(cache['v'])
+
+    return check
+
+
+def _resolve_scale_position(img, numbers, ticks, center, bound, value,
+                             is_zero=False, occlusion_check=None):
+    """
+    target_valueに対応する目盛り位置を特定する。
+    OCRで直接読めていればそれを、読めていなければ等間隔性からの推定
+    （locate_value_by_extrapolation）を使い、通常は該当箇所を再OCRして
+    実在を確認できた場合のみ採用する（VLMのハルシネーション対策）。
+
+    ただし is_zero=True の場合に限り、再OCRでの確認が失敗しても、
+    「針が0の目盛りに重なっている」ことがVLMで確認できていれば、
+    見えなくて当然なので確認をスキップしてそのまま採用する。
+    さらに、針と目盛りの輪郭が融合して目盛り候補自体が見つからない
+    場合は、等間隔性から予測した角度と他の主目盛りの平均半径を使って
+    座標を合成する（この合成もis_zero=True かつ重なりを確認できた
+    場合のみ行う。それ以外では根拠のない当てずっぽうになるため使わない）。
+
+    occlusion_check: 「針が0の目盛りに重なっているか」を返す0引数の関数
+    （呼び出しは重いので必要になるまで遅延評価する）。Noneの場合は
+    この判定なしで、通常通りの安全側の挙動（確認できなければ採用しない）になる。
+
+    戻り値: (座標 or None, 視覚的な裏取りなしに「重なり」を理由として採用したか)
+    """
+    pt = locate_value_on_ticks(numbers, ticks, center, value)
+    if pt is not None:
+        return pt, False
+
+    pt = locate_value_by_extrapolation(bound, ticks, value)
+    if pt is not None:
+        if _verify_label_near_position(img, pt, value):
+            return pt, False
+        if is_zero and occlusion_check is not None and occlusion_check():
+            return pt, True
+        return None, False
+
+    if is_zero and occlusion_check is not None and occlusion_check():
+        predicted_angle = _predict_angle_for_value(bound, value)
+        if predicted_angle is not None:
+            synth = _synthesize_tick_point(ticks, center, predicted_angle)
+            if synth is not None:
+                return synth, True
+    return None, False
+
+
 def _verify_label_near_position(img, pt, target_value, radius=60, upscale=4):
     """
     ptの周辺だけを切り出して拡大し、OCRを再実行してtarget_valueに一致する
@@ -343,6 +421,7 @@ def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None):
         'n_total': n_total,
         'is_confident': is_confident,
         'source': 'ocr_tick',
+        'needle_overlap_zero': False,
     }
 
 
@@ -477,24 +556,22 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
             # ときだけ採用する。
             vlm_min, vlm_max = vlm_result
             bound = None
+            occlusion_check = _make_occlusion_check(img)
             if abs(agreed['min_value'] - vlm_min) > 1e-6:
                 bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
-                pt = locate_value_on_ticks(numbers, ticks, center, vlm_min)
-                if pt is None:
-                    pt = locate_value_by_extrapolation(bound, ticks, vlm_min)
-                    if pt is not None and not _verify_label_near_position(img, pt, vlm_min):
-                        pt = None
+                pt, overlap = _resolve_scale_position(
+                    img, numbers, ticks, center, bound, vlm_min,
+                    is_zero=True, occlusion_check=occlusion_check)
                 if pt is not None:
                     agreed['zero_pt'] = pt
                     agreed['min_value'] = vlm_min
+                    agreed['needle_overlap_zero'] = overlap
             if abs(agreed['max_value'] - vlm_max) > 1e-6:
                 if bound is None:
                     bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
-                pt = locate_value_on_ticks(numbers, ticks, center, vlm_max)
-                if pt is None:
-                    pt = locate_value_by_extrapolation(bound, ticks, vlm_max)
-                    if pt is not None and not _verify_label_near_position(img, pt, vlm_max):
-                        pt = None
+                pt, _overlap = _resolve_scale_position(
+                    img, numbers, ticks, center, bound, vlm_max,
+                    is_zero=False, occlusion_check=occlusion_check)
                 if pt is not None:
                     agreed['full_pt'] = pt
                     agreed['max_value'] = vlm_max
@@ -505,21 +582,14 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
     if vlm_result is not None:
         min_value, max_value = vlm_result
         bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
+        occlusion_check = _make_occlusion_check(img)
 
-        zero_pt = locate_value_on_ticks(numbers, ticks, center, min_value)
-        if zero_pt is None:
-            # OCRがmin_value自体を読み落とした場合の最終手段：他の対応付け
-            # 済みの数字から目盛りの等間隔性を推定し、位置を予測する
-            # （VLMの値をそのまま信じるのは危険なため、ローカル再OCRで実在確認する）
-            zero_pt = locate_value_by_extrapolation(bound, ticks, min_value)
-            if zero_pt is not None and not _verify_label_near_position(img, zero_pt, min_value):
-                zero_pt = None
-
-        full_pt = locate_value_on_ticks(numbers, ticks, center, max_value)
-        if full_pt is None:
-            full_pt = locate_value_by_extrapolation(bound, ticks, max_value)
-            if full_pt is not None and not _verify_label_near_position(img, full_pt, max_value):
-                full_pt = None
+        zero_pt, zero_overlap = _resolve_scale_position(
+            img, numbers, ticks, center, bound, min_value,
+            is_zero=True, occlusion_check=occlusion_check)
+        full_pt, _overlap = _resolve_scale_position(
+            img, numbers, ticks, center, bound, max_value,
+            is_zero=False, occlusion_check=occlusion_check)
 
         if zero_pt is not None and full_pt is not None:
             return {
@@ -531,6 +601,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
                 'n_total': 2,
                 'is_confident': True,
                 'source': 'vlm',
+                'needle_overlap_zero': zero_overlap,
             }
 
     # VLMも失敗した場合、条件間で割れた結果のうち一番マシなものを

@@ -49,6 +49,8 @@ class MeterAngleDetector:
         # 0=中心待ち, 1=ゼロ点待ち, 2=フルスケール点待ち, 3=完了
         self.click_step = 0
         self._last_overlay = None  # 直前に表示したオーバーレイ画像（リサイズ再描画用）
+        # 針が0の目盛りに重なっており、0点が目視確認できていないケースかどうか
+        self.zero_needle_overlap = False
 
         self.auto_center_candidate = None  # (x, y, radius) or None
         self.detected_ticks = []           # PCAで検出した目盛り線のリスト
@@ -225,6 +227,7 @@ class MeterAngleDetector:
         self.val_min = 0.0
         self.val_max = 100.0
         self.click_step = 0
+        self.zero_needle_overlap = False
         self.auto_center_candidate = None
         self.detected_ticks = []
         self.auto_scale_candidate = None
@@ -505,7 +508,19 @@ class MeterAngleDetector:
 
         is_confident = c.get('is_confident', True)
         source = c.get('source', 'ocr_tick')
-        if is_confident and source == 'vlm':
+        if c.get('needle_overlap_zero'):
+            # 針が0の目盛りに重なっているとVLMで確認できたケース。
+            # is_confidentの値に関わらず、0の位置は実際には目視確認できて
+            # いない（等間隔性からの推定または座標合成）ことを必ず警告する。
+            self.scale_info_label.configure(fg="#f9e2af")
+            self.scale_info_var.set(
+                f"⚠️ 針が0の目盛りに重なっており0の位置を直接確認できませんでした"
+                f"（目盛り間隔から推定）: 最小値={c['min_value']:.4g}  最大値={c['max_value']:.4g}"
+            )
+            self.status_var.set(
+                "⚠️ 針が0付近を指しているため、0の位置は自動検出で目視確認できていません。"
+                "ズレていないか必ず確認してから選んでください")
+        elif is_confident and source == 'vlm':
             self.scale_info_label.configure(fg="#cba6f7")
             self.scale_info_var.set(
                 f"🤖 OCRの対応付けが不十分だったためVLMで補完: "
@@ -543,6 +558,7 @@ class MeterAngleDetector:
         self.fullscale_point = c['full_pt']
         self.val_min = c['min_value']
         self.val_max = c['max_value']
+        self.zero_needle_overlap = c.get('needle_overlap_zero', False)
         self.auto_scale_candidate = None
         self.click_step = 3
         self._hide_confirm_scale_frame()
@@ -562,6 +578,11 @@ class MeterAngleDetector:
             'n_total': c['n_total'],
             'is_confident': c.get('is_confident', True),
             'source': c.get('source', 'ocr_tick'),
+            # 「針が0の目盛りに重なっている」という判定は、入れ替え前のzero_ptに
+            # 対して行ったものなので、入れ替え後の新しいzero_pt（＝元のfull_pt）
+            # には当てはまらない。そのまま引き継ぐと、実際には目視確認できている
+            # 点に警告が出る一方、本当に不確かな点の警告が消えてしまう。
+            'needle_overlap_zero': False,
         }
         self._show_scale_candidate()
 
@@ -812,9 +833,12 @@ class MeterAngleDetector:
                         font, 0.5, (180, 100, 255), 1)
 
             self._render(img)
+            zero_warning = (
+                "　⚠️ 0の位置は目視確認できていません（針の重なりから推定）"
+                if self.zero_needle_overlap else "")
             self.status_var.set(
                 f"✅ 検出完了！  角度: {abs_angle:.1f}°  値: {value:.2f}  "
-                f"（{self.val_min} ～ {self.val_max}）")
+                f"（{self.val_min} ～ {self.val_max}）{zero_warning}")
             self.angle_var.set(f"📊 {value:.2f}  ({abs_angle:.1f}°)")
 
             try:
@@ -830,6 +854,7 @@ class MeterAngleDetector:
                         "value": round(value, 4),
                         "needle_line": [int(x1), int(y1), int(x2), int(y2)],
                         "needle_tip": [int(tip_x), int(tip_y)],
+                        "zero_needle_overlap": self.zero_needle_overlap,
                     },
                     source_path=self.image_path,
                 )
