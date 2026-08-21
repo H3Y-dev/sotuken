@@ -1,0 +1,31 @@
+{
+  "timestamp": "20260714_112525_704",
+  "source_image": "C:/卒研/images/images (7).jpeg",
+  "scanned_image": "20260714_112525_704.png",
+  "center": [
+    126,
+    124
+  ],
+  "zero_point": [
+    77,
+    174
+  ],
+  "fullscale_point": [
+    174,
+    174
+  ],
+  "val_min": 0.0,
+  "val_max": 10.0,
+  "angle_deg": 81.53,
+  "value": 3.0004,
+  "needle_line": [
+    52,
+    75,
+    194,
+    178
+  ],
+  "needle_tip": [
+    55,
+    72
+  ]
+}
