@@ -260,7 +260,7 @@ def main(argv=None):
     rows = []
     for i, entry in enumerate(entries, 1):
         if entry.get('true_value') is None:
-            print('[{}/{}] {} — 真値が未記入のためスキップ'.format(
+            print('[{}/{}] {} : 真値が未記入のためスキップ'.format(
                 i, len(entries), entry['image']))
         else:
             print('[{}/{}] {} ...'.format(i, len(entries), entry['image']))

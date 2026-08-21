@@ -70,29 +70,29 @@
     "note": "扇形 松下電工 超過目盛電流計 別カット / 暗背景・赤針あり"
   },
   {
-    "image": "C:/卒研/images/meter1.png",
-    "true_value": null,
+    "image": "images/meter1.png",
+    "true_value": 21.0,
     "min_value": 0.0,
     "max_value": 150.0,
     "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近"
   },
   {
-    "image": "C:/卒研/images/meter2.jpg",
-    "true_value": null,
+    "image": "images/meter2.jpg",
+    "true_value": 30.0,
     "min_value": 0.0,
     "max_value": 100.0,
     "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近"
   },
   {
-    "image": "C:/卒研/images/meter3.png",
-    "true_value": null,
+    "image": "images/meter3.png",
+    "true_value": 2.9,
     "min_value": 0.0,
     "max_value": 8.0,
     "note": "丸型 車両タコメーター（×1000RPM表記、印字は0〜8）。中心露出・正立（回転なし）。参考:針は3.0〜3.1付近"
   },
   {
-    "image": "C:/卒研/images/meter4.jpg",
-    "true_value": null,
+    "image": "images/meter4.jpg",
+    "true_value": 1.2,
     "min_value": 0.0,
     "max_value": 8.0,
     "note": "丸型 車両タコメーター（Honda Fit、×1000r/min表記、印字は0〜8）。中心露出・正立（回転なし）。参考:針は1.0〜1.1付近"
