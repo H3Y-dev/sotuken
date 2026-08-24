@@ -12,11 +12,33 @@ import base64
 import io
 import json
 import re
+import time
 
 import cv2
 from PIL import Image
 
 MODEL_NAME = 'qwen3-vl:4b-instruct'
+
+
+def _chat_with_retry(ollama, retries=1, retry_wait=1.5, **kwargs):
+    """
+    ollama.chat()を呼び、失敗したら少し待って1回だけ再試行する。
+
+    このPCはGPU(8GB)を多数のデスクトップアプリ（ブラウザ・チャットアプリ等）と
+    共有しており、その瞬間の空きVRAMが変動するため、Ollamaのモデル読み込みが
+    cudaMallocのOOMで断続的に失敗することが分かっている（環境要因で、
+    こちら側のコードでは根本的には避けられない）。多くは一過性の競合なので、
+    一呼吸置いて再試行するだけで通ることが多い。
+    """
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            return ollama.chat(**kwargs)
+        except Exception as e:
+            last_error = e
+            if attempt < retries:
+                time.sleep(retry_wait)
+    raise last_error
 
 
 def check_availability():
@@ -79,7 +101,8 @@ def read_min_max(img):
         # 推論だけで使い切り、肝心のJSON本文が空になってしまうため、
         # 余裕を持たせている。現在使っている-instruct版は思考しないので
         # この心配は無いが、通常版に戻しても壊れないよう余裕は残しておく。
-        res = ollama.chat(
+        res = _chat_with_retry(
+            ollama,
             model=MODEL_NAME,
             messages=[{
                 'role': 'user',
@@ -87,7 +110,7 @@ def read_min_max(img):
                 'images': [img_b64],
             }],
             think=False,
-            options={'num_predict': 200}
+            options={'num_predict': 200, 'num_ctx': 2048}
         )
 
         match = re.search(r'\{.*?\}', res.message.content, re.DOTALL)
@@ -146,7 +169,8 @@ def check_needle_overlaps_zero(img):
             '{"overlaps_zero": <true or false>}'
         )
 
-        res = ollama.chat(
+        res = _chat_with_retry(
+            ollama,
             model=MODEL_NAME,
             messages=[{
                 'role': 'user',
@@ -154,7 +178,7 @@ def check_needle_overlaps_zero(img):
                 'images': [img_b64],
             }],
             think=False,
-            options={'num_predict': 150}
+            options={'num_predict': 150, 'num_ctx': 2048}
         )
 
         match = re.search(r'\{.*?\}', res.message.content, re.DOTALL)
@@ -207,7 +231,8 @@ def detect_meter_bbox(img):
             "All values are fractions of image width/height in range 0.0-1.0."
         )
 
-        res = ollama.chat(
+        res = _chat_with_retry(
+            ollama,
             model=MODEL_NAME,
             messages=[{
                 'role': 'user',
@@ -215,7 +240,7 @@ def detect_meter_bbox(img):
                 'images': [img_b64],
             }],
             think=False,
-            options={'num_predict': 200}
+            options={'num_predict': 200, 'num_ctx': 2048}
         )
 
         match = re.search(r'\{.*?\}', res.message.content, re.DOTALL)
@@ -285,7 +310,8 @@ def read_min_max_with_positions(img):
             "y=0.0 is the top edge, y=1.0 is the bottom edge."
         )
 
-        res = ollama.chat(
+        res = _chat_with_retry(
+            ollama,
             model=MODEL_NAME,
             messages=[{
                 'role': 'user',
@@ -293,7 +319,7 @@ def read_min_max_with_positions(img):
                 'images': [img_b64],
             }],
             think=False,
-            options={'num_predict': 250}
+            options={'num_predict': 250, 'num_ctx': 2048}
         )
 
         match = re.search(r'\{.*?\}', res.message.content, re.DOTALL)
