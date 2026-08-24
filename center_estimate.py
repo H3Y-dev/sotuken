@@ -51,7 +51,9 @@ def _distance_threshold(img):
     if img is None or not hasattr(img, 'shape') or len(img.shape) < 2:
         return 2.0
     height, width = img.shape[:2]
-    return max(2.0, math.hypot(float(width), float(height)) * 0.015)
+    # 既存の目盛り検出は主軸と放射方向の差を18度まで許容する。
+    # 実画像の輪郭分断による主軸誤差も支持線に残せる幅を確保する。
+    return max(2.0, math.hypot(float(width), float(height)) * 0.027)
 
 
 def estimate_center(img, ticks=None):
@@ -87,6 +89,7 @@ def estimate_center(img, ticks=None):
     threshold = _distance_threshold(img)
     minimum_inliers = max(3, int(math.ceil(len(lines) * 0.5)))
     best_inlier_indices = None
+    best_residuals = None
     best_score = None
 
     # 2本を標本とするRANSAC。目盛り本数は小さいためランダム抽出せず、
@@ -113,24 +116,22 @@ def estimate_center(img, ticks=None):
             if best_score is None or score > best_score:
                 best_score = score
                 best_inlier_indices = inlier_indices
+                best_residuals = residuals
 
     if best_inlier_indices is None:
         return None
 
-    inlier_lines = [lines[index] for index in best_inlier_indices]
+    # 広い支持判定の端に紛れた外れ値が最小二乗を引っ張らないよう、
+    # 支持線の残差中央値から求めた内側の集合でフィットする。
+    median_residual = float(np.median(best_residuals[best_inlier_indices]))
+    fit_threshold = max(2.0, min(threshold, median_residual * 2.5))
+    fit_indices = np.flatnonzero(best_residuals <= fit_threshold)
+    if len(fit_indices) < minimum_inliers:
+        fit_indices = best_inlier_indices
+
+    inlier_lines = [lines[index] for index in fit_indices]
     center = _fit_least_squares(inlier_lines)
     if center is None:
         return None
-
-    # 最小二乗後に支持線を一度選び直し、境界付近の正しい線も取り込む。
-    residuals = np.asarray([
-        abs(float(normal @ center) - offset)
-        for normal, offset in lines
-    ])
-    refined_indices = np.flatnonzero(residuals <= threshold)
-    if len(refined_indices) >= minimum_inliers:
-        refined = _fit_least_squares([lines[index] for index in refined_indices])
-        if refined is not None:
-            center = refined
 
     return float(center[0]), float(center[1])
