@@ -7,3 +7,12 @@ manager.db
 readings_export.csv
 eval/rep_*.json
 .serena/
+
+# ── 企業提供画像の流出防止 ────────────────────────────────
+# 日本製鋼所様から受領した実機写真および、それを元に生成した検証用画像は
+# リポジトリに含めない。GitHubは外部サービスであり、一度pushすると
+# 履歴から完全に消すのは難しい。詳細は tasks/企業提供画像の取り扱い.md
+eval/overlays/
+eval/overlays_*/
+*_result.jpg
+debug_*.jpg
