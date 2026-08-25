@@ -55,6 +55,84 @@ def _normalize_ocr_text(text):
     return text.translate(_CONFUSION_MAP)
 
 
+def _split_merged_number_boxes(candidates):
+    """隣接ラベルを一つに読んだ、幅が不自然に広い整数ボックスを分割する。"""
+    character_widths = []
+    for candidate in candidates:
+        text = candidate['text']
+        if text.isdigit():
+            width = candidate['x_right'] - candidate['x_left']
+            character_widths.append(width / len(text))
+    if not character_widths:
+        return candidates
+
+    sorted_widths = sorted(character_widths)
+    middle = len(sorted_widths) // 2
+    if len(sorted_widths) % 2:
+        typical_width = sorted_widths[middle]
+    else:
+        typical_width = (sorted_widths[middle - 1] + sorted_widths[middle]) / 2.0
+
+    split_candidates = []
+    for candidate in candidates:
+        text = candidate['text']
+        width = candidate['x_right'] - candidate['x_left']
+        # 134730では融合ボックスが正常値の1.24倍に留まるため、実測に合わせて
+        # 1.2倍とする。後続の等差列・先頭ゼロの検証で誤分割を抑止する。
+        if (not text.isdigit() or len(text) % 2 or
+                width / len(text) < typical_width * 1.2):
+            split_candidates.append(candidate)
+            continue
+
+        half = len(text) // 2
+        left_text = text[:half]
+        right_text = text[half:]
+        # ``2000 -> 20, 00`` のように、正当な4桁ラベルを壊さない。
+        if ((len(left_text) > 1 and left_text.startswith('0')) or
+                (len(right_text) > 1 and right_text.startswith('0'))):
+            split_candidates.append(candidate)
+            continue
+
+        left_value = float(left_text)
+        right_value = float(right_text)
+        step = abs(right_value - left_value)
+        other_values = [item['value'] for item in candidates if item is not candidate]
+        if step == 0 or not other_values:
+            split_candidates.append(candidate)
+            continue
+
+        # 分割した二値と既存値が同じ刻みの並びになることを確認する。
+        # 近傍に1刻み差の既存値があり、全既存値も同じ格子上にある場合だけ採用する。
+        has_neighbor = any(
+            abs(value - left_value) == step or abs(value - right_value) == step
+            for value in other_values
+        )
+        on_same_grid = all(
+            abs((value - left_value) / step - round((value - left_value) / step)) < 1e-6
+            for value in other_values
+        )
+        if not has_neighbor or not on_same_grid:
+            split_candidates.append(candidate)
+            continue
+
+        midpoint = (candidate['x_left'] + candidate['x_right']) / 2.0
+        left_candidate = candidate.copy()
+        left_candidate.update({
+            'text': left_text,
+            'value': left_value,
+            'x': (candidate['x_left'] + midpoint) / 2.0,
+        })
+        right_candidate = candidate.copy()
+        right_candidate.update({
+            'text': right_text,
+            'value': right_value,
+            'x': (midpoint + candidate['x_right']) / 2.0,
+        })
+        split_candidates.extend([left_candidate, right_candidate])
+
+    return split_candidates
+
+
 def read_scale_numbers(img):
     """
     盤面上の数字をOCRで検出する。
@@ -62,9 +140,9 @@ def read_scale_numbers(img):
     """
     engine = _load_engine()
     result = engine(img)
-    numbers = []
+    candidates = []
     if result is None or result.boxes is None:
-        return numbers
+        return candidates
 
     for box, text, score in zip(result.boxes, result.txts, result.scores):
         text = text.strip()
@@ -81,10 +159,25 @@ def read_scale_numbers(img):
 
         xs = [p[0] for p in box]
         ys = [p[1] for p in box]
-        cx = float(sum(xs) / len(xs))
-        cy = float(sum(ys) / len(ys))
-        numbers.append({'value': value, 'x': cx, 'y': cy, 'score': float(score)})
+        candidates.append({
+            'text': normalized,
+            'value': value,
+            'x_left': float(min(xs)),
+            'x_right': float(max(xs)),
+            'x': float(sum(xs) / len(xs)),
+            'y': float(sum(ys) / len(ys)),
+            'score': float(score),
+        })
 
+    numbers = []
+    for candidate in _split_merged_number_boxes(candidates):
+        numbers.append({
+            'value': candidate['value'],
+            'x': candidate.get(
+                'x', (candidate['x_left'] + candidate['x_right']) / 2.0),
+            'y': candidate['y'],
+            'score': candidate['score'],
+        })
     return numbers
 
 
