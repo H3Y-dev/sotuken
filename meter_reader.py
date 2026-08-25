@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 
-def arc_ratio(theta_needle, theta_zero, theta_full):
+def arc_ratio(theta_needle, theta_zero, theta_full, tick_angles=None):
     """
     ゼロ点・フルスケール点・針の角度（いずれもatan2のラジアン）から、
     針がスケール上のどの位置にあるかを0.0〜1.0の比率で返す。
@@ -25,20 +25,79 @@ def arc_ratio(theta_needle, theta_zero, theta_full):
     （ゼロとフルが同じ直線上に並ぶ場合など）は、弧が長い側＝実際に目盛りが
     振られている側とみなす。どちらにも収まらない場合は、針がスケールの外を
     指しているので0〜1にクランプする。
+
+    `tick_angles` に検出済みの目盛り角度（ラジアンのリスト）を渡すと、
+    **目盛りが実際に並んでいる側の弧**を走査方向として確定できる。
+
+    これを渡さない場合、針がスケールの外側（ゼロ点より手前など）を指すと、
+    「0〜1に収まる方を採用する」というルールが裏目に出て、**逆回りの弧に
+    収まってしまい、大きく誤った値を返す**（2026-08-25に実測で確認）。
+
+        ゼロ点135度・フル点45度（有効スパン270度）のメーターで、
+        針がゼロ点の5度手前 -> 22.2（0-400スケール、正しくは0）
+        針がゼロ点の67.5度手前 -> 300.0（ほぼフルスケール、正しくは0）
+
+    実機写真（耐圧試験_昇圧前圧力計）で、ゼロ点を「100」の目盛りと
+    誤検出したために針が範囲外になり、真値0.12に対し約184と読む
+    原因になっていた。目盛り角度を渡せばこの取り違えは起きない。
     """
     two_pi = 2 * math.pi
 
-    def _ratio(cw):
+    def _span(cw):
         if cw:
-            span = (theta_full - theta_zero) % two_pi
+            return (theta_full - theta_zero) % two_pi
+        return (theta_zero - theta_full) % two_pi
+
+    def _ratio(cw):
+        span = _span(cw)
+        if cw:
             offset = (theta_needle - theta_zero) % two_pi
         else:
-            span = (theta_zero - theta_full) % two_pi
             offset = (theta_zero - theta_needle) % two_pi
         return (offset / span) if span > 1e-6 else None
 
     r_cw = _ratio(cw=True)
     r_ccw = _ratio(cw=False)
+
+    def _clamped(cw, ratio):
+        """
+        弧の外を指す針を、近い方の端にクランプする。
+
+        単純に0〜1へ丸めるだけでは足りない。針がゼロ点の手前にある場合、
+        offsetは2πに近い値になり、比率は1を大きく超える。これをそのまま
+        1へ丸めると**満尺側**に振り切れてしまう（正しくはゼロ側）。
+        死角（スパンから2πまで）の真ん中を境に、どちらの端に近いかで
+        丸め先を決める。
+        """
+        if ratio is None:
+            return None
+        if 0.0 <= ratio <= 1.0:
+            return ratio
+        span = _span(cw)
+        if span <= 1e-6:
+            return max(0.0, min(1.0, ratio))
+        offset = ratio * span
+        dead_zone_middle = (span + two_pi) / 2.0
+        # 死角の後半（2π寄り）＝ゼロ点の手前 → 0側へ丸める
+        return 0.0 if offset > dead_zone_middle else 1.0
+
+    # 目盛りの位置が分かっているなら、走査方向を推測せず確定できる
+    if tick_angles:
+        span_cw = _span(cw=True)
+        n_cw = 0
+        for a in tick_angles:
+            # ゼロ点から時計回り側の弧に入っている目盛りを数える
+            if (a - theta_zero) % two_pi <= span_cw:
+                n_cw += 1
+        n_ccw = len(tick_angles) - n_cw
+        if n_cw != n_ccw:
+            cw = n_cw > n_ccw
+            chosen = _clamped(cw, r_cw if cw else r_ccw)
+            if chosen is not None:
+                # 針が弧の外を指していても、近い端へクランプするだけ。
+                # 逆回りの解釈に乗り換えない（それが上記の誤読の原因）
+                return chosen
+
     ok_cw = r_cw is not None and 0.0 <= r_cw <= 1.0
     ok_ccw = r_ccw is not None and 0.0 <= r_ccw <= 1.0
 
@@ -47,9 +106,7 @@ def arc_ratio(theta_needle, theta_zero, theta_full):
     if ok_ccw and not ok_cw:
         return r_ccw
     if ok_cw and ok_ccw:
-        span_cw = (theta_full - theta_zero) % two_pi
-        span_ccw = (theta_zero - theta_full) % two_pi
-        return r_cw if span_cw >= span_ccw else r_ccw
+        return r_cw if _span(cw=True) >= _span(cw=False) else r_ccw
     return max(0.0, min(1.0, r_cw if r_cw is not None else 0.0))
 
 
@@ -146,9 +203,14 @@ def detect_needle(img, center):
     }
 
 
-def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max):
+def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max,
+                    tick_angles=None):
     """
     画像・中心点・ゼロ点・フルスケール点・目盛りの最小/最大値から測定値を求める。
+
+    `tick_angles` は検出済みの目盛り角度（ラジアンのリスト、省略可）。
+    渡すとスケールの走査方向を推測せず確定できるため、針がスケール範囲の
+    外を指している場合の誤読を防げる（詳細は arc_ratio のdocstring）。
 
     戻り値: {'value', 'ratio', 'angle_deg', 'needle_line', 'needle_tip'}
             針を検出できなければ None
@@ -172,6 +234,7 @@ def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max):
         math.atan2(ndy, ndx),
         math.atan2(zy - cy, zx - cx),
         math.atan2(fsy - cy, fsx - cx),
+        tick_angles=tick_angles,
     )
     value = ratio_to_value(ratio, val_min, val_max)
 
