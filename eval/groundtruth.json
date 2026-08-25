@@ -99,28 +99,28 @@
   },
   {
     "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
-    "true_value": null,
+    "true_value": 0.16,
     "min_value": 0.0,
     "max_value": 150.0,
     "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近"
   },
   {
     "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
-    "true_value": null,
+    "true_value": 100.75,
     "min_value": 0.0,
     "max_value": 150.0,
     "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近"
   },
   {
     "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
-    "true_value": null,
+    "true_value": 0.12,
     "min_value": 0.0,
     "max_value": 400.0,
     "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近"
   },
   {
     "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
-    "true_value": null,
+    "true_value": 139.55,
     "min_value": 0.0,
     "max_value": 400.0,
     "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近"
