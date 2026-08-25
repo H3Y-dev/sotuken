@@ -47,6 +47,59 @@ class TestIsPlausibleFullscale(unittest.TestCase):
             self.assertFalse(scale_value_detect.is_plausible_fullscale(value))
 
 
+class TestSplitMergedNumberBoxes(unittest.TestCase):
+    """幅が不自然に広いOCR数字ボックスだけを安全に分割する。"""
+
+    @staticmethod
+    def _candidate(text, left, width):
+        return {
+            'text': text,
+            'value': float(text),
+            'x_left': float(left),
+            'x_right': float(left + width),
+            'y': 100.0,
+            'score': 0.9,
+        }
+
+    def test_splits_wide_even_digit_box_that_completes_progression(self):
+        candidates = [
+            self._candidate('10', 700, 107),
+            self._candidate('2030', 1056, 450),
+            self._candidate('60', 1466, 143),
+        ]
+
+        result = scale_value_detect._split_merged_number_boxes(candidates)
+
+        self.assertEqual([10.0, 20.0, 30.0, 60.0],
+                         [candidate['value'] for candidate in result])
+        self.assertEqual(1168.5, result[1]['x'])
+        self.assertEqual(1393.5, result[2]['x'])
+
+    def test_keeps_normal_width_box_intact(self):
+        candidates = [
+            self._candidate('10', 700, 107),
+            self._candidate('2030', 1056, 280),
+            self._candidate('60', 1466, 143),
+        ]
+
+        result = scale_value_detect._split_merged_number_boxes(candidates)
+
+        self.assertEqual([10.0, 2030.0, 60.0],
+                         [candidate['value'] for candidate in result])
+
+    def test_keeps_split_with_leading_zero_intact(self):
+        candidates = [
+            self._candidate('10', 700, 107),
+            self._candidate('2000', 1056, 450),
+            self._candidate('60', 1466, 143),
+        ]
+
+        result = scale_value_detect._split_merged_number_boxes(candidates)
+
+        self.assertEqual([10.0, 2000.0, 60.0],
+                         [candidate['value'] for candidate in result])
+
+
 class TestDetermineMinMaxMinimumExtension(unittest.TestCase):
     """OCRで読めなかった最小値を、実在する主目盛りへ1本ずつ補完する。"""
 
