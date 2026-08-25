@@ -46,6 +46,26 @@ py -0
 py -3.8 -m venv venv
 ```
 
+> [!warning]
+> **Anacondaが唯一の3.8として登録されている環境では、`sqlite3`が使えません**
+> （T6の保存層で使用）。`py -0p`で一覧を見たとき、3.8の行が
+> `C:\Users\<ユーザー名>\anaconda3\python.exe`を指している場合が該当します。
+> Anacondaは`import sqlite3`に必要な`sqlite3.dll`を`Library\bin`にしか
+> 置いておらず、`conda activate`で環境を有効化しない限りそこがPATHに
+> 乗らないため、`py -3.8`や通常のvenvから直接呼ぶと次のエラーで失敗します。
+> ```
+> ImportError: DLL load failed while importing _sqlite3: 指定されたモジュールが見つかりません。
+> ```
+> **直し方（1回だけでOK、Anaconda本体に対して行う）:**
+> ```powershell
+> Copy-Item "C:\Users\<ユーザー名>\anaconda3\Library\bin\sqlite3.dll" `
+>           "C:\Users\<ユーザー名>\anaconda3\DLLs\sqlite3.dll"
+> ```
+> このあと`py -3.8 -c "import sqlite3; print(sqlite3.sqlite_version)"`が
+> 通ればOKです。**既にvenvを作ってしまっている場合は、上記コピーの後に
+> venvを作り直す必要はありません**（venvはシステムのDLL検索を使うため、
+> このコピーだけで既存venvも直ります）。
+
 `venv`フォルダがこのプロジェクト専用に新しく作られます。他のプロジェクトの
 venvと混ざることはありません。作成後、念のためバージョンを確認してください。
 

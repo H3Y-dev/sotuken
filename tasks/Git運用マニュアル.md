@@ -119,6 +119,12 @@ python -m pip uninstall -y opencv-python
 python -m pip install --force-reinstall --no-deps opencv-contrib-python==4.10.0.84
 ```
 
+### Anaconda環境で`sqlite3`が使えない場合がある
+
+`py -3.8`がAnaconda由来のPythonを指している環境では、T6（保存層）で使う
+`import sqlite3`が`DLL load failed`で失敗することがあります。原因と直し方は
+`SETUP.md`の該当箇所を参照してください。
+
 ### `print()`に絵文字を使わない
 
 日本語Windowsの標準の文字コード（cp932）では絵文字を画面に出せず、
