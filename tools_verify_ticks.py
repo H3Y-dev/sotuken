@@ -7,7 +7,12 @@ import sys
 import cv2
 import numpy as np
 
-REPO = r'C:\卒研\git_stk\sotuken'
+# リポジトリのパスを固定してはいけない。worktreeを分けて複数案を比較するとき、
+# どのworktreeから実行しても常に同じ実装を測ってしまい、
+# 「違う案なのに数値が完全に一致する」という形で測定が破綻する
+# （2026-08-25に実際に起きた。A案とB案が同一の数値を出して気づいた）。
+# このファイル自身の位置を基準にすることで、実行したworktreeの実装を測る。
+REPO = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO)
 os.chdir(REPO)
 
