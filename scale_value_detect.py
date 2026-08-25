@@ -365,7 +365,7 @@ def is_plausible_fullscale(value, rel_tol=0.005):
     return False
 
 
-def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None):
+def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None, ticks=None):
     """
     数字が対応付けられた目盛りの集合から、0目盛り・フルスケール目盛りを決定する。
 
@@ -446,6 +446,42 @@ def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None):
     if is_confident and not is_plausible_fullscale(full_pair['value']):
         is_confident = False
 
+    # OCRが最小ラベルを読み落としていても、等間隔に並ぶ主目盛りが実在する場合だけ
+    # 1本ずつ最小値を補完する。弧の端までは外挿しない。
+    if ticks:
+        unique_values = sorted({pair['value'] for pair in survivors})
+        steps = [unique_values[i + 1] - unique_values[i]
+                 for i in range(len(unique_values) - 1)
+                 if unique_values[i + 1] > unique_values[i]]
+        if steps:
+            step = min(steps)
+            original_min = zero_pair['value']
+            original_span = full_pair['value'] - original_min
+            # 元の値幅の50%以内で、かつ数目盛りまでに制限する。
+            max_extension_steps = min(3, int(original_span / (2.0 * step)))
+            all_observed_non_negative = all(pair['value'] >= 0 for pair in bound_pairs)
+            used_tick_points = {
+                (int(round(pair['tick']['centroid'][0])),
+                 int(round(pair['tick']['centroid'][1])))
+                for pair in survivors
+            }
+
+            for _index in range(max_extension_steps):
+                candidate_value = zero_pair['value'] - step
+                if all_observed_non_negative and candidate_value < 0:
+                    break
+                candidate_pt = locate_value_by_extrapolation(
+                    survivors, ticks, candidate_value)
+                # 許容角内に既存の対応済み目盛りしかない場合は、候補の主目盛りは
+                # 実在しない。既存目盛りの再利用による誤延長を防ぐ。
+                if candidate_pt is None or candidate_pt in used_tick_points:
+                    break
+                zero_pair = {
+                    'value': candidate_value,
+                    'tick': {'centroid': candidate_pt},
+                }
+                used_tick_points.add(candidate_pt)
+
     return {
         'zero_pt': (int(round(zero_pair['tick']['centroid'][0])),
                     int(round(zero_pair['tick']['centroid'][1]))),
@@ -510,7 +546,8 @@ def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points):
     numbers = read_scale_numbers(img)
     bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
     n_ocr_unique = len({n['value'] for n in numbers})
-    return determine_min_max(bound, min_points=min_points, n_ocr_unique=n_ocr_unique)
+    return determine_min_max(bound, min_points=min_points, n_ocr_unique=n_ocr_unique,
+                             ticks=ticks)
 
 
 def _find_agreeing_result(results):
