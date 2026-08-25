@@ -44,6 +44,11 @@ import meter_pipeline
 # JIS C 1102 の確度階級。2.5級＝フルスケールの±2.5%
 DEFAULT_TOLERANCE_PERCENT = 2.5
 
+# これを超える引用誤差は「惜しい失敗」ではなく、別の原因で破綻していると
+# みなす（針を取り違えた、盤面を誤検出した等）。閾値そのものに理論的な
+# 根拠は無く、通常ケースと破綻ケースを分けて見るための実務的な線引き。
+CATASTROPHIC_THRESHOLD_PERCENT = 25.0
+
 
 # ── 指標 ──────────────────────────────────────────────────────
 def absolute_error(measured, true_value):
@@ -82,6 +87,17 @@ def is_within_tolerance(measured, true_value, val_min, val_max,
 
 
 # ── 集計 ──────────────────────────────────────────────────────
+def _median(values):
+    """中央値。外れ値に引きずられないので平均と併記する"""
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
 def summarize(rows):
     """
     評価結果の一覧から全体の要約を作る。
@@ -102,11 +118,23 @@ def summarize(rows):
         if stage != meter_pipeline.STAGE_OK:
             failure_stages[stage] = failure_stages.get(stage, 0) + 1
 
+    # 平均だけを見ると判断を誤る。2026-08-25の実測では、平均16.55%FSに対し
+    # 中央値は5.47%FSだった。25%FSを超える破滅的失敗が5件あり、それだけで
+    # 平均の79%を占めていた（残り12件の平均は4.87%FSで許容値に近い）。
+    # 平均だけを指標にすると、多数の地道な改善が数値に反映されない一方で、
+    # 担当範囲外（扇形メーター=T5など）の失敗に振り回される。
+    # そのため中央値と、破滅的失敗を除いた平均・件数を併記する。
+    catastrophic = [e for e in errors if e > CATASTROPHIC_THRESHOLD_PERCENT]
+    normal = [e for e in errors if e <= CATASTROPHIC_THRESHOLD_PERCENT]
+
     return {
         'total': total,
         'read_ok': len(ok_rows),
         'within_tolerance': sum(1 for r in rows if r.get('within_tolerance')),
         'mean_reference_error': (sum(errors) / len(errors)) if errors else None,
+        'median_reference_error': _median(errors),
+        'mean_excluding_catastrophic': (sum(normal) / len(normal)) if normal else None,
+        'catastrophic_count': len(catastrophic),
         'max_reference_error': max(errors) if errors else None,
         'failure_stages': failure_stages,
     }
@@ -221,7 +249,14 @@ def print_report(rows, summary, tolerance_percent):
     print('許容誤差内(±{}%FS): {} / {}'.format(
         tolerance_percent, summary['within_tolerance'], summary['total']))
     print('平均引用誤差      : {} %FS'.format(_fmt(summary['mean_reference_error'], '{:.2f}')))
+    print('中央値引用誤差    : {} %FS  <- 外れ値に強い。平均と大きく違う場合は'
+          ' 少数の破綻が平均を吊り上げている'.format(
+              _fmt(summary.get('median_reference_error'), '{:.2f}')))
     print('最大引用誤差      : {} %FS'.format(_fmt(summary['max_reference_error'], '{:.2f}')))
+    print('破滅的失敗({}%FS超): {} 件'.format(
+        int(CATASTROPHIC_THRESHOLD_PERCENT), summary.get('catastrophic_count', 0)))
+    print('  上記を除く平均  : {} %FS  <- 通常ケースでの実力'.format(
+        _fmt(summary.get('mean_excluding_catastrophic'), '{:.2f}')))
     if summary['failure_stages']:
         print('失敗の内訳        : ' + ', '.join(
             '{}={}'.format(k, v) for k, v in sorted(summary['failure_stages'].items())))
