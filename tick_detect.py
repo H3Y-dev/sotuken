@@ -100,102 +100,222 @@ def estimate_center_from_ticks(img, max_shift_ratio=0.4):
     return refine_center_from_ticks(ticks, seed, img.shape, max_shift_ratio=max_shift_ratio)
 
 
+def _dial_radius(img, center):
+    """Hough円検出が中心と整合するときだけ、盤面半径を返す。"""
+    try:
+        from detect_meter_center_v2 import detect_meter_center
+
+        short = min(img.shape[:2])
+        scale = min(1.0, 800.0 / short)
+        if scale < 1.0:
+            resized = cv2.resize(img, None, fx=scale, fy=scale,
+                                 interpolation=cv2.INTER_AREA)
+            result = detect_meter_center(resized)
+            expected_center = (center[0] * scale, center[1] * scale)
+        else:
+            result = detect_meter_center(img)
+            expected_center = center
+        if result is None:
+            return None
+        detected_center = result['center']
+        radius = float(result['radius'])
+        if radius <= 0:
+            return None
+        if math.hypot(detected_center[0] - expected_center[0],
+                      detected_center[1] - expected_center[1]) > radius * 0.2:
+            return None
+        return radius / scale
+    except Exception:
+        # 中心検出は補助情報なので、失敗時は従来の短辺基準に縮退する。
+        return None
+
+
+def _periodic_peaks(profile, min_separation):
+    """1周分の1次元プロファイルから、等間隔性を満たすピークを抽出する。"""
+    values = profile.astype(np.float32)
+    detail = values - cv2.GaussianBlur(values.reshape(1, -1), (0, 0), 8).ravel()
+    median = float(np.median(detail))
+    deviation = float(np.median(np.abs(detail - median)))
+    threshold = max(median + 12.0, median + 3.0 * deviation)
+
+    local_maxima = np.where(
+        (detail >= np.roll(detail, 1)) &
+        (detail > np.roll(detail, -1)) &
+        (detail >= threshold)
+    )[0]
+    if len(local_maxima) < 8:
+        return None
+    # 文字・反射が多い写真では局所最大が数千個になることがある。目盛り本数を
+    # 十分に上回る強い候補だけで周期性を評価し、探索時間を一定に保つ。
+    if len(local_maxima) > 180:
+        strongest = np.argpartition(detail[local_maxima], -180)[-180:]
+        local_maxima = local_maxima[strongest]
+
+    # 目盛り1本の太さによる重複ピークを、強い方だけにする。
+    selected = []
+    for index in sorted(local_maxima, key=lambda i: detail[i], reverse=True):
+        if all(min((index - other) % len(detail), (other - index) % len(detail))
+               >= min_separation for other in selected):
+            selected.append(int(index))
+    selected.sort()
+    if len(selected) < 8:
+        return None
+
+    gaps = np.diff(selected + [selected[0] + len(detail)]).astype(np.float32)
+    median_gap = float(np.median(gaps))
+    if median_gap <= 0:
+        return None
+    regular = (gaps >= median_gap * 0.55) & (gaps <= median_gap * 1.55)
+    regular_ratio = float(np.mean(regular))
+    if regular_ratio < 0.45:
+        return None
+
+    tick_count = int(round(len(detail) / median_gap))
+    if tick_count < 8:
+        return None
+    spacing = float(len(detail)) / tick_count
+    tolerance = spacing * 0.24
+
+    # 周期格子に最もよく合う位相を選ぶ。文字や背景の単発ピークが混ざっても、
+    # その1本に格子全体を引っ張らせないための処理である。
+    best_grid = None
+    for seed in selected:
+        phase = seed % spacing
+        # 各ピークを最寄りの格子セルへ一度だけ割り当てる。
+        # 以前の「全セル×全ピーク」探索は、写真の文字でピークが増えると
+        # 計算量が急増していた。
+        matched_by_cell = {}
+        for index in selected:
+            cell = int(round((index - phase) / spacing)) % tick_count
+            expected = (phase + cell * spacing) % len(detail)
+            distance = abs(((index - expected + len(detail) / 2.0) % len(detail))
+                           - len(detail) / 2.0)
+            if distance <= tolerance:
+                previous = matched_by_cell.get(cell)
+                if previous is None or distance < previous[0]:
+                    matched_by_cell[cell] = (distance, index)
+        matched = [item[1] for item in matched_by_cell.values()]
+        score = len(matched)
+        if best_grid is None or score > best_grid[0]:
+            best_grid = (score, matched)
+
+    # 一部が文字や針で隠れる盤面では、全目盛りが暗線として現れない。
+    # それでも周期格子へ3分の1以上が一致すれば、同一半径の目盛り帯と判断する。
+    if best_grid is None or best_grid[0] < max(8, tick_count * 0.35):
+        return None
+    return sorted(set(best_grid[1])), best_grid[0] * regular_ratio
+
+
+def _radial_length(polar, radius, angle_index, angle_half_width):
+    """極座標画像で、指定角度の暗線が半径方向に続く長さを測る。"""
+    count = polar.shape[1]
+    columns = [(angle_index + offset) % count
+               for offset in range(-angle_half_width, angle_half_width + 1)]
+    signal = np.max(polar[:, columns], axis=1) > 127
+    # アンチエイリアスや圧縮ノイズで1pxだけ切れた目盛りをつなぐ。
+    signal = cv2.morphologyEx(signal.astype(np.uint8).reshape(-1, 1),
+                              cv2.MORPH_CLOSE,
+                              np.ones((3, 1), dtype=np.uint8)).ravel().astype(bool)
+    search_start = max(0, radius - 4)
+    search_end = min(len(signal), radius + 5)
+    nearby = np.where(signal[search_start:search_end])[0]
+    if len(nearby) == 0:
+        return 0, float(radius)
+    radius = search_start + int(nearby[np.argmin(
+        np.abs(search_start + nearby - radius))])
+
+    start = radius
+    while start > 0 and signal[start - 1]:
+        start -= 1
+    end = radius
+    while end + 1 < len(signal) and signal[end + 1]:
+        end += 1
+    return end - start + 1, (start + end) / 2.0
+
+
 def detect_scale_ticks(img, center):
     """
-    盤面上の目盛り線をPCAベースで検出する。
-    各輪郭の点群にPCAをかけて主軸方向を求め、
-    中心方向とほぼ一致する（＝放射状に伸びた）細長い輪郭だけを
-    目盛り線として採用する。
+    中心を基準に極座標変換し、同一半径上で周期的に現れる暗線を目盛りとして返す。
+    輪郭の連結状態を使わないため、目盛りと円弧が融合していても検出できる。
     戻り値: [{'angle', 'centroid', 'line_angle', 'length', 'is_major'}, ...]
     """
     try:
-        cx, cy = center
+        cx, cy = float(center[0]), float(center[1])
         h, w = img.shape[:2]
         short = min(h, w)
+        edge_radius = min(cx, cy, w - 1 - cx, h - 1 - cy)
+        if edge_radius < 8:
+            return []
+
+        dial_radius = _dial_radius(img, (cx, cy))
+        if dial_radius is not None:
+            min_radius = int(round(dial_radius * 0.55))
+            max_radius = int(round(dial_radius * 0.98))
+        else:
+            # 盤面半径を得られない画像では、従来の短辺基準を保つ。
+            min_radius = int(round(short * 0.12))
+            max_radius = int(round(short * 0.55))
+        max_radius = min(max_radius, int(edge_radius))
+        if max_radius - min_radius < 8:
+            return []
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        thresh = cv2.adaptiveThreshold(
+        binary = cv2.adaptiveThreshold(
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY_INV, 25, 5
         )
+        angle_samples = max(360, int(round(2.0 * math.pi * max_radius)))
+        # warpPolarの出力は (角度, 半径)。転置して (半径, 角度) として扱う。
+        polar = cv2.warpPolar(
+            binary, (max_radius + 1, angle_samples), (cx, cy), max_radius,
+            cv2.WARP_POLAR_LINEAR | cv2.WARP_FILL_OUTLIERS,
+        ).T
 
-        contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        band_half_width = max(2, int(round(short * 0.012)))
+        step = max(1, band_half_width // 2)
+        best = None
+        for radius in range(min_radius + band_half_width,
+                            max_radius - band_half_width + 1, step):
+            profile = np.mean(
+                polar[radius - band_half_width:radius + band_half_width + 1], axis=0)
+            peaks = _periodic_peaks(
+                profile, max(3, int(round(angle_samples * math.radians(0.25))))
+            )
+            if peaks is None:
+                continue
+            indices, score = peaks
+            if best is None or score > best[0]:
+                best = (score, radius, indices)
 
-        min_len = short * 0.008
-        max_len = short * 0.12
-        min_dist = short * 0.12
-        max_dist = short * 0.55
+        if best is None:
+            return []
 
+        _, peak_radius, indices = best
+        angle_half_width = max(1, int(round(angle_samples * math.radians(0.35))))
         raw = []
-        for cnt in contours:
-            if len(cnt) < 5:
+        for index in indices:
+            length, centroid_radius = _radial_length(
+                polar, peak_radius, index, angle_half_width)
+            if length < max(3, short * 0.006):
                 continue
-            pts = cnt.reshape(-1, 2).astype(np.float32)
-
-            mean, eigvecs, _ = cv2.PCACompute2(pts, mean=None)
-            principal, secondary = eigvecs[0], eigvecs[1]
-            m = mean[0]
-
-            proj_p = (pts - m) @ principal
-            proj_s = (pts - m) @ secondary
-            length = float(proj_p.max() - proj_p.min())
-            thickness = float(proj_s.max() - proj_s.min())
-
-            if length < min_len or length > max_len:
-                continue
-            if thickness <= 0 or length / thickness < 2.0:
-                continue  # 細長い形状でなければ目盛りではない
-
-            mx, my = float(m[0]), float(m[1])
-            dist = math.hypot(mx - cx, my - cy)
-            if dist < min_dist or dist > max_dist:
-                continue
-
-            line_angle = math.atan2(principal[1], principal[0])
-            theta_to_center = math.atan2(my - cy, mx - cx)
-
-            diff = (line_angle - theta_to_center) % math.pi
-            diff = min(diff, math.pi - diff)
-            if diff > math.radians(18):
-                continue  # 放射方向を向いていない輪郭は除外
-
+            angle = 2.0 * math.pi * index / angle_samples
             raw.append({
-                'angle': theta_to_center,
-                'centroid': (mx, my),
-                'line_angle': line_angle,
-                'length': length,
+                'angle': angle,
+                'centroid': (
+                    cx + centroid_radius * math.cos(angle),
+                    cy + centroid_radius * math.sin(angle),
+                ),
+                'line_angle': angle,
+                'length': float(length),
             })
 
         if not raw:
             return []
-
-        # 角度が近い断片（同じ目盛りが分裂検出されたもの）を統合
-        raw.sort(key=lambda t: t['angle'])
-        merged = []
-        angle_eps = math.radians(1.2)
-        for t in raw:
-            if merged and abs(((t['angle'] - merged[-1]['angle'] + math.pi)
-                                % (2 * math.pi)) - math.pi) < angle_eps:
-                if t['length'] > merged[-1]['length']:
-                    merged[-1] = t
-            else:
-                merged.append(t)
-        if len(merged) > 1:
-            wrap_diff = abs(((merged[0]['angle'] - merged[-1]['angle'] + math.pi)
-                              % (2 * math.pi)) - math.pi)
-            if wrap_diff < angle_eps:
-                if merged[0]['length'] >= merged[-1]['length']:
-                    merged.pop()
-                else:
-                    merged.pop(0)
-
-        lengths = sorted(t['length'] for t in merged)
-        median_len = lengths[len(lengths) // 2]
-        for t in merged:
-            t['is_major'] = t['length'] > median_len * 1.3
-
-        return merged
-
+        lengths = sorted(tick['length'] for tick in raw)
+        median_length = lengths[len(lengths) // 2]
+        for tick in raw:
+            tick['is_major'] = tick['length'] > median_length * 1.3
+        return raw
     except Exception:
         return []
 
