@@ -2,6 +2,7 @@ import math
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -57,6 +58,53 @@ def _make_meter_with_ticks():
     return image, center, angles
 
 
+def _make_meter_with_ticks_and_numerals():
+    """周期的な数字より、放射状に続く目盛りを選ぶ合成盤面を作る。"""
+    size = 480
+    center = (size // 2, size // 2)
+    image = np.full((size, size, 3), 235, dtype=np.uint8)
+    tick_radius = 190
+    angles = []
+
+    # 実写真と同様に、目盛りの両端を結ぶ2本の円弧を描く。
+    cv2.circle(image, center, tick_radius, (90, 90, 90), 1, cv2.LINE_AA)
+    cv2.circle(image, center, tick_radius - 32, (90, 90, 90), 1, cv2.LINE_AA)
+
+    # 外周の目盛りは、実写で針や反射に隠れる状況を再現して一部を欠落させる。
+    for index in range(24):
+        if index % 4 == 3:
+            continue
+        angle = 2.0 * math.pi * index / 24.0
+        angles.append(angle)
+        length = 44 if index % 4 == 0 else 32
+        inner = tick_radius - length
+        p0 = (
+            int(round(center[0] + inner * math.cos(angle))),
+            int(round(center[1] + inner * math.sin(angle))),
+        )
+        p1 = (
+            int(round(center[0] + tick_radius * math.cos(angle))),
+            int(round(center[1] + tick_radius * math.sin(angle))),
+        )
+        cv2.line(image, p0, p1, (130, 130, 130), 1, cv2.LINE_AA)
+
+    # 内側の濃い数字も角度方向に周期性を持ち、現行実装ではこちらが勝つ。
+    for index, value in enumerate(range(0, 160, 10)):
+        angle = 2.0 * math.pi * index / 16.0 - math.pi / 2.0
+        label_radius = 130
+        x = int(round(center[0] + label_radius * math.cos(angle)))
+        y = int(round(center[1] + label_radius * math.sin(angle)))
+        label = str(value)
+        (text_width, text_height), _ = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
+        cv2.putText(
+            image, label, (x - text_width // 2, y + text_height // 2),
+            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (10, 10, 10), 2, cv2.LINE_AA,
+        )
+
+    return image, center, angles, tick_radius
+
+
 class TestDetectScaleTicksPolar(unittest.TestCase):
     def test_recovers_periodic_ticks_despite_connected_arc(self):
         image, center, expected_angles = _make_meter_with_ticks()
@@ -85,6 +133,30 @@ class TestDetectScaleTicksPolar(unittest.TestCase):
         for tick in ticks:
             self.assertLess(
                 min(_angle_difference(tick['angle'], angle) for angle in expected_angles),
+                math.radians(2.0),
+            )
+
+    def test_prefers_radial_ticks_over_periodic_numerals(self):
+        image, center, expected_angles, tick_radius = (
+            _make_meter_with_ticks_and_numerals())
+
+        # Hough円の成否ではなく、同じ探索範囲にある2つの周期帯を比較する。
+        with patch('tick_detect._dial_radius', return_value=205.0):
+            ticks = detect_scale_ticks(image, center)
+        detected_angles = [tick['angle'] for tick in ticks]
+        detected_radii = [
+            math.hypot(tick['centroid'][0] - center[0],
+                       tick['centroid'][1] - center[1])
+            for tick in ticks
+        ]
+
+        self.assertEqual(len(ticks), len(expected_angles))
+        self.assertGreater(np.median(detected_radii), tick_radius - 30)
+        self.assertEqual(sum(tick['is_major'] for tick in ticks), 6)
+        for expected in expected_angles:
+            self.assertLess(
+                min(_angle_difference(expected, actual)
+                    for actual in detected_angles),
                 math.radians(2.0),
             )
 
