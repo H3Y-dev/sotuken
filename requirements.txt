@@ -17,3 +17,9 @@ onnxruntime==1.19.2
 
 # 対応付けの信頼度が低い場合のVLMフォールバック（Ollama経由でQwen3-VLを利用）
 ollama
+
+# T6 一元管理システムのWeb UI（manager/ と app.py で使用）
+# Python 3.8対応の最終版で固定している。これより新しい版は3.9以上が必須。
+# 既存のピン（numpy 1.24.4 / pillow 10.4.0）と衝突しないことを確認済み。
+streamlit==1.40.1
+pandas==2.0.3

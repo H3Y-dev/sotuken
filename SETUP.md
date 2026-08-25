@@ -118,6 +118,15 @@ python -m pip install --force-reinstall --no-deps opencv-contrib-python==4.10.0.
 | pillow | 画像の読み込み・GUI表示 |
 | rapidocr, onnxruntime | 盤面の数字のOCR読み取り |
 | ollama | VLM（Qwen3-VL）と通信するためのクライアント |
+| streamlit, pandas | T6一元管理システムのWeb UI（`app.py`） |
+
+> [!note] streamlit / pandas のバージョンについて
+> `streamlit==1.40.1` / `pandas==2.0.3` は **Python 3.8に対応する最終版**です。
+> これより新しい版はPython 3.9以上が必須になるため、上げないでください。
+> 既存の`numpy==1.24.4` / `pillow==10.4.0`と衝突しないことは確認済みです。
+>
+> `app.py`（T6のWeb UI）を使わない場合、この2つは無くても
+> `main_sotuken.py`の動作には影響しません。
 
 > 旧スクリプト（`ocr_meter.py`, `paddletest.py`）専用の依存関係（`pytesseract`等）は
 > 現行パイプラインでは使わないため`requirements.txt`から外してあります。これらの
