@@ -3,7 +3,16 @@ import os
 import sys
 from typing import Any, Dict, List, Optional
 
-from manager.storage import MeterReading, Storage
+# このファイル自身のフォルダを検索パスに追加してから storage を読み込む。
+# こう書くと、次のどちらの呼ばれ方でも動く:
+#   - テスト側: sys.path に manager/ を追加して `from manager import MeterManager`
+#     （manager.py 自体がトップレベルのモジュールとして読み込まれる）
+#   - アプリ側: `from manager.manager import MeterManager`（パッケージ経由）
+# `from manager.storage import ...` と書くと前者で
+# 「'manager' is not a package」になり、テストが壊れる。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from storage import MeterReading, Storage
 
 
 class MeterManager:
