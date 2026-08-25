@@ -285,10 +285,31 @@ def main(argv=None):
     parser.add_argument('--tolerance', type=float,
                         default=DEFAULT_TOLERANCE_PERCENT,
                         help='許容誤差[%%FS]（既定: JIS 2.5級の2.5）')
+    parser.add_argument('--scope', default='round',
+                        help=('評価対象の形状で絞る（既定: round）。'
+                              '正解データの scope と一致するものだけを評価する。'
+                              'all を指定すると全件を評価する'))
     args = parser.parse_args(argv)
 
     with open(args.groundtruth, encoding='utf-8') as f:
         entries = json.load(f)
+
+    # 2026-08-25、本人の判断で**円形メーターに集中する**方針にした。
+    # 企業（日本製鋼所様）から提供された実データが丸型の圧力計であり、
+    # まずそこに近い条件で精度を確実に上げることを優先する。
+    # 扇形メーター（暗背景・赤い設定針）や角形PSK-100は当面対象外とし、
+    # 正解データの scope で切り替えられるようにしてある。
+    #
+    # 対象外のものも正解データからは消さない。方針が戻ったときに
+    # `--scope all` で元に戻せるようにしておくため。
+    if args.scope != 'all':
+        total_before = len(entries)
+        entries = [e for e in entries if e.get('scope', 'round') == args.scope]
+        print('評価対象: scope={} の {} 件（全 {} 件中）'.format(
+            args.scope, len(entries), total_before))
+        if not entries:
+            print('該当する画像がありません。--scope all で全件を評価できます')
+            return 1
 
     base_dir = os.path.dirname(os.path.abspath(args.groundtruth))
 
