@@ -12,13 +12,46 @@ Windows環境を前提としています。
 
 ---
 
-## 1. Python仮想環境（venv）のセットアップ
-
-このプロジェクトには既に`venv`フォルダが用意されています。まだ無い場合は作成してください。
+## 0. リポジトリをclone する
 
 ```powershell
-# プロジェクトフォルダで実行
-python -m venv venv
+git clone https://github.com/H3Y-dev/sotuken.git
+cd sotuken
+```
+
+`venv`フォルダは`.gitignore`で除外されており、cloneした直後は**存在しません。**
+次のステップで新規に作成してください（「他の人が作ったvenvが見当たらない」は
+正常な状態です。gitはvenv自体をリポジトリに含めない設計になっています）。
+
+---
+
+## 1. Python仮想環境（venv）のセットアップ
+
+**先にPython 3.8系が入っているか確認してください。** PCに複数のPythonバージョンが
+入っていることがあり、`python`コマンドが3.8以外（3.11や3.14等）を指してしまう場合が
+あります。バージョンがズレると、`requirements.txt`のバージョン固定パッケージが
+インストールできず失敗します。
+
+```powershell
+# インストール済みのPythonバージョン一覧を確認
+py -0
+```
+
+一覧に`3.8`が無い場合は、事前に[python.org](https://www.python.org/downloads/release/python-388/)
+等からPython 3.8系をインストールしてください。
+
+```powershell
+# プロジェクトフォルダ（sotuken）の直下で実行
+# "python" ではなく "py -3.8" を使い、バージョンを明示的に指定する
+py -3.8 -m venv venv
+```
+
+`venv`フォルダがこのプロジェクト専用に新しく作られます。他のプロジェクトの
+venvと混ざることはありません。作成後、念のためバージョンを確認してください。
+
+```powershell
+.\venv\Scripts\python.exe --version
+# Python 3.8.x と表示されればOK
 ```
 
 ### VSCodeでこのvenvを使うように設定する
@@ -42,21 +75,33 @@ python -m venv venv
 
 # ライブラリをインストール
 python -m pip install -r requirements.txt
+
+# rapidocrが依存関係として opencv-python を引き込んでしまい、
+# 既に入れた opencv-contrib-python と衝突する(cv2の挙動がおかしくなり
+# main_sotuken.pyの針検出が壊れる)。以下の2行で必ず解消しておく。
+python -m pip uninstall -y opencv-python
+python -m pip install --force-reinstall --no-deps opencv-contrib-python==4.10.0.84
 ```
+
+> [!warning]
+> `opencv-python`と`opencv-contrib-python`は同じ`cv2`という名前を提供する別パッケージで、
+> **両方入っていると片方の中身で上書きされ、原因不明のエラー（`cannot unpack non-iterable
+> numpy.int32 object`等）が出ます。** 上記2行を忘れると、`python -m unittest discover -s tests`
+> がエラーになります。心当たりのないエラーが出たら、まず`pip list`で両方入っていないか確認してください。
 
 `requirements.txt`の内容：
 
 | パッケージ | 用途 |
 |---|---|
 | opencv-contrib-python | 画像処理全般（目盛り線検出、中心検出など） |
-| numpy | 数値計算 |
+| numpy | 数値計算（中心推定の円フィッティング等も含む） |
 | pillow | 画像の読み込み・GUI表示 |
-| pytesseract | （現在は`ocr_meter.py`という旧スクリプト専用。メインの`main_sotuken.py`では未使用） |
 | rapidocr, onnxruntime | 盤面の数字のOCR読み取り |
 | ollama | VLM（Qwen3-VL）と通信するためのクライアント |
 
-> `pytesseract`はPythonパッケージを入れただけでは動かず、別途Tesseract-OCR本体のインストールが必要です。ただし現在のメインアプリでは使用していないため、`ocr_meter.py`を使う予定が無ければスキップして構いません。
-> （必要な場合のみ: https://github.com/UB-Mannheim/tesseract/wiki からWindows版をインストール）
+> 旧スクリプト（`ocr_meter.py`, `paddletest.py`）専用の依存関係（`pytesseract`等）は
+> 現行パイプラインでは使わないため`requirements.txt`から外してあります。これらの
+> スクリプトを使う予定がなければ気にしなくて大丈夫です。
 
 ---
 
