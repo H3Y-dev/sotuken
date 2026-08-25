@@ -334,6 +334,37 @@ def _verify_label_near_position(img, pt, target_value, radius=60, upscale=4):
     return any(abs(n['value'] - target_value) < 1e-6 for n in local_numbers)
 
 
+# 計器のフルスケールは、切りの良い値（標準数）から選ばれるのが普通。
+# 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8 ... に10のべき乗を掛けた値。
+# このプロジェクトで扱っている計器も 8 / 10 / 20 / 30 / 60 / 100 / 150 / 400 と、
+# すべてこの形に収まっている。
+_PLAUSIBLE_FULLSCALE_MANTISSAS = (1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0,
+                                  6.0, 7.5, 8.0)
+
+
+def is_plausible_fullscale(value, rel_tol=0.005):
+    """
+    フルスケールとしてありえる値か（標準数かどうか）を判定する。
+
+    OCRが目盛り線を数字と誤読すると、`1111` のような現実にはあり得ない
+    フルスケール値が出ることがある。2026-08-25の実測では、
+    20260817_134619.jpg でスケールが 20〜1111 と誤検出され、真値45に対し
+    1101.91と読んで引用誤差880%FSを記録していた。**この1枚だけで全体の
+    平均引用誤差が16%FSから60%FSへ跳ね上がっていた。**
+
+    ここで弾いた場合、値を捨てるのではなく信頼度を下げる。
+    既存のVLMフォールバックに委ねるほうが安全なため。
+    """
+    if value is None or value <= 0:
+        return False
+    exponent = math.floor(math.log10(abs(value)))
+    mantissa = abs(value) / (10.0 ** exponent)
+    for m in _PLAUSIBLE_FULLSCALE_MANTISSAS:
+        if abs(mantissa - m) <= rel_tol * m:
+            return True
+    return False
+
+
 def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None):
     """
     数字が対応付けられた目盛りの集合から、0目盛り・フルスケール目盛りを決定する。
@@ -409,6 +440,11 @@ def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None):
         # 実際に採用できた値の割合が低ければ信頼度を下げる。
         value_coverage = len({b['value'] for b in survivors}) / n_ocr_unique
         is_confident = value_coverage >= 0.5
+
+    # フルスケールが標準数から外れている場合は、OCRが目盛り線を数字と
+    # 誤読した可能性が高い。値は捨てず信頼度だけ下げ、VLMフォールバックに委ねる
+    if is_confident and not is_plausible_fullscale(full_pair['value']):
+        is_confident = False
 
     return {
         'zero_pt': (int(round(zero_pair['tick']['centroid'][0])),
