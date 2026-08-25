@@ -147,9 +147,15 @@ def read_meter(img, use_vlm=True):
     result['scale_confident'] = scale.get('is_confident')
 
     # ── 針 ──
+    # 目盛りの角度を渡すことで、スケールがどちら回りかを推測せず確定できる。
+    # 渡さないと、針がスケール範囲の外を指したときに逆回りの弧に収まって
+    # しまい大きく誤読する（meter_reader.arc_ratio のdocstring参照）
+    tick_angles = [t['angle'] for t in ticks if 'angle' in t] if ticks else None
+
     reading = meter_reader.compute_reading(
         img, center, scale['zero_pt'], scale['full_pt'],
-        scale['min_value'], scale['max_value'])
+        scale['min_value'], scale['max_value'],
+        tick_angles=tick_angles)
     if reading is None:
         result['stage'] = STAGE_NEEDLE
         return result
