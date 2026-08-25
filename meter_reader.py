@@ -14,6 +14,8 @@ import math
 import cv2
 import numpy as np
 
+from needle_detect import select_indicator_candidate
+
 
 def arc_ratio(theta_needle, theta_zero, theta_full, tick_angles=None):
     """
@@ -144,8 +146,7 @@ def detect_needle(img, center):
         maxLineGap=15
     )
 
-    needle_line = None
-    best_score = -1
+    candidates = []
     center_pass_thresh = min(h, w) * 0.03
 
     if lines is not None:
@@ -158,9 +159,9 @@ def detect_needle(img, center):
             dist_to_center = abs(dy * cx - dx * cy + x2 * y1 - y2 * x1) / line_len
             if dist_to_center > center_pass_thresh:
                 continue
-            if line_len > best_score:
-                best_score = line_len
-                needle_line = line[0]
+            candidates.append((int(x1), int(y1), int(x2), int(y2)))
+
+    needle_line = select_indicator_candidate(img, candidates)
 
     if needle_line is None:
         return None
