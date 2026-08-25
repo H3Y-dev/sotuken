@@ -9,6 +9,13 @@ import math
 import cv2
 import numpy as np
 
+# 主目盛りがこの本数に満たない場合、長さの上位を主目盛りとみなすフォールバックを使う。
+# 数字が振られる主目盛りは、どんな盤面でも最低数本はあるという前提。
+_MIN_MAJOR_TICKS = 3
+# フォールバック時に主目盛りとみなす割合。主目盛りの間には副目盛りが
+# 4〜9本入るのが一般的なので、全体の2割程度を上限の目安にしている。
+_MAJOR_TICK_FALLBACK_RATIO = 0.2
+
 
 def crop_with_margin(img, bbox, margin_ratio=0.1, min_size=20):
     """
@@ -389,6 +396,22 @@ def detect_scale_ticks(img, center):
         median_length = lengths[len(lengths) // 2]
         for tick in raw:
             tick['is_major'] = tick['length'] > median_length * 1.3
+
+        # 固定倍率だけだと、主目盛りと副目盛りの長さの差が小さい盤面で
+        # 主目盛りが1本も立たないことがある。実測では 20260817_134728.jpg の
+        # 最長目盛りが中央値の1.29倍しかなく、閾値1.3をわずかに下回って
+        # 主目盛り0本になっていた（同種の 134730 は1.38倍で8本立つ）。
+        #
+        # 主目盛りが無いと、OCR数字の対応付け（bind_numbers_to_ticks の
+        # major_bonus）も、目盛りの実在確認による最小値の補完
+        # （scale_value_detect の下方向への延長）も機能しなくなる。
+        # そこで、規定数に満たない場合は長い順の上位を主目盛りとみなす。
+        if sum(1 for t in raw if t['is_major']) < _MIN_MAJOR_TICKS:
+            n_major = max(_MIN_MAJOR_TICKS,
+                          int(len(raw) * _MAJOR_TICK_FALLBACK_RATIO))
+            threshold = sorted(lengths, reverse=True)[min(n_major, len(lengths)) - 1]
+            for tick in raw:
+                tick['is_major'] = tick['length'] >= threshold
         return raw
     except Exception:
         return []
