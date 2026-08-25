@@ -5,3 +5,5 @@ logs/
 eval/report*.json
 manager.db
 readings_export.csv
+eval/rep_*.json
+.serena/
