@@ -206,6 +206,62 @@ def _periodic_peaks(profile, min_separation):
     return sorted(set(best_grid[1])), best_grid[0] * regular_ratio
 
 
+def _tick_band_from_arcs(polar, min_radius, max_radius, short):
+    """角度方向へ広く続く2本の円弧から、その間の目盛り帯を求める。"""
+    occupancy = np.mean(polar > 127, axis=1).astype(np.float32)
+    smoothed = cv2.GaussianBlur(
+        occupancy.reshape(-1, 1), (0, 0), 2).ravel()
+    baseline = cv2.GaussianBlur(
+        occupancy.reshape(-1, 1), (0, 0), 12).ravel()
+    prominence = smoothed - baseline
+
+    angle_count = polar.shape[1]
+    sector_count = min(72, angle_count)
+    sector_width = angle_count // sector_count
+    usable_angles = sector_width * sector_count
+    if sector_width == 0 or usable_angles == 0:
+        return None
+
+    boundaries = []
+    start_radius = max(1, min_radius)
+    end_radius = min(len(smoothed) - 1, max_radius)
+    for radius in range(start_radius, end_radius):
+        if not (smoothed[radius] >= smoothed[radius - 1] and
+                smoothed[radius] > smoothed[radius + 1]):
+            continue
+        if prominence[radius] < 0.03:
+            continue
+
+        row_start = max(0, radius - 4)
+        row_end = min(polar.shape[0], radius + 5)
+        patch = (polar[row_start:row_end, :usable_angles] > 127).reshape(
+            row_end - row_start, sector_count, sector_width)
+        sector_density = np.mean(patch, axis=(0, 2))
+        coverage = float(np.mean(sector_density >= 0.10))
+        if coverage >= 0.60:
+            boundaries.append(
+                (radius, coverage, float(prominence[radius])))
+
+    min_gap = short * 0.02
+    max_gap = short * 0.12
+    pairs = []
+    for inner_index, inner in enumerate(boundaries):
+        for outer in boundaries[inner_index + 1:]:
+            gap = outer[0] - inner[0]
+            if min_gap <= gap <= max_gap:
+                pairs.append((
+                    min(inner[1], outer[1]),
+                    min(inner[2], outer[2]),
+                    inner[0],
+                    outer[0],
+                ))
+    if not pairs:
+        return None
+
+    best_pair = max(pairs, key=lambda pair: (pair[0], pair[1]))
+    return best_pair[2], best_pair[3]
+
+
 def _radial_length(polar, radius, angle_index, angle_half_width):
     """極座標画像で、指定角度の暗線が半径方向に続く長さを測る。"""
     count = polar.shape[1]
@@ -273,7 +329,16 @@ def detect_scale_ticks(img, center):
 
         band_half_width = max(2, int(round(short * 0.012)))
         step = max(1, band_half_width // 2)
+        arc_band = _tick_band_from_arcs(
+            polar, min_radius, max_radius, short)
+        if arc_band is not None:
+            arc_min = arc_band[0] + band_half_width
+            arc_max = arc_band[1] - band_half_width
+            if arc_min > arc_max:
+                arc_band = None
+
         best = None
+        fallback_best = None
         for radius in range(min_radius + band_half_width,
                             max_radius - band_half_width + 1, step):
             profile = np.mean(
@@ -284,9 +349,18 @@ def detect_scale_ticks(img, center):
             if peaks is None:
                 continue
             indices, score = peaks
-            if best is None or score > best[0]:
-                best = (score, radius, indices)
+            candidate = (score, radius, indices)
+            if fallback_best is None or score > fallback_best[0]:
+                fallback_best = candidate
+            if (arc_band is not None and arc_min <= radius <= arc_max and
+                    (best is None or score > best[0])):
+                best = candidate
 
+        if (arc_band is not None and fallback_best is not None and
+                arc_band[0] <= fallback_best[1] <= arc_band[1]):
+            best = fallback_best
+        if best is None:
+            best = fallback_best
         if best is None:
             return []
 
