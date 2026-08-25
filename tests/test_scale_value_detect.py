@@ -47,5 +47,47 @@ class TestIsPlausibleFullscale(unittest.TestCase):
             self.assertFalse(scale_value_detect.is_plausible_fullscale(value))
 
 
+class TestDetermineMinMaxMinimumExtension(unittest.TestCase):
+    """OCRで読めなかった最小値を、実在する主目盛りへ1本ずつ補完する。"""
+
+    @staticmethod
+    def _tick(angle, x, is_major=True):
+        return {'angle': angle, 'centroid': (x, 50), 'is_major': is_major}
+
+    def _bound_pairs(self, values):
+        return [
+            {'value': value, 'angle': index * 0.1,
+             'tick': self._tick(index * 0.1, 100 + index * 10)}
+            for index, value in enumerate(values)
+        ]
+
+    def test_extends_minimum_to_previous_major_tick(self):
+        bound_pairs = self._bound_pairs([100.0, 200.0, 300.0, 400.0])
+        ticks = [self._tick(-0.1, 90)] + [pair['tick'] for pair in bound_pairs]
+
+        result = scale_value_detect.determine_min_max(bound_pairs, ticks=ticks)
+
+        self.assertEqual(0.0, result['min_value'])
+        self.assertEqual((90, 50), result['zero_pt'])
+
+    def test_does_not_extend_below_zero_when_all_observations_are_non_negative(self):
+        bound_pairs = self._bound_pairs([0.0, 10.0, 20.0, 30.0])
+        ticks = [self._tick(-0.1, 90)] + [pair['tick'] for pair in bound_pairs]
+
+        result = scale_value_detect.determine_min_max(bound_pairs, ticks=ticks)
+
+        self.assertEqual(0.0, result['min_value'])
+        self.assertEqual((100, 50), result['zero_pt'])
+
+    def test_does_not_extend_without_previous_major_tick(self):
+        bound_pairs = self._bound_pairs([10.0, 20.0, 30.0, 40.0])
+        ticks = [pair['tick'] for pair in bound_pairs]
+
+        result = scale_value_detect.determine_min_max(bound_pairs, ticks=ticks)
+
+        self.assertEqual(10.0, result['min_value'])
+        self.assertEqual((100, 50), result['zero_pt'])
+
+
 if __name__ == '__main__':
     unittest.main()
