@@ -1,14 +1,13 @@
+import csv
 import os
 import sys
 from typing import Any, Dict, List, Optional
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from storage import MeterReading, Storage
+from manager.storage import MeterReading, Storage
 
 
 class MeterManager:
-    """管理層：画像認識とDB保存の連携・表示用整形を制御するメインクラス"""
+    """管理層：画像認識とDB保存の連携・表示・CSV出力・閾値判定を制御するメインクラス"""
 
     def __init__(self, db_path: str = "manager.db") -> None:
         self.storage = Storage(db_path)
@@ -18,8 +17,10 @@ class MeterManager:
         image_path: str,
         device_name: str,
         reader_func: Any,
-    ) -> MeterReading:
-        """1枚のメーター画像を読み取り、結果を保存して返却する"""
+        threshold_max: Optional[float] = None,
+        threshold_min: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """認識処理を実行し、閾値判定を付与した結果を返却"""
         read_result: Dict[str, Any] = reader_func(image_path)
 
         row_id = self.storage.save_reading(
@@ -29,25 +30,37 @@ class MeterManager:
         )
 
         readings = self.storage.get_all_readings()
+        reading_obj = None
         for r in readings:
             if r.id == row_id:
-                return r
+                reading_obj = r
+                break
 
-        return MeterReading(
-            id=row_id,
-            device_name=device_name,
-            value=read_result.get("value"),
-            stage=read_result.get("stage", "unknown"),
-            image_path=image_path,
-            raw_data=read_result,
-        )
+        val = read_result.get("value")
+        is_alert = False
+        alert_message = ""
+
+        # 閾値チェック判定
+        if val is not None:
+            if threshold_max is not None and val > threshold_max:
+                is_alert = True
+                alert_message = f"上限閾値 ({threshold_max}) を超過しています！"
+            elif threshold_min is not None and val < threshold_min:
+                is_alert = True
+                alert_message = f"下限閾値 ({threshold_min}) を下回っています！"
+
+        return {
+            "reading": reading_obj,
+            "val": val,
+            "stage": read_result.get("stage", "unknown"),
+            "is_alert": is_alert,
+            "alert_message": alert_message,
+        }
 
     def get_history(self) -> List[MeterReading]:
-        """全読み取り履歴を取得する"""
         return self.storage.get_all_readings()
 
     def format_history_for_cli(self) -> str:
-        """CLI出力用に履歴をテキストテーブル形式で整形する"""
         readings = self.get_history()
         if not readings:
             return "履歴データがありません。"
@@ -64,7 +77,6 @@ class MeterManager:
         return "\n".join(lines)
 
     def format_history_for_ui(self) -> List[Dict[str, Any]]:
-        """GUI/Web UI用に履歴を辞書型のリストとして整形する"""
         readings = self.get_history()
         return [
             {
@@ -78,3 +90,31 @@ class MeterManager:
             }
             for r in readings
         ]
+
+    def export_to_csv(self, output_path: str = "readings_export.csv") -> str:
+        """保存されている全履歴を CSV ファイルに出力する"""
+        readings = self.get_history()
+        fieldnames = [
+            "id",
+            "timestamp",
+            "device_name",
+            "stage",
+            "value",
+            "image_path",
+        ]
+
+        with open(output_path, mode="w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in readings:
+                writer.writerow(
+                    {
+                        "id": r.id,
+                        "timestamp": r.timestamp,
+                        "device_name": r.device_name,
+                        "stage": r.stage,
+                        "value": r.value if r.value is not None else "",
+                        "image_path": r.image_path,
+                    }
+                )
+        return os.path.abspath(output_path)
