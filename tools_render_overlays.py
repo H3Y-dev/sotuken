@@ -25,6 +25,7 @@
   黄色い十字   中心点
   緑の点       目盛り（副目盛り）
   マゼンタの点 目盛り（主目盛り）
+  マゼンタの輪 目盛り（格子から合成した主目盛り）
   黄色い丸     ゼロ点
   マゼンタの丸 フルスケール点
   赤い線       検出した針
@@ -95,16 +96,22 @@ def render(entry, base_dir, use_vlm):
 
     center = result.get('center')
     if center is not None:
-        # 目盛りは pipeline が返さないので、同じ条件で取り直して描く
-        try:
-            ticks = tick_detect.detect_scale_ticks(
-                tick_detect.apply_clahe(img, clip_limit=2.0), center)
-        except Exception:
-            ticks = []
+        # pipeline が実際に使った目盛り（主目盛りの付け直し済み）を描く。
+        # 取り直すと主目盛りの判定が実際の読み取りとずれて、目視検証が
+        # 本番と違うものを見ることになる。
+        ticks = result.get('ticks')
+        if not ticks:
+            try:
+                ticks = tick_detect.detect_scale_ticks(
+                    tick_detect.apply_clahe(img, clip_limit=2.0), center)
+            except Exception:
+                ticks = []
         for t in ticks:
             pt = (int(t['centroid'][0]), int(t['centroid'][1]))
             color = (255, 0, 255) if t.get('is_major') else (0, 255, 0)
-            cv2.circle(out, pt, 7, color, -1)
+            # 検出値と格子からの推定値を目視で区別し、誤った外挿を見逃さない。
+            thickness = 2 if t.get('synthetic') else -1
+            cv2.circle(out, pt, 7, color, thickness)
 
         cv2.drawMarker(out, tuple(center), (0, 255, 255),
                        cv2.MARKER_CROSS, 46, 4)

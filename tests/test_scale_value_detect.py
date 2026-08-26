@@ -4,6 +4,7 @@ scale_value_detect のうち、画像に依存しない判定部分のテスト�
 実行:
     venv\\Scripts\\python.exe -m unittest discover -s tests
 """
+import math
 import os
 import sys
 import unittest
@@ -140,6 +141,94 @@ class TestDetermineMinMaxMinimumExtension(unittest.TestCase):
 
         self.assertEqual(10.0, result['min_value'])
         self.assertEqual((100, 50), result['zero_pt'])
+
+
+class TestExtendTicksToNumbers(unittest.TestCase):
+    """検出漏れした主目盛りを、数字と格子の両方で確認して補う。"""
+
+    @staticmethod
+    def _tick(center, angle, length=10.0):
+        radius = 100.0
+        return {
+            'angle': angle,
+            'centroid': (center[0] + radius * math.cos(angle),
+                         center[1] + radius * math.sin(angle)),
+            'line_angle': angle,
+            'length': length,
+            'is_major': False,
+        }
+
+    def _grid_inputs(self, extra_numbers=()):
+        center = (200.0, 150.0)
+        period = math.radians(15.0)
+        # slot 0 の主目盛りだけを検出漏れとし、数字0だけは残った状態を作る。
+        ticks = [self._tick(center, slot * period)
+                 for slot in range(1, 20)]
+        numbers = [
+            {'value': 0.0, 'x': 300.0, 'y': 150.0},
+            {'value': 20.0,
+             'x': 200.0 + 130.0 * math.cos(5 * period),
+             'y': 150.0 + 130.0 * math.sin(5 * period)},
+            {'value': 40.0,
+             'x': 200.0 + 130.0 * math.cos(10 * period),
+             'y': 150.0 + 130.0 * math.sin(10 * period)},
+            {'value': 60.0,
+             'x': 200.0 + 130.0 * math.cos(15 * period),
+             'y': 150.0 + 130.0 * math.sin(15 * period)},
+        ]
+        return center, numbers + list(extra_numbers), ticks
+
+    def test_synthesizes_missing_major_tick_at_number_position(self):
+        center, numbers, ticks = self._grid_inputs()
+
+        result = scale_value_detect.extend_ticks_to_numbers(numbers, ticks, center)
+
+        synthetic = [tick for tick in result if tick.get('synthetic')]
+        self.assertEqual(1, len(synthetic))
+        self.assertTrue(synthetic[0]['is_major'])
+        self.assertAlmostEqual(0.0, synthetic[0]['angle'], places=6)
+        self.assertAlmostEqual(300.0, synthetic[0]['centroid'][0], places=6)
+        self.assertAlmostEqual(150.0, synthetic[0]['centroid'][1], places=6)
+
+    def test_rejects_number_whose_angle_disagrees_with_grid(self):
+        # 値80なら格子は300度を示すが、数字は315度にある。格子だけを根拠に
+        # 合成すると誤読でも盤面上へ点を置いてしまうため、12度の安全弁で捨てる。
+        bad_number = {
+            'value': 80.0,
+            'x': 200.0 + 130.0 * math.cos(math.radians(315.0)),
+            'y': 150.0 + 130.0 * math.sin(math.radians(315.0)),
+        }
+        center, numbers, ticks = self._grid_inputs([bad_number])
+
+        result = scale_value_detect.extend_ticks_to_numbers(numbers, ticks, center)
+
+        self.assertEqual(1, sum(tick.get('synthetic', False) for tick in result))
+
+    def test_rejects_number_beyond_grid_extension_limit(self):
+        center = (200.0, 150.0)
+        period = math.radians(15.0)
+        ticks = [self._tick(center, slot * period) for slot in range(1, 11)]
+        numbers = [
+            {'value': 0.0, 'x': 300.0, 'y': 150.0},
+            {'value': 20.0,
+             'x': 200.0 + 130.0 * math.cos(3 * period),
+             'y': 150.0 + 130.0 * math.sin(3 * period)},
+            {'value': 40.0,
+             'x': 200.0 + 130.0 * math.cos(6 * period),
+             'y': 150.0 + 130.0 * math.sin(6 * period)},
+            {'value': 60.0,
+             'x': 200.0 + 130.0 * math.cos(9 * period),
+             'y': 150.0 + 130.0 * math.sin(9 * period)},
+            # 値120の格子位置は270度で数字の位置とも一致するが、検出範囲から
+            # 主目盛り2区間を超えているため、外挿の暴走を避けて捨てる。
+            {'value': 120.0,
+             'x': 200.0 + 130.0 * math.cos(math.radians(270.0)),
+             'y': 150.0 + 130.0 * math.sin(math.radians(270.0))},
+        ]
+
+        result = scale_value_detect.extend_ticks_to_numbers(numbers, ticks, center)
+
+        self.assertEqual(1, sum(tick.get('synthetic', False) for tick in result))
 
 
 if __name__ == '__main__':

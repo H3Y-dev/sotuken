@@ -181,6 +181,340 @@ def read_scale_numbers(img):
     return numbers
 
 
+# 主目盛りは副目盛りn本ごとに1本現れる。n=1（隣り合う目盛りが両方とも
+# 主目盛り）はメータとしてあり得ないし、nが大きすぎるのも実在しない。
+_MAJOR_CADENCE_MIN = 2
+_MAJOR_CADENCE_MAX = 20
+# 数字が直線に乗っているとみなす、通し番号のずれの許容幅（目盛り本数）。
+# 印字された数字の重心は目盛り線とぴったり同じ角度には来ない（盤面が斜めに
+# 写ると数字の外接矩形が傾き、重心が数度ずれる）。目盛りの間隔が10度未満の
+# メータでは、これだけで対応付けが隣の目盛りに1本ずれる。1本のずれは
+# 許容し、直線に乗るかどうかで正誤を判断する。
+_SLOT_TOLERANCE = 1.2
+
+
+def _bind_number_tick_indices(numbers, ticks, center, max_angle_deg,
+                              major_bonus_deg):
+    """各数字に目盛り線を1つだけ割り当て、(数字, 目盛りindex)の一覧を返す。"""
+    cx, cy = center
+    max_diff = math.radians(max_angle_deg)
+    bonus = math.radians(major_bonus_deg)
+
+    # 各数字ごとに最良の目盛り候補を1つだけ選ぶ
+    number_candidates = []  # (score, number, tick_idx)
+    for n in numbers:
+        angle = math.atan2(n['y'] - cy, n['x'] - cx)
+        best_score, best_idx = None, None
+        for i, t in enumerate(ticks):
+            diff = abs(((t['angle'] - angle + math.pi) % (2 * math.pi)) - math.pi)
+            if diff >= max_diff:
+                continue
+            score = diff - bonus if t.get('is_major') else diff
+            if best_score is None or score < best_score:
+                best_score, best_idx = score, i
+        if best_idx is not None:
+            number_candidates.append((best_score, n, best_idx))
+
+    number_candidates.sort(key=lambda c: c[0])
+    used_ticks = set()
+    pairs = []
+    for score, n, idx in number_candidates:
+        if idx in used_ticks:
+            continue
+        used_ticks.add(idx)
+        pairs.append((n, idx))
+    return pairs
+
+
+def _arc_order(ticks):
+    """目盛りを円弧に沿った並び順に直したindex列を返す。
+
+    detect_scale_ticks は角度0を基点に並べて返すので、盤面下部の死角
+    （目盛りが無い区間）が配列の途中に来ることがある。そのままだと
+    「配列で隣り合う＝1目盛り分だけ離れている」という関係が死角をまたぐ
+    ところで崩れ、主目盛りの間隔を数え違える。最大の角度間隔の直後を
+    先頭に回し、円弧に沿った順序へ直す。
+    """
+    n = len(ticks)
+    if n < 3:
+        return list(range(n))
+    angles = [t['angle'] for t in ticks]
+    gaps = [(angles[(i + 1) % n] - angles[i]) % (2 * math.pi) for i in range(n)]
+    median_gap = sorted(gaps)[n // 2]
+    widest = max(range(n), key=lambda i: gaps[i])
+    if median_gap <= 0 or gaps[widest] < median_gap * 1.8:
+        return list(range(n))
+    start = (widest + 1) % n
+    return [(start + k) % n for k in range(n)]
+
+
+def _tick_slots(ticks, order):
+    """円弧に沿った目盛りを、等間隔の櫛の何本目かという通し番号に直す。
+
+    目盛り検出は一部を取りこぼすことがある（実測: 気密試験の写真は本来31本
+    前後あるはずのところ23本しか出ない）。取りこぼすと「配列で隣同士＝
+    1目盛り分」が成り立たなくなり、主目盛りの間隔を数え違える。
+    角度の刻み幅で割って通し番号に直せば、欠けていても正しく数えられる。
+
+    戻り値: order と同じ並びの通し番号のリスト。求められなければ None。
+    """
+    count = len(order)
+    if count < 3:
+        return None
+    angles = [ticks[index]['angle'] for index in order]
+    gaps = [(angles[k + 1] - angles[k]) % (2 * math.pi)
+            for k in range(count - 1)]
+    positive = sorted(gap for gap in gaps if gap > 1e-9)
+    if not positive:
+        return None
+    period = positive[len(positive) // 2]
+
+    def to_slots(unit):
+        slots = [0]
+        total = 0.0
+        for gap in gaps:
+            total += gap
+            slots.append(int(round(total / unit)))
+        return slots
+
+    slots = to_slots(period)
+    # 刻み幅の誤差が端まで積み上がるので、全長から刻み幅を求め直して詰める
+    if slots[-1] > 0:
+        total_angle = sum(gaps)
+        slots = to_slots(total_angle / slots[-1])
+
+    # 死角（目盛りの無い区間）が並びの途中に残っていると通し番号が跳ね上がる。
+    # そうなっていたら周期の当てはめは信用できないので諦める。
+    if slots[-1] > count * 2.5 or slots != sorted(slots):
+        return None
+    return slots
+
+
+def _cadence_from_line(marks, slope, intercept):
+    """1本の直線に乗る数字を数え、そこから主目盛りの周期と位相を出す。
+
+    戻り値: (乗った数字の数, 残差の合計, 周期, 位相) または不成立なら None
+    """
+    inliers = [mark for mark in marks
+               if abs(mark[0] - (slope * mark[1] + intercept))
+               <= _SLOT_TOLERANCE]
+    # 過半数が直線から外れるなら、そもそも数字の読みが信用できない
+    if len(inliers) < max(3, int(math.ceil(len(marks) * 0.6))):
+        return None
+
+    values = sorted(set(mark[1] for mark in inliers))
+    steps = [values[k + 1] - values[k] for k in range(len(values) - 1)]
+    steps = [step for step in steps if step > 0]
+    if not steps:
+        return None
+    # 印字された数字の最小間隔＝主目盛り1つ分の値
+    cadence_float = abs(slope) * min(steps)
+    cadence = int(round(cadence_float))
+    if abs(cadence_float - cadence) > 0.25:
+        return None
+    if cadence < _MAJOR_CADENCE_MIN or cadence > _MAJOR_CADENCE_MAX:
+        return None
+
+    # 位相は直線そのものから決める。値0のときの通し番号が切片なので、
+    # 主目盛りは「切片と同じ余り」を持つ通し番号に並ぶ。
+    # 個々の対応付けは1本ずれ得るが、直線は全点から求めているのでずれない。
+    phase = int(round(intercept)) % cadence
+    residual = sum(abs(mark[0] - (slope * mark[1] + intercept))
+                   for mark in inliers)
+    return len(inliers), residual, cadence, phase
+
+
+def _fit_major_cadence(marks):
+    """(櫛の通し番号, 値)の組から、主目盛りの周期と位相を頑健に求める。
+
+    値と通し番号は本来1本の直線に乗る（値が1増えると決まった本数だけ進む）。
+    ところがOCRは無関係な数字や誤読（100を108と読む等）を混ぜてくるので、
+    全点をまとめて平均すると壊れる。そこで2点で決まる直線を総当たりし、
+    最も多くの数字が乗る直線を採る。
+
+    周期が整数にならない直線は、その時点で捨てる。誤読を含む直線はここで
+    落ちるので、「一番よく乗る直線」を先に選んでから整数性を見てはいけない
+    （誤読を含む直線の方が見かけ上よく乗ることがあり、正しい直線が
+    選ばれる前に捨てられてしまう）。
+
+    戻り値: (周期, 位相) または当てはまらなければ None
+    """
+    model = _fit_major_grid_line(marks)
+    if model is None:
+        return None
+    return model['cadence'], model['phase']
+
+
+def _fit_major_grid_line(marks):
+    """主目盛りの周期だけでなく、値と通し番号を結ぶ直線も返す。"""
+    count = len(marks)
+    best = None
+    for i in range(count):
+        for j in range(i + 1, count):
+            slot_i, value_i = marks[i]
+            slot_j, value_j = marks[j]
+            if value_j == value_i or slot_j == slot_i:
+                continue
+            slope = float(slot_j - slot_i) / (value_j - value_i)
+            intercept = slot_i - slope * value_i
+            model = _cadence_from_line(marks, slope, intercept)
+            if model is None:
+                continue
+            n_inliers, residual, cadence, phase = model
+            candidate = (n_inliers, -residual, cadence, phase, slope, intercept)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+    if best is None:
+        return None
+    return {
+        'cadence': best[2],
+        'phase': best[3],
+        'slope': best[4],
+        'intercept': best[5],
+    }
+
+
+def build_tick_grid(numbers, ticks, center, max_angle_deg=12.0):
+    """目盛りの等間隔格子と、値との対応（直線）を求める。
+
+    戻り値: dict または求められなければ None
+        cadence     … 主目盛りが副目盛り何本ごとに現れるか
+        phase       … 主目盛りが乗る通し番号の余り（通し番号 % cadence）
+        slope       … 値1あたり通し番号がいくつ進むか
+        intercept   … 値0のときの通し番号
+        period      … 目盛り1本あたりの角度（ラジアン）
+        base_angle  … 通し番号0の目盛りの角度（ラジアン）
+        min_slot    … 検出できた目盛りの通し番号の最小
+        max_slot    … 同じく最大
+        radius      … 目盛りの中心からの距離の中央値
+    """
+    if not numbers or len(ticks) < 4:
+        return None
+
+    order = _arc_order(ticks)
+    slots = _tick_slots(ticks, order)
+    if slots is None or slots[-1] <= 0:
+        return None
+    slot_of = dict((tick_index, slots[k])
+                   for k, tick_index in enumerate(order))
+
+    # 主目盛りを決める前なので、既存のis_majorの判定には引きずられない。
+    pairs = _bind_number_tick_indices(numbers, ticks, center, max_angle_deg, 0.0)
+    by_value = {}
+    for n, idx in pairs:
+        by_value.setdefault(float(n['value']), []).append(slot_of[idx])
+    marks = sorted((found[0], value) for value, found in by_value.items()
+                   if len(found) == 1)
+    if len(marks) < 3:
+        return None
+
+    line = _fit_major_grid_line(marks)
+    if line is None:
+        return None
+
+    angles = [ticks[index]['angle'] for index in order]
+    total_angle = sum((angles[k + 1] - angles[k]) % (2 * math.pi)
+                      for k in range(len(angles) - 1))
+    period = total_angle / slots[-1]
+    cx, cy = center
+    radii = sorted(math.hypot(t['centroid'][0] - cx, t['centroid'][1] - cy)
+                   for t in ticks)
+    if period <= 0 or not radii:
+        return None
+
+    grid = dict(line)
+    grid.update({
+        'period': period,
+        'base_angle': angles[0],
+        'min_slot': min(slots),
+        'max_slot': max(slots),
+        'radius': radii[len(radii) // 2],
+    })
+    return grid
+
+
+def refine_major_ticks_from_numbers(numbers, ticks, center, max_angle_deg=12.0):
+    """印字された数字の位置から主目盛りを決め直した目盛り一覧を返す。
+
+    目盛り線の「長さ」で主目盛りを見分ける方法は、実機写真では機能しない。
+    盤面が斜めを向いて写るため手前側の副目盛りが奥側の主目盛りより長く写り、
+    さらに極座標での長さ計測自体がぶれる（耐圧試験の写真の実測で、同じ種類の
+    目盛りの長さが3〜43までばらついた）。長さには主目盛りかどうかの情報が
+    ほとんど残っていない。
+
+    一方、数字が印字されているのは必ず主目盛りの位置である。そこで数字が
+    付いた目盛りを起点にし、「主目盛りは副目盛りn本ごとに1本」という周期を
+    当てはめて、数字が読めなかった位置（針に隠れた0など）も含めて立て直す。
+    周期を2以上に限定しているので、主目盛りが隣り合って並ぶことは原理的に無い。
+
+    判定できない場合は入力の ticks をそのまま返す（長さベースの判定に戻す）。
+    """
+    grid = build_tick_grid(numbers, ticks, center, max_angle_deg=max_angle_deg)
+    if grid is None:
+        return ticks
+
+    order = _arc_order(ticks)
+    slots = _tick_slots(ticks, order)
+    if slots is None:
+        return ticks
+
+    refined = [dict(tick) for tick in ticks]
+    for k, tick_index in enumerate(order):
+        refined[tick_index]['is_major'] = bool(
+            slots[k] % grid['cadence'] == grid['phase'])
+    return refined
+
+
+def extend_ticks_to_numbers(numbers, ticks, center, max_angle_deg=12.0):
+    """検出できていない位置の主目盛りを、格子から計算して補った一覧を返す。"""
+    grid = build_tick_grid(numbers, ticks, center, max_angle_deg=max_angle_deg)
+    if grid is None:
+        return ticks
+
+    # 既に実測の目盛りへ対応できた数字は、重複して合成しない。
+    bound_pairs = _bind_number_tick_indices(
+        numbers, ticks, center, max_angle_deg, 0.0)
+    bound_number_ids = {id(number) for number, _index in bound_pairs}
+    max_diff = math.radians(max_angle_deg)
+    cx, cy = center
+    synthesized_slots = set()
+    extended = list(ticks)
+
+    for number in numbers:
+        if id(number) in bound_number_ids:
+            continue
+        predicted = grid['slope'] * float(number['value']) + grid['intercept']
+        slot = (int(round((predicted - grid['phase']) / grid['cadence']))
+                * grid['cadence'] + grid['phase'])
+        if abs(slot - predicted) > grid['cadence'] * 0.75:
+            continue
+
+        angle = grid['base_angle'] + slot * grid['period']
+        number_angle = math.atan2(number['y'] - cy, number['x'] - cx)
+        angle_diff = abs((angle - number_angle + math.pi) % (2 * math.pi) - math.pi)
+        # 格子だけではOCR誤読の位置まで正しいとは言えないため、印字位置が
+        # 同じ角度にある場合だけ合成する。
+        if angle_diff > max_diff:
+            continue
+        if (slot < grid['min_slot'] - grid['cadence'] * 2 or
+                slot > grid['max_slot'] + grid['cadence'] * 2):
+            continue
+        if slot in synthesized_slots:
+            continue
+
+        synthesized_slots.add(slot)
+        extended.append({
+            'angle': angle,
+            'centroid': (cx + grid['radius'] * math.cos(angle),
+                         cy + grid['radius'] * math.sin(angle)),
+            'line_angle': angle,
+            'length': 0.0,
+            'is_major': True,
+            'synthetic': True,
+        })
+    return sorted(extended, key=lambda tick: tick['angle'])
+
+
 def bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=12.0, major_bonus_deg=4.0):
     """
     各数字を、角度が最も近い目盛り線に対応付ける。
@@ -198,36 +532,10 @@ def bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=12.0, major_bonu
     """
     if not numbers or not ticks:
         return []
-
-    cx, cy = center
-    max_diff = math.radians(max_angle_deg)
-    bonus = math.radians(major_bonus_deg)
-
-    # 各数字ごとに最良の目盛り候補を1つだけ選ぶ
-    number_candidates = []  # (score, number, tick_idx)
-    for n in numbers:
-        angle = math.atan2(n['y'] - cy, n['x'] - cx)
-        best_score, best_idx = None, None
-        for i, t in enumerate(ticks):
-            diff = abs(((t['angle'] - angle + math.pi) % (2 * math.pi)) - math.pi)
-            if diff >= max_diff:
-                continue
-            score = diff - bonus if t['is_major'] else diff
-            if best_score is None or score < best_score:
-                best_score, best_idx = score, i
-        if best_idx is not None:
-            number_candidates.append((best_score, n, best_idx))
-
-    number_candidates.sort(key=lambda c: c[0])
-    used_ticks = set()
-    bound = []
-    for score, n, idx in number_candidates:
-        if idx in used_ticks:
-            continue
-        used_ticks.add(idx)
-        bound.append({'value': n['value'], 'tick': ticks[idx], 'angle': ticks[idx]['angle']})
-
-    return bound
+    pairs = _bind_number_tick_indices(
+        numbers, ticks, center, max_angle_deg, major_bonus_deg)
+    return [{'value': n['value'], 'tick': ticks[idx],
+             'angle': ticks[idx]['angle']} for n, idx in pairs]
 
 
 def _longest_monotonic(values, increasing=True):
@@ -336,12 +644,16 @@ def _synthesize_tick_point(ticks, center, angle):
     return (int(round(cx + r * math.cos(angle))), int(round(cy + r * math.sin(angle))))
 
 
-def _make_occlusion_check(img):
+def _make_occlusion_check(img, use_vlm=True):
     """
     「針が0の目盛りに重なっているか」をVLMに問い合わせる関数を返す。
+    use_vlm=False のときは、再現性を保つため問い合わせを一切行わず False とする。
     呼び出しは重いため、実際に必要になるまで行わず、一度呼んだら
     結果をキャッシュして使い回す（1回の検出につき最大1回だけ問い合わせる）。
     """
+    if not use_vlm:
+        return lambda: False
+
     cache = {}
 
     def check():
@@ -637,10 +949,19 @@ def locate_value_on_ticks(numbers, ticks, center, target_value, max_angle_deg=15
 def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points):
     """1つの（前処理済み）画像に対してOCR＋目盛り対応付けを1回実行する。"""
     numbers = read_scale_numbers(img)
+    # 長さではなく、数字の位置から主目盛りを決め直してから対応付ける
+    ticks = refine_major_ticks_from_numbers(
+        numbers, ticks, center, max_angle_deg=max_angle_deg)
+    ticks = extend_ticks_to_numbers(
+        numbers, ticks, center, max_angle_deg=max_angle_deg)
     bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
     n_ocr_unique = len({n['value'] for n in numbers})
-    return determine_min_max(bound, min_points=min_points, n_ocr_unique=n_ocr_unique,
-                             ticks=ticks)
+    result = determine_min_max(bound, min_points=min_points,
+                               n_ocr_unique=n_ocr_unique, ticks=ticks)
+    if result is not None:
+        # 描画・検証側が同じ主目盛り判定を見られるように添えて返す
+        result['ticks'] = ticks
+    return result
 
 
 def _find_agreeing_result(results):
@@ -660,7 +981,8 @@ def _find_agreeing_result(results):
     return max(best_group, key=lambda r: r['n_used'])
 
 
-def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
+def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
+                        use_vlm=True):
     """
     元画像と、CLAHE（コントラスト強調）を適用した複数のバリアントそれぞれで
     OCR＋目盛り対応付けを行い、min/maxの判定が一致するかをクロスチェックする。
@@ -707,7 +1029,10 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
     agreed = _find_agreeing_result(results)
 
     numbers = read_scale_numbers(img)
-    vlm_result = vlm_scale_value.read_min_max(img)
+    ticks = refine_major_ticks_from_numbers(
+        numbers, ticks, center, max_angle_deg=max_angle_deg)
+    # --no-vlm ではOllamaの応答状態に結果が左右されないよう、補助判定も使わない。
+    vlm_result = vlm_scale_value.read_min_max(img) if use_vlm else None
 
     if agreed is not None:
         agreed['is_confident'] = True
@@ -722,7 +1047,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
             # ときだけ採用する。
             vlm_min, vlm_max = vlm_result
             bound = None
-            occlusion_check = _make_occlusion_check(img)
+            occlusion_check = _make_occlusion_check(img, use_vlm=use_vlm)
             if abs(agreed['min_value'] - vlm_min) > 1e-6:
                 bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
                 pt, overlap = _resolve_scale_position(
@@ -748,7 +1073,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
     if vlm_result is not None:
         min_value, max_value = vlm_result
         bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
-        occlusion_check = _make_occlusion_check(img)
+        occlusion_check = _make_occlusion_check(img, use_vlm=use_vlm)
 
         zero_pt, zero_overlap = _resolve_scale_position(
             img, numbers, ticks, center, bound, min_value,
@@ -768,6 +1093,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3):
                 'is_confident': True,
                 'source': 'vlm',
                 'needle_overlap_zero': zero_overlap,
+                'ticks': ticks,
             }
 
     # VLMも失敗した場合、条件間で割れた結果のうち一番マシなものを

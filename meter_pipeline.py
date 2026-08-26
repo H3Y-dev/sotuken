@@ -61,10 +61,9 @@ def read_meter(img, use_vlm=True):
     """
     画像1枚を自動で読み取る。
 
-    use_vlm: FalseにするとVLM（Ollama）を使う盤面クロップを飛ばす。
-             Ollamaが動いていない環境や、VLMの寄与を切り分けたいときに使う。
-             なお目盛り数値の読み取り側（scale_value_detect）は、OCRの
-             信頼度が低い場合に内部でVLMを呼ぶため、こちらでは制御しない。
+    use_vlm: Falseにすると、VLM（Ollama）を使う処理をすべて飛ばす。
+             VLMはモデルのロード状態で応答が変わることがあるため、測定結果を
+             再現可能にして比較したいときは必ずFalseにする。
 
     戻り値: dict
         stage        : 'ok' か、失敗した段階名（center / scale / needle）
@@ -128,9 +127,10 @@ def read_meter(img, use_vlm=True):
         result['error'] = str(e)
     result['n_ticks'] = len(ticks)
 
-    # ── 目盛りの数値（OCR、信頼度が低ければ内部でVLMに問い合わせる） ──
+    # ── 目盛りの数値（OCR、必要時のみVLMで補助する） ──
     try:
-        scale = scale_value_detect.detect_scale_values(img, ticks, center)
+        scale = scale_value_detect.detect_scale_values(
+            img, ticks, center, use_vlm=use_vlm)
     except Exception as e:
         scale = None
         result['error'] = str(e)
@@ -138,6 +138,12 @@ def read_meter(img, use_vlm=True):
     if scale is None:
         result['stage'] = STAGE_SCALE
         return result
+
+    # 数字の位置から主目盛りを付け直した目盛りが返ってきていれば、
+    # そちらを以後の基準にする（描画・検証も同じ判定を見られるようにする）
+    if scale.get('ticks'):
+        ticks = scale['ticks']
+    result['ticks'] = ticks
 
     result['zero_pt'] = scale['zero_pt']
     result['full_pt'] = scale['full_pt']
