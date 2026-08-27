@@ -55,6 +55,7 @@ class MeterAngleDetector:
 
         self.auto_center_candidate = None  # (x, y, radius) or None
         self.detected_ticks = []           # PCAで検出した目盛り線のリスト
+        self.detected_numbers = []         # OCRで検出した目盛り数値のリスト
         self.auto_scale_candidate = None   # OCR自動検出した0/フルスケール候補
         self._scale_request_id = 0        # リセット時に古いスレッド結果を破棄するためのID
 
@@ -231,6 +232,7 @@ class MeterAngleDetector:
         self.zero_needle_overlap = False
         self.auto_center_candidate = None
         self.detected_ticks = []
+        self.detected_numbers = []
         self.auto_scale_candidate = None
         self._scale_request_id += 1  # 実行中スレッドの結果を無効化
         self.angle_var.set("")
@@ -386,6 +388,7 @@ class MeterAngleDetector:
     def _on_center_confirmed(self):
         self.click_step = 1
         self.detected_ticks = []
+        self.detected_numbers = []
         self._draw_markers()
         self.status_var.set("🔍 目盛り線を検出中...")
 
@@ -396,7 +399,7 @@ class MeterAngleDetector:
             # ここで例外を捕らずに落ちると、root.after が一度も呼ばれず
             # メイン画面が「検出中...」のまま無言で固まって見えてしまうため、
             # 何が起きても必ずメインスレッドへ結果（またはエラー）を返す。
-            ticks, center, auto_scale, error = [], self.center_point, None, None
+            ticks, numbers, center, auto_scale, error = [], [], self.center_point, None, None
             vlm_reason = ""
             try:
                 # CLAHEでコントラストを強調してから目盛り線を検出する。
@@ -424,6 +427,11 @@ class MeterAngleDetector:
                 except Exception:
                     auto_scale = None
 
+                try:
+                    numbers = scale_value_detect.read_scale_numbers(self.image_original)
+                except Exception:
+                    numbers = []
+
                 if auto_scale is None:
                     # 自動検出が全滅した場合のみ、VLM（Ollama）が使える状態か診断する。
                     # read_min_max等は失敗理由を問わず一律Noneを返す設計なので、
@@ -440,16 +448,17 @@ class MeterAngleDetector:
             # メインスレッドへ結果を渡す（リセット済みなら無視）
             self.root.after(
                 0, lambda: self._on_ticks_detected(
-                    ticks, center, auto_scale, error, vlm_reason, request_id))
+                    ticks, numbers, center, auto_scale, error, vlm_reason, request_id))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_ticks_detected(self, ticks, center, auto_scale, error, vlm_reason, request_id):
+    def _on_ticks_detected(self, ticks, numbers, center, auto_scale, error, vlm_reason, request_id):
         """目盛り線・目盛り数値検出スレッドの結果をメインスレッドで受け取る"""
         if request_id != self._scale_request_id:
             return  # リセット・新規画像で無効化済み
 
         self.detected_ticks = ticks
+        self.detected_numbers = numbers
         self.center_point = center
         self._draw_markers()
 
@@ -461,6 +470,8 @@ class MeterAngleDetector:
 
         if auto_scale is not None:
             self.auto_scale_candidate = auto_scale
+            if auto_scale.get('ticks') is not None:
+                self.detected_ticks = auto_scale['ticks']
             self._show_scale_candidate()
             return
 
@@ -485,7 +496,8 @@ class MeterAngleDetector:
             color = (0, 200, 255) if t['is_major'] else (110, 110, 110)
             radius = 4 if t['is_major'] else 2
             pt = (int(round(t['centroid'][0])), int(round(t['centroid'][1])))
-            cv2.circle(overlay, pt, radius, color, -1)
+            thickness = 2 if t.get('synthetic') else -1
+            cv2.circle(overlay, pt, radius, color, thickness)
 
         cx, cy = self.center_point
         cv2.drawMarker(overlay, (cx, cy), (0, 255, 100), cv2.MARKER_CROSS, 30, 2)
@@ -493,6 +505,15 @@ class MeterAngleDetector:
 
         zero_pt, full_pt = c['zero_pt'], c['full_pt']
         font = cv2.FONT_HERSHEY_SIMPLEX
+
+        bound = scale_value_detect.bind_numbers_to_ticks(
+            self.detected_numbers, self.detected_ticks, self.center_point,
+            max_angle_deg=12.0)
+        for b in bound:
+            centroid_x, centroid_y = b['tick']['centroid']
+            cv2.putText(overlay, f"{b['value']:.4g}",
+                        (int(round(centroid_x)) + 6, int(round(centroid_y)) + 14),
+                        font, 0.4, (255, 255, 0), 1)
 
         cv2.line(overlay, (cx, cy), zero_pt, (100, 220, 255), 2)
         cv2.circle(overlay, zero_pt, 10, (100, 220, 255), 2)
