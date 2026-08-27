@@ -1029,17 +1029,19 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     try:
         result = _run_ocr_tick(img, ticks, center, max_angle_deg, min_points)
         if result is not None:
+            result['label'] = 'input_ticks'
             results.append(result)
     except Exception:
         pass
 
-    for variant_img in variant_images:
+    for label, variant_img in zip(('original', 'clahe1.5', 'clahe2.5'), variant_images):
         try:
             variant_ticks = tick_detect.detect_scale_ticks(variant_img, center)
             result = _run_ocr_tick(variant_img, variant_ticks, center, max_angle_deg, min_points)
         except Exception:
             result = None
         if result is not None:
+            result['label'] = label
             results.append(result)
 
     agreed = _find_agreeing_result(results)
@@ -1053,6 +1055,12 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     if agreed is not None:
         agreed['is_confident'] = True
         agreed['source'] = 'ocr_tick'
+        agreed['attempts'] = [
+            {'label': result.get('label', '?'), 'min_value': result['min_value'],
+             'max_value': result['max_value'], 'n_used': result['n_used'],
+             'n_total': result['n_total']}
+            for result in results
+        ]
 
         # OCRで読めた最小値が正でも、針との重なりで0の目盛り線だけが
         # 検出から漏れた可能性がある。VLMの値に頼らず、等間隔性から0の
@@ -1098,6 +1106,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                     agreed['full_pt'] = pt
                     agreed['max_value'] = vlm_max
 
+        agreed.pop('label', None)
         return agreed
 
     # 前処理条件間で結果が割れた（不安定）、またはどれも対応付け不足
@@ -1125,6 +1134,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                 'source': 'vlm',
                 'needle_overlap_zero': zero_overlap,
                 'ticks': ticks,
+                'attempts': [],
             }
 
     # VLMも失敗した場合、条件間で割れた結果のうち一番マシなものを
@@ -1133,5 +1143,12 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
         best = max(results, key=lambda r: r['n_used'])
         best['is_confident'] = False
         best['source'] = 'ocr_tick'
+        best['attempts'] = [
+            {'label': result.get('label', '?'), 'min_value': result['min_value'],
+             'max_value': result['max_value'], 'n_used': result['n_used'],
+             'n_total': result['n_total']}
+            for result in results
+        ]
+        best.pop('label', None)
         return best
     return None

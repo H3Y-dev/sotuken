@@ -23,6 +23,7 @@ from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image, ImageTk
 import math
 import threading
+import time
 
 import tick_detect
 import scale_value_detect
@@ -58,6 +59,7 @@ class MeterAngleDetector:
         self.detected_numbers = []         # OCRで検出した目盛り数値のリスト
         self.auto_scale_candidate = None   # OCR自動検出した0/フルスケール候補
         self._scale_request_id = 0        # リセット時に古いスレッド結果を破棄するためのID
+        self.debug_visible = False
 
         self.canvas_width = 800
         self.canvas_height = 600
@@ -109,6 +111,15 @@ class MeterAngleDetector:
             bg="#f38ba8", fg="#1e1e2e",
             relief=tk.FLAT, padx=12, pady=4, cursor="hand2"
         ).pack(side=tk.RIGHT, padx=4)
+
+        self.debug_toggle_button = tk.Button(
+            header, text="🐞 デバッグ",
+            command=self._toggle_debug_panel,
+            font=("Helvetica", 11),
+            bg="#cba6f7", fg="#1e1e2e",
+            relief=tk.FLAT, padx=12, pady=4, cursor="hand2"
+        )
+        self.debug_toggle_button.pack(side=tk.RIGHT, padx=4)
 
         # ── キャンバス ────────────────────────────────────────
         canvas_frame = tk.Frame(self.root, bg="#1e1e2e")
@@ -207,6 +218,123 @@ class MeterAngleDetector:
             fg="#fab387", bg="#313244"
         ).pack(side=tk.RIGHT, padx=16)
 
+        # ── デバッグパネル（初期状態は非表示） ────────────────
+        self.debug_frame = tk.Frame(self.root, bg="#1e1e2e", padx=16, pady=8)
+
+        self.flow_canvas = tk.Canvas(
+            self.debug_frame, height=70, bg="#1e1e2e",
+            highlightthickness=1, highlightbackground="#585b70"
+        )
+        self.flow_canvas.pack(fill=tk.X)
+
+        trace_frame = tk.Frame(self.debug_frame, bg="#1e1e2e")
+        trace_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        trace_scrollbar = tk.Scrollbar(trace_frame)
+        trace_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.trace_text = tk.Text(
+            trace_frame, height=8, bg="#11111b", fg="#cdd6f4",
+            insertbackground="#cdd6f4", relief=tk.FLAT, wrap=tk.WORD,
+            font=("Consolas", 10), state=tk.DISABLED,
+            yscrollcommand=trace_scrollbar.set
+        )
+        self.trace_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        trace_scrollbar.config(command=self.trace_text.yview)
+
+        self._flow_reset()
+
+    def _toggle_debug_panel(self):
+        """デバッグ用フローチャートとトレースログを表示・非表示にする。"""
+        self.debug_visible = not self.debug_visible
+        if self.debug_visible:
+            self.debug_frame.pack(fill=tk.X, after=self.status_frame)
+        else:
+            self.debug_frame.pack_forget()
+
+    def _flow_reset(self):
+        """フローチャートとトレースログを初期状態へ戻す。"""
+        self._flow_stage_items = {}
+        self._flow_stage_states = {}
+        self.flow_canvas.delete("all")
+
+        stages = [
+            ("center", "① 中心検出"),
+            ("ticks", "② 目盛り検出"),
+            ("ocr", "③ OCR対応付け"),
+            ("needle", "④ 針検出"),
+        ]
+        box_width = 145
+        box_height = 44
+        gap = 30
+        start_x = 12
+        top_y = 13
+        radius = 10
+
+        for index, (stage_key, label) in enumerate(stages):
+            left = start_x + index * (box_width + gap)
+            right = left + box_width
+            shape_ids = self._create_flow_box(left, top_y, right, top_y + box_height, radius)
+            text_id = self.flow_canvas.create_text(
+                (left + right) / 2, top_y + box_height / 2,
+                text=f"{label}\n未実行", fill="#cdd6f4", font=("Helvetica", 9, "bold"),
+                justify=tk.CENTER
+            )
+            self._flow_stage_items[stage_key] = (shape_ids, text_id, label)
+            self._flow_set_stage(stage_key, "idle")
+            if index < len(stages) - 1:
+                self.flow_canvas.create_line(
+                    right + 4, top_y + box_height / 2,
+                    right + gap - 4, top_y + box_height / 2,
+                    fill="#585b70", width=2, arrow=tk.LAST
+                )
+
+        self.trace_text.config(state=tk.NORMAL)
+        self.trace_text.delete("1.0", tk.END)
+        self.trace_text.config(state=tk.DISABLED)
+
+    def _create_flow_box(self, left, top, right, bottom, radius):
+        """Canvas上に色を変更できる角丸矩形を描く。"""
+        return [
+            self.flow_canvas.create_rectangle(left + radius, top, right - radius, bottom, outline=""),
+            self.flow_canvas.create_rectangle(left, top + radius, right, bottom - radius, outline=""),
+            self.flow_canvas.create_oval(left, top, left + radius * 2, top + radius * 2, outline=""),
+            self.flow_canvas.create_oval(right - radius * 2, top, right, top + radius * 2, outline=""),
+            self.flow_canvas.create_oval(left, bottom - radius * 2, left + radius * 2, bottom, outline=""),
+            self.flow_canvas.create_oval(right - radius * 2, bottom - radius * 2, right, bottom, outline=""),
+        ]
+
+    def _flow_set_stage(self, stage_key, state):
+        """指定したフローチャート段階の表示状態を更新する。"""
+        colors = {
+            "idle": "#45475a",
+            "running": "#89b4fa",
+            "ok": "#a6e3a1",
+            "warn": "#fab387",
+            "fail": "#f38ba8",
+        }
+        state_labels = {
+            "idle": "未実行",
+            "running": "実行中",
+            "ok": "成功",
+            "warn": "警告",
+            "fail": "失敗",
+        }
+        if stage_key not in self._flow_stage_items or state not in colors:
+            return
+
+        shape_ids, text_id, label = self._flow_stage_items[stage_key]
+        for shape_id in shape_ids:
+            self.flow_canvas.itemconfig(shape_id, fill=colors[state])
+        self.flow_canvas.itemconfig(text_id, text=f"{label}\n{state_labels[state]}")
+        self._flow_stage_states[stage_key] = state
+
+    def _trace(self, message):
+        """時刻付きのデバッグトレースを1行追加して末尾を表示する。"""
+        timestamp = time.strftime("%H:%M:%S")
+        self.trace_text.config(state=tk.NORMAL)
+        self.trace_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        self.trace_text.see(tk.END)
+        self.trace_text.config(state=tk.DISABLED)
+
     # ── 画像読み込み ──────────────────────────────────────────
     def open_image(self):
         path = filedialog.askopenfilename(
@@ -238,6 +366,7 @@ class MeterAngleDetector:
         self.angle_var.set("")
         self._hide_confirm_frame()
         self._hide_confirm_scale_frame()
+        self._flow_reset()
 
         if self.image_raw is None:
             self.image_original = None
@@ -285,6 +414,7 @@ class MeterAngleDetector:
 
     def _start_center_detection(self):
         self.status_var.set("🔍 中心点を検出中...")
+        self._flow_set_stage('center', 'running')
         hough_candidate = self._auto_detect_center()
         self._refine_center_candidate(hough_candidate)
 
@@ -317,31 +447,52 @@ class MeterAngleDetector:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_center_candidate_ready(self, hough_candidate, refined, request_id):
+    def _on_center_candidate_ready(self, hough, refined, request_id):
         if request_id != self._scale_request_id:
             return  # リセット・新規画像で無効化済み
 
         h, w = self.image_original.shape[:2]
         default_r = int(min(h, w) * 0.05)
+        center = None
+        center_source = None
 
-        if hough_candidate is not None and refined is not None:
-            hx, hy, r = hough_candidate
+        if hough is not None and refined is not None:
+            hx, hy, r = hough
             shift = math.hypot(refined[0] - hx, refined[1] - hy)
             if shift > min(h, w) * 0.03:
                 # 目盛り線の交点がHoughの結果と大きくズレている
                 # → Houghの誤検出とみなし、目盛り線側を採用する
                 self.auto_center_candidate = (refined[0], refined[1], r)
-                self._show_auto_candidate(source='corrected')
+                center = (refined[0], refined[1])
+                center_source = 'corrected'
             else:
                 self.auto_center_candidate = (hx, hy, r)
-                self._show_auto_candidate(source='hough')
-        elif hough_candidate is not None:
-            hx, hy, r = hough_candidate
+                center = (hx, hy)
+                center_source = 'hough'
+        elif hough is not None:
+            hx, hy, r = hough
             self.auto_center_candidate = (hx, hy, r)
-            self._show_auto_candidate(source='hough')
+            center = (hx, hy)
+            center_source = 'hough'
         elif refined is not None:
             self.auto_center_candidate = (refined[0], refined[1], default_r)
-            self._show_auto_candidate(source='ticks')
+            center = (refined[0], refined[1])
+            center_source = 'ticks'
+
+        center_source_labels = {
+            'hough': 'Hough円検出',
+            'corrected': '目盛り補正で修正',
+            'ticks': '目盛りのみ',
+        }
+        self._trace(
+            f"中心検出: Hough={hough if hough else '検出なし'} / "
+            f"目盛り補正={refined if refined else '未補正'} → 採用={center}"
+            f"（{center_source_labels.get(center_source, center_source)}）"
+        )
+        self._flow_set_stage('center', 'ok' if center_source else 'fail')
+
+        if center_source is not None:
+            self._show_auto_candidate(source=center_source)
         else:
             self.status_var.set(
                 "🎯 Step 1: 針の中心点をクリックしてください（自動検出できませんでした）")
@@ -391,6 +542,8 @@ class MeterAngleDetector:
         self.detected_numbers = []
         self._draw_markers()
         self.status_var.set("🔍 目盛り線を検出中...")
+        self._flow_set_stage('ticks', 'running')
+        self._flow_set_stage('ocr', 'running')
 
         request_id = self._scale_request_id
 
@@ -461,6 +614,40 @@ class MeterAngleDetector:
         self.detected_numbers = numbers
         self.center_point = center
         self._draw_markers()
+
+        n_major_raw = sum(1 for tick in ticks if tick.get('is_major'))
+        self._trace(
+            f"目盛り検出: {len(ticks)}本検出（うち主目盛り候補 {n_major_raw}本、補正前）")
+        self._flow_set_stage('ticks', 'ok' if ticks else 'warn')
+
+        numbers_str = ", ".join(
+            f"{number['value']:.4g}(score={number['score']:.2f})" for number in numbers
+        ) or "なし"
+        self._trace(f"OCR検出数字: {numbers_str}")
+        if auto_scale is not None:
+            n_major_final = sum(1 for tick in auto_scale.get('ticks', []) if tick.get('is_major'))
+            n_synthetic = sum(1 for tick in auto_scale.get('ticks', []) if tick.get('synthetic'))
+            self._trace(
+                f"OCR対応付け: 最小値={auto_scale['min_value']:.4g} 最大値={auto_scale['max_value']:.4g} "
+                f"（対応 {auto_scale['n_used']}/{auto_scale['n_total']}点、"
+                f"source={auto_scale.get('source')}、confident={auto_scale.get('is_confident')}） "
+                f"主目盛り{n_major_final}本（うち補完/合成 {n_synthetic}本）"
+            )
+            if auto_scale.get('needle_overlap_zero'):
+                self._trace("⚠️ 針が0の目盛りに重なっており、0の位置は目視確認できていません")
+            for attempt in auto_scale.get('attempts', []):
+                self._trace(
+                    f"  試行[{attempt['label']}]: 最小値={attempt['min_value']:.4g} "
+                    f"最大値={attempt['max_value']:.4g} "
+                    f"対応 {attempt['n_used']}/{attempt['n_total']}点"
+                )
+            self._flow_set_stage(
+                'ocr',
+                'warn' if (not auto_scale.get('is_confident', True)
+                           or auto_scale.get('needle_overlap_zero')) else 'ok')
+        else:
+            self._trace(f"OCR対応付け: 自動判定に失敗（{vlm_reason or error or '原因不明'}）")
+            self._flow_set_stage('ocr', 'fail')
 
         if error is not None:
             self.status_var.set(
@@ -728,11 +915,17 @@ class MeterAngleDetector:
 
         # 針の検出と値の算出は meter_reader に切り出してある
         # （GUIを起動しなくても同じ計算を評価スクリプトから呼べるようにするため）
+        self._flow_set_stage('needle', 'running')
         reading = meter_reader.compute_reading(
             self.image_original, self.center_point, self.zero_point,
             self.fullscale_point, self.val_min, self.val_max)
 
         if reading is not None:
+            self._trace(
+                f"針検出: 角度={reading['angle_deg']:.2f}° ratio={reading['ratio']:.4f} "
+                f"→ 値={reading['value']:.4g}"
+            )
+            self._flow_set_stage('needle', 'ok')
             x1, y1, x2, y2 = reading['needle_line']
             tip_x, tip_y = reading['needle_tip']
             abs_angle = reading['angle_deg']
@@ -800,6 +993,8 @@ class MeterAngleDetector:
                 pass  # ログ保存の失敗で検出結果表示自体を止めない
 
         else:
+            self._trace("針検出: 直線を検出できませんでした")
+            self._flow_set_stage('needle', 'fail')
             self._draw_markers()
             messagebox.showwarning(
                 "検出失敗",
