@@ -3,7 +3,7 @@ import os  # ファイルのパスを操作するための道具
 import tempfile  # テスト用の「一時的なファイル」を作るための道具
 import unittest  # テストを自動化するためのPython標準ライブラリ
 
-from manager.export import export_to_csv  # KPくんが作った関数を呼び出す
+from manager.export import export_to_csv, filter_readings  # filter_readingsを追加！
 
 
 # テスト用の偽データ（ダミー）の型を定義
@@ -63,6 +63,41 @@ class TestExportToCsv(unittest.TestCase):
         # 4. 検証: 行数が「1行（ヘッダーのみ）」になっているかチェック！
         self.assertEqual(len(rows), 1)
 
+    def test_filter_by_device_name(self):
+        # 1. 機器名が異なるデータを用意
+        readings = [
+            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
+            DummyReading(2, "2026-08-21", "meter2", 20.0, "ok", "b.jpg"),
+        ]
+        # 2. meter1 で絞り込みを実行
+        result = filter_readings(readings, device_name="meter1")
+        # 3. 検証: 1件だけ残り、それがID 1であることを確認
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, 1)
 
+    def test_filter_by_date_range(self):
+        # 1. 日付が異なるデータを3件用意
+        readings = [
+            DummyReading(1, "2026-08-10", "meter1", 10.0, "ok", "a.jpg"),
+            DummyReading(2, "2026-08-20", "meter1", 20.0, "ok", "b.jpg"),
+            DummyReading(3, "2026-08-30", "meter1", 30.0, "ok", "c.jpg"),
+        ]
+        # 2. 8/15 〜 8/25 の範囲で絞り込みを実行
+        result = filter_readings(
+            readings, start_date="2026-08-15", end_date="2026-08-25"
+        )
+        # 3. 検証: 該当する8/20のデータ（ID 2）だけが残ることを確認
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, 2)
+
+    def test_no_filter_returns_all(self):
+        # 1. 条件を指定しない場合のテスト
+        readings = [
+            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
+        ]
+        # 2. 条件なしで実行
+        result = filter_readings(readings)
+        # 3. 検証: データがそのまま返ってくることを確認
+        self.assertEqual(len(result), 1)
 if __name__ == "__main__":
     unittest.main()
