@@ -680,8 +680,8 @@ def _resolve_scale_position(img, numbers, ticks, center, bound, value,
     見えなくて当然なので確認をスキップしてそのまま採用する。
     さらに、針と目盛りの輪郭が融合して目盛り候補自体が見つからない
     場合は、等間隔性から予測した角度と他の主目盛りの平均半径を使って
-    座標を合成する（この合成もis_zero=True かつ重なりを確認できた
-    場合のみ行う。それ以外では根拠のない当てずっぽうになるため使わない）。
+    座標を合成する。合成座標の周辺を複数サイズで再OCRし、target_valueを
+    実際に確認できた場合だけ採用するため、この経路はVLMに依存しない。
 
     occlusion_check: 「針が0の目盛りに重なっているか」を返す0引数の関数
     （呼び出しは重いので必要になるまで遅延評価する）。Noneの場合は
@@ -701,12 +701,13 @@ def _resolve_scale_position(img, numbers, ticks, center, bound, value,
             return pt, True
         return None, False
 
-    if is_zero and occlusion_check is not None and occlusion_check():
+    if is_zero:
         predicted_angle = _predict_angle_for_value(bound, value)
         if predicted_angle is not None:
             synth = _synthesize_tick_point(ticks, center, predicted_angle)
-            if synth is not None:
-                return synth, True
+            if (synth is not None and
+                    _verify_label_near_position_multi(img, synth, value)):
+                return synth, False
     return None, False
 
 
@@ -737,6 +738,21 @@ def _verify_label_near_position(img, pt, target_value, radius=60, upscale=4):
     except Exception:
         return False
     return any(abs(n['value'] - target_value) < 1e-6 for n in local_numbers)
+
+
+def _verify_label_near_position_multi(img, pt, target_value,
+                                      radii=(60, 80, 100, 130), upscale=4):
+    """
+    異なる切り出し半径で局所OCRを順に試し、target_valueを確認できたらTrueを返す。
+
+    文字の位置や大きさの違いにより、適切な半径は画像ごとに異なる。
+    既存の単一radius版をそのまま使い、最初に確認できた半径で打ち切る。
+    """
+    return any(
+        _verify_label_near_position(img, pt, target_value,
+                                    radius=radius, upscale=upscale)
+        for radius in radii
+    )
 
 
 # 計器のフルスケールは、切りの良い値（標準数）から選ばれるのが普通。
@@ -1037,6 +1053,21 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     if agreed is not None:
         agreed['is_confident'] = True
         agreed['source'] = 'ocr_tick'
+
+        # OCRで読めた最小値が正でも、針との重なりで0の目盛り線だけが
+        # 検出から漏れた可能性がある。VLMの値に頼らず、等間隔性から0の
+        # 座標を合成して局所OCRでラベルを確認できた場合だけ補正する。
+        # 実在確認に失敗すれば元の判定をそのまま残すため、最小値が0でない
+        # 計器を根拠なく0始まりとして扱うことはない。
+        if agreed['min_value'] > 0:
+            bound = bind_numbers_to_ticks(
+                numbers, ticks, center, max_angle_deg=max_angle_deg)
+            zero_pt, zero_overlap = _resolve_scale_position(
+                img, numbers, ticks, center, bound, 0.0, is_zero=True)
+            if zero_pt is not None:
+                agreed['zero_pt'] = zero_pt
+                agreed['min_value'] = 0.0
+                agreed['needle_overlap_zero'] = zero_overlap
 
         if vlm_result is not None:
             # 既に複数条件で一致した結果をVLMの値で上書きするのは、
