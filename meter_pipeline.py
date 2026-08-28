@@ -22,6 +22,10 @@ import orientation
 import scale_value_detect
 import tick_detect
 import vlm_scale_value
+import detect_meter_center_v2
+import center_estimate
+import circle_fit
+import center_consensus
 
 # 処理段階。失敗した場合、その段階名が結果の stage に入る
 STAGE_CENTER = 'center'
@@ -32,30 +36,49 @@ STAGE_OK = 'ok'
 
 def _detect_center(img):
     """
-    GUIと同じ手順で中心点を決める。
-    Hough円検出と目盛り線からの推定を突き合わせ、大きく食い違う場合は
-    目盛り線側を採用する（Houghがリベット等を誤検出した場合の対策）。
+    Hough円検出・estimate_center（目盛り線の交点）・円フィッティング
+    （目盛りcentroid群への当てはめ）の3候補の一致度から中心を決める。
+
+    3候補が対等な3票ではないことに注意: estimate_centerと円フィッティングは
+    どちらも同じ目盛り検出結果（ticks）に依存しているため独立した情報源
+    ではない。Hough円検出のみが盤面外周ベゼルという別の画像特徴を見る
+    独立した情報源。resolve_center_consensus側でこの前提を踏まえて
+    一致度判定・ネジ等の誤検出対策を行う。
     """
     h, w = img.shape[:2]
 
-    hough = tick_detect.auto_detect_center(img)
-    seed = (hough[0], hough[1]) if hough is not None else (w // 2, h // 2)
+    # 候補1: Hough円検出
+    hough_result = detect_meter_center_v2.detect_meter_center_from_raw(img)
 
+    # refine_center_iterativeのseedには、旧来通りHough中心があればそれを使う
+    seed = hough_result["center"] if hough_result is not None else (w // 2, h // 2)
+
+    # 目盛り検出は1回だけ行い、estimate_centerとfit_circle_to_ticksの両方に渡す
     try:
-        refined, _ticks = tick_detect.refine_center_iterative(img, seed)
+        _refined, ticks = tick_detect.refine_center_iterative(img, seed)
     except Exception:
-        refined = None
+        ticks = None
 
-    if hough is not None and refined is not None:
-        shift = math.hypot(refined[0] - hough[0], refined[1] - hough[1])
-        if shift > min(h, w) * 0.03:
-            return refined, 'corrected'
-        return (hough[0], hough[1]), 'hough'
-    if hough is not None:
-        return (hough[0], hough[1]), 'hough'
-    if refined is not None:
-        return refined, 'ticks'
-    return None, None
+    # 候補2: estimate_center（目盛り線の交点）
+    estimate = None
+    if ticks:
+        try:
+            estimate = center_estimate.estimate_center(img, ticks)
+        except Exception:
+            estimate = None
+
+    # 候補3: 円フィッティング（Taubin法）
+    fit_result = None
+    if ticks:
+        try:
+            fit_result = circle_fit.fit_circle_to_ticks(ticks, method="taubin")
+        except Exception:
+            fit_result = None
+
+    center, source = center_consensus.resolve_center_consensus(
+        hough_result, estimate, fit_result, img.shape, ticks=ticks
+    )
+    return center, source
 
 
 def read_meter(img, use_vlm=True):
