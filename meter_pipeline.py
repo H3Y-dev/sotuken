@@ -161,7 +161,8 @@ def read_meter(img, use_vlm=True):
     reading = meter_reader.compute_reading(
         img, center, scale['zero_pt'], scale['full_pt'],
         scale['min_value'], scale['max_value'],
-        tick_angles=tick_angles)
+        tick_angles=tick_angles,
+        calibration_angles=scale.get('calibration'))
     if reading is None:
         result['stage'] = STAGE_NEEDLE
         return result

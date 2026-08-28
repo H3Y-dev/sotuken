@@ -92,6 +92,15 @@ class TestPastDetectionsAreReproduced(unittest.TestCase):
                     np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
                 self.assertIsNotNone(img, '画像を読み込めません: %s' % image_path)
 
+                # T2-1: tick_angles/calibration_angles次第でvalueが変わるため、
+                # ログに記録されていれば同じ入力で再現する（古いログや
+                # tick_angles=None時のログには無いので、その場合は
+                # 従来通りNoneのまま = 2点線形補間で比較する）
+                tick_angles = record.get('tick_angles')
+                calibration_angles = record.get('calibration_angles')
+                if calibration_angles is not None:
+                    calibration_angles = [tuple(p) for p in calibration_angles]
+
                 result = meter_reader.compute_reading(
                     img,
                     tuple(record['center']),
@@ -99,6 +108,8 @@ class TestPastDetectionsAreReproduced(unittest.TestCase):
                     tuple(record['fullscale_point']),
                     record['val_min'],
                     record['val_max'],
+                    tick_angles=tick_angles,
+                    calibration_angles=calibration_angles,
                 )
                 self.assertIsNotNone(result, '針を検出できませんでした')
                 # ログは丸めて保存されているので、その桁数の範囲で一致を見る

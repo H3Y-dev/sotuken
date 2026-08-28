@@ -112,15 +112,175 @@ def arc_ratio(theta_needle, theta_zero, theta_full, tick_angles=None):
     return max(0.0, min(1.0, r_cw if r_cw is not None else 0.0))
 
 
-def ratio_to_value(ratio, val_min, val_max):
+def ratio_to_value(ratio, val_min, val_max, calibration=None):
     """
     スケール上の位置比率を実際の測定値に変換する。
 
-    注意: これは目盛りが角度に対して等間隔（線形スケール）であることを
-    前提にしている。可動鉄片形の電流計のように低い側が圧縮された
-    非線形スケールの計器では、中間域に系統誤差が乗る。
+    `calibration` を渡さない場合は、両端（val_min/val_max）だけを使った
+    従来通りの2点線形補間になる。これは目盛りが角度に対して等間隔
+    （線形スケール）であることを前提にしており、可動鉄片形の電流計の
+    ように低い側が圧縮された非線形スケールの計器では中間域に系統誤差が乗る。
+
+    `calibration` に `[(ratio, value), ...]`（OCRで数値が対応付いた
+    中間の目盛り点、ratioは針と同じ0〜1の位置比率空間）を渡すと、
+    両端だけでなくこれらの点も使った区分線形補間になり、非線形スケールにも
+    追従できる。
+
+    値が単調に増加しない較正点（OCR誤読等）が混ざっていても落ちない
+    ように、`val_min`〜`val_max` の間にあり、かつ内部で単調増加する
+    最長の部分列だけを使う。`val_min`/`val_max` 自体は常に両端点として
+    使われる（较正点の外れ値フィルタで欠落することはない）。
     """
-    return val_min + ratio * (val_max - val_min)
+    if not calibration:
+        return val_min + ratio * (val_max - val_min)
+
+    interior = [
+        (r, v) for r, v in calibration
+        if 0.0 < r < 1.0 and val_min < v < val_max
+    ]
+    interior = _longest_monotonic_by_ratio(interior)
+    interior = _filter_arithmetic_progression(interior)
+
+    points = [(0.0, val_min)] + interior + [(1.0, val_max)]
+    ratios = [p[0] for p in points]
+    values = [p[1] for p in points]
+    return float(np.interp(ratio, ratios, values))
+
+
+def _longest_monotonic_by_ratio(points):
+    """
+    `[(ratio, value), ...]` をratio昇順に並べた上で、valueが単調増加する
+    最長の部分列を返す（O(n^2)。较正点はせいぜい数十件程度なので十分速い）。
+    """
+    ordered = sorted(points, key=lambda p: p[0])
+    n = len(ordered)
+    if n == 0:
+        return []
+
+    lengths = [1] * n
+    prev = [-1] * n
+    for i in range(n):
+        for j in range(i):
+            if ordered[j][1] < ordered[i][1] and lengths[j] + 1 > lengths[i]:
+                lengths[i] = lengths[j] + 1
+                prev[i] = j
+
+    end = max(range(n), key=lambda i: lengths[i])
+    seq = []
+    while end != -1:
+        seq.append(ordered[end])
+        end = prev[end]
+    seq.reverse()
+    return seq
+
+
+def _filter_arithmetic_progression(points, rel_tol=0.15):
+    """
+    ratio昇順・value単調増加に並んだ較正点から、値が等差数列から外れる点を
+    さらに除く（`_longest_monotonic_by_ratio` だけでは、単調ではあるが
+    値そのものが誤っている較正点を検出できない）。
+
+    実際のメーターに印字された目盛り数値は、非線形スケール（可動鉄片形等）
+    でも角度の間隔が不均一なだけで、**印字されている値自体は0/10/20/...の
+    ような等差数列**になっているのが普通（読み飛ばしで一部が欠けることは
+    あっても、値の刻み自体が不規則になることはまず無い）。OCRが「30」を
+    「38」のように誤読すると、単調増加という条件だけは満たしてしまう
+    （20 < 38 < 40）ため、値の刻みが単位刻みの整数倍から外れているかで
+    検出する。
+
+    2点以下（等差数列の単位刻みを推定できない）ならそのまま返す。
+    """
+    if len(points) < 3:
+        return points
+
+    values = [v for _, v in points]
+    deltas = sorted(
+        values[i + 1] - values[i] for i in range(len(values) - 1)
+        if values[i + 1] > values[i]
+    )
+    if not deltas:
+        return points
+    unit = deltas[len(deltas) // 2]  # 中央値（読み飛ばしに引きずられにくい）
+    if unit <= 0:
+        return points
+
+    def _fits(delta):
+        if delta <= 0:
+            return False
+        steps = delta / unit
+        return abs(steps - round(steps)) <= rel_tol and round(steps) >= 1
+
+    def _greedy_increasing(seq):
+        kept = [seq[0]]
+        for p in seq[1:]:
+            if _fits(p[1] - kept[-1][1]):
+                kept.append(p)
+        return kept
+
+    def _greedy_decreasing(seq):
+        kept = [seq[0]]
+        for p in seq[1:]:
+            if _fits(kept[-1][1] - p[1]):
+                kept.append(p)
+        return kept
+
+    # 先頭から順に見て単位刻みに合う点だけを残す（先頭自体が外れ値だと
+    # そこから先すべて基準がずれるため、末尾から見た場合とで長い方を採用する）
+    forward = _greedy_increasing(points)
+    backward = list(reversed(_greedy_decreasing(list(reversed(points)))))
+    return forward if len(forward) >= len(backward) else backward
+
+
+def _resolve_cw(theta_zero, theta_full, tick_angles):
+    """
+    ゼロ点→フルスケール点への走査方向（時計回りかどうか）を、目盛り角度の
+    分布から確定する。`arc_ratio` の目盛り角度による方向確定ロジック
+    （docstring参照）と同じ考え方だが、較正点の角度をratio空間へ変換する
+    ためだけに使う独立した実装（`arc_ratio` 本体には手を入れない）。
+
+    確定できなければ None を返す（呼び出し側は較正点を使わず、
+    両端の線形補間にフォールバックする）。
+    """
+    if not tick_angles:
+        return None
+    two_pi = 2 * math.pi
+    span_cw = (theta_full - theta_zero) % two_pi
+    n_cw = sum(1 for a in tick_angles if (a - theta_zero) % two_pi <= span_cw)
+    n_ccw = len(tick_angles) - n_cw
+    if n_cw == n_ccw:
+        return None
+    return n_cw > n_ccw
+
+
+def _angle_to_ratio(theta, theta_zero, theta_full, cw):
+    """`cw` で指定した走査方向での、theta_zero から theta までの弧の位置比率。"""
+    two_pi = 2 * math.pi
+    span = (theta_full - theta_zero) % two_pi if cw else (theta_zero - theta_full) % two_pi
+    if span <= 1e-6:
+        return None
+    offset = (theta - theta_zero) % two_pi if cw else (theta_zero - theta) % two_pi
+    return offset / span
+
+
+def calibration_to_ratios(calibration_angles, theta_zero, theta_full, tick_angles=None):
+    """
+    `[(angle, value), ...]`（OCRで数値が対応付いた目盛りの角度と値）を、
+    `ratio_to_value` が受け取れる `[(ratio, value), ...]` へ変換する。
+
+    走査方向（時計回りかどうか）が目盛り角度の分布から確定できない場合は
+    空リストを返す（呼び出し側は両端の線形補間にフォールバックする）。
+    """
+    if not calibration_angles:
+        return []
+    cw = _resolve_cw(theta_zero, theta_full, tick_angles)
+    if cw is None:
+        return []
+    result = []
+    for angle, value in calibration_angles:
+        r = _angle_to_ratio(angle, theta_zero, theta_full, cw)
+        if r is not None:
+            result.append((r, value))
+    return result
 
 
 def detect_needle(img, center):
@@ -205,13 +365,18 @@ def detect_needle(img, center):
 
 
 def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max,
-                    tick_angles=None):
+                    tick_angles=None, calibration_angles=None):
     """
     画像・中心点・ゼロ点・フルスケール点・目盛りの最小/最大値から測定値を求める。
 
     `tick_angles` は検出済みの目盛り角度（ラジアンのリスト、省略可）。
     渡すとスケールの走査方向を推測せず確定できるため、針がスケール範囲の
     外を指している場合の誤読を防げる（詳細は arc_ratio のdocstring）。
+
+    `calibration_angles` は `[(angle, value), ...]`（OCRで数値が対応付いた
+    中間の目盛りの角度と値、省略可）。渡すと両端（val_min/val_max）だけの
+    線形補間ではなく、これらの点も使った区分線形補間になり、可動鉄片形
+    などの非線形スケールにも追従できる（詳細は ratio_to_value のdocstring）。
 
     戻り値: {'value', 'ratio', 'angle_deg', 'needle_line', 'needle_tip'}
             針を検出できなければ None
@@ -231,13 +396,17 @@ def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max,
     cos_a = np.dot([ndx, ndy], zero_vec) / (np.linalg.norm(zero_vec) + 1e-9)
     abs_angle = math.degrees(math.acos(np.clip(cos_a, -1.0, 1.0)))
 
+    theta_zero = math.atan2(zy - cy, zx - cx)
+    theta_full = math.atan2(fsy - cy, fsx - cx)
     ratio = arc_ratio(
         math.atan2(ndy, ndx),
-        math.atan2(zy - cy, zx - cx),
-        math.atan2(fsy - cy, fsx - cx),
+        theta_zero,
+        theta_full,
         tick_angles=tick_angles,
     )
-    value = ratio_to_value(ratio, val_min, val_max)
+    calibration = calibration_to_ratios(
+        calibration_angles, theta_zero, theta_full, tick_angles=tick_angles)
+    value = ratio_to_value(ratio, val_min, val_max, calibration=calibration)
 
     return {
         'value': value,

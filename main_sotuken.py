@@ -48,6 +48,9 @@ class MeterAngleDetector:
         self.fullscale_point = None
         self.val_min = 0.0
         self.val_max = 100.0
+        # OCRで数値が対応付いた中間の目盛り点。[(angle, value), ...]。
+        # T2-1: 両端だけでなくこれらも使った区分線形補間で非線形スケールに対応する
+        self.calibration_angles = None
         # 0=中心待ち, 1=ゼロ点待ち, 2=フルスケール点待ち, 3=完了
         self.click_step = 0
         self._last_overlay = None  # 直前に表示したオーバーレイ画像（リサイズ再描画用）
@@ -356,6 +359,7 @@ class MeterAngleDetector:
         self.fullscale_point = None
         self.val_min = 0.0
         self.val_max = 100.0
+        self.calibration_angles = None
         self.click_step = 0
         self.zero_needle_overlap = False
         self.auto_center_candidate = None
@@ -767,6 +771,7 @@ class MeterAngleDetector:
         self.fullscale_point = c['full_pt']
         self.val_min = c['min_value']
         self.val_max = c['max_value']
+        self.calibration_angles = c.get('calibration')
         self.zero_needle_overlap = c.get('needle_overlap_zero', False)
         self.auto_scale_candidate = None
         self.click_step = 3
@@ -787,6 +792,7 @@ class MeterAngleDetector:
             'n_total': c['n_total'],
             'is_confident': c.get('is_confident', True),
             'source': c.get('source', 'ocr_tick'),
+            'calibration': c.get('calibration'),
             # 「針が0の目盛りに重なっている」という判定は、入れ替え前のzero_ptに
             # 対して行ったものなので、入れ替え後の新しいzero_pt（＝元のfull_pt）
             # には当てはまらない。そのまま引き継ぐと、実際には目視確認できている
@@ -878,6 +884,7 @@ class MeterAngleDetector:
                 return
             self.val_min = val_min
             self.val_max = val_max
+            self.calibration_angles = None
             self.click_step = 3
             self.status_var.set("🔍 針を検出中...")
             self.root.update()
@@ -916,9 +923,12 @@ class MeterAngleDetector:
         # 針の検出と値の算出は meter_reader に切り出してある
         # （GUIを起動しなくても同じ計算を評価スクリプトから呼べるようにするため）
         self._flow_set_stage('needle', 'running')
+        tick_angles = [t['angle'] for t in self.detected_ticks if 'angle' in t] or None
         reading = meter_reader.compute_reading(
             self.image_original, self.center_point, self.zero_point,
-            self.fullscale_point, self.val_min, self.val_max)
+            self.fullscale_point, self.val_min, self.val_max,
+            tick_angles=tick_angles,
+            calibration_angles=self.calibration_angles)
 
         if reading is not None:
             self._trace(
@@ -986,6 +996,11 @@ class MeterAngleDetector:
                         "needle_line": [int(x1), int(y1), int(x2), int(y2)],
                         "needle_tip": [int(tip_x), int(tip_y)],
                         "zero_needle_overlap": self.zero_needle_overlap,
+                        # T2-1: tick_angles/calibration_angles次第でvalueが変わるため、
+                        # 回帰テスト(tests/test_regression_logs.py)が同じ入力で
+                        # 再現できるよう、実際に使った値も一緒に記録しておく
+                        "tick_angles": tick_angles,
+                        "calibration_angles": self.calibration_angles,
                     },
                     source_path=self.image_path,
                 )

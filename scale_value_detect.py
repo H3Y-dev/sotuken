@@ -915,6 +915,10 @@ def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None, ticks=None):
         'is_confident': is_confident,
         'source': 'ocr_tick',
         'needle_overlap_zero': False,
+        # 単調部分列に残った中間の目盛り点（角度・値）。T2-1: 両端だけでなく
+        # これらも使った区分線形補間で非線形スケールに対応するために使う
+        # （meter_reader.compute_reading の calibration_angles 引数）。
+        'calibration': [(b['angle'], b['value']) for b in survivors],
     }
 
 

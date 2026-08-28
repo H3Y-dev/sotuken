@@ -120,5 +120,131 @@ class TestRatioToValue(unittest.TestCase):
         self.assertAlmostEqual(meter_reader.ratio_to_value(0.5, 20.0, 40.0), 30.0)
 
 
+class TestRatioToValueWithCalibration(unittest.TestCase):
+    """
+    T2-1: 両端（val_min/val_max）だけでなく、OCRで対応付いた中間の目盛り点も
+    使った区分線形補間で、可動鉄片形などの非線形スケールに対応する。
+    """
+
+    def test_matches_linear_interpolation_when_only_two_points(self):
+        """較正点が両端の2点だけなら、従来の線形補間と完全に一致する"""
+        calibration = [(0.0, 0.0), (1.0, 100.0)]
+        for ratio in (0.0, 0.25, 0.6, 1.0):
+            self.assertAlmostEqual(
+                meter_reader.ratio_to_value(ratio, 0.0, 100.0, calibration=calibration),
+                meter_reader.ratio_to_value(ratio, 0.0, 100.0),
+                places=6,
+            )
+
+    def test_none_calibration_is_identical_to_plain_linear(self):
+        self.assertAlmostEqual(
+            meter_reader.ratio_to_value(0.6, 0.0, 5.0, calibration=None),
+            meter_reader.ratio_to_value(0.6, 0.0, 5.0),
+        )
+
+    def test_interior_point_bends_the_interpolation(self):
+        # 可動鉄片形のような、低い側が圧縮されたスケール:
+        # ratio 0〜0.2 の間に値0〜80が詰まっている
+        calibration = [(0.2, 80.0)]
+        value_at_bend = meter_reader.ratio_to_value(
+            0.2, 0.0, 100.0, calibration=calibration)
+        self.assertAlmostEqual(value_at_bend, 80.0, places=6)
+
+        # 較正点が無い（=線形補間）なら ratio 0.2 は値20のはず
+        linear_value = meter_reader.ratio_to_value(0.2, 0.0, 100.0)
+        self.assertAlmostEqual(linear_value, 20.0, places=6)
+
+    def test_nonlinear_scale_is_more_accurate_than_linear(self):
+        """複数の較正点を使った補間のほうが、2点線形補間より真値に近いこと"""
+        true_calibration = [
+            (0.0, 0.0), (0.1, 10.0), (0.3, 40.0), (0.6, 75.0), (1.0, 100.0),
+        ]
+        # (0.3, 40.0) と (0.6, 75.0) の間、ratio=0.45 の真値
+        true_value_at_045 = 40.0 + (75.0 - 40.0) * (0.45 - 0.3) / (0.6 - 0.3)
+
+        via_calibration = meter_reader.ratio_to_value(
+            0.45, 0.0, 100.0, calibration=true_calibration[1:-1])
+        via_linear = meter_reader.ratio_to_value(0.45, 0.0, 100.0)
+
+        self.assertAlmostEqual(via_calibration, true_value_at_045, places=6)
+        self.assertLess(
+            abs(via_calibration - true_value_at_045),
+            abs(via_linear - true_value_at_045),
+        )
+
+    def test_non_monotonic_outlier_is_excluded_without_crashing(self):
+        """OCR誤読で値が逆転した外れ値が混ざっていても、例外にならず除外される"""
+        calibration = [
+            (0.2, 20.0),
+            (0.5, 5.0),   # 外れ値: 直前より小さい値
+            (0.8, 80.0),
+        ]
+        value = meter_reader.ratio_to_value(0.5, 0.0, 100.0, calibration=calibration)
+        # 外れ値(5.0)がそのまま採用されていないこと
+        self.assertNotAlmostEqual(value, 5.0, places=1)
+        # 外れ値を除いた(0.2,20.0)→(0.8,80.0)の線形補間に近いはず
+        self.assertAlmostEqual(value, 50.0, places=1)
+
+    def test_monotonic_but_wrong_ocr_value_is_excluded(self):
+        """
+        OCRが「30」を「38」と誤読したケース（2026-08-28、meter2.jpgで実際に
+        発生・退行を確認）。20 < 38 < 40 なので単調増加という条件だけは
+        満たしてしまうが、他の点が10刻みの等差数列（0,10,20,40,...,100）に
+        なっているので、38だけが刻みからずれていると検出できるはずである。
+        """
+        calibration = [
+            (0.1, 10.0), (0.2, 20.0), (0.3, 38.0), (0.4, 40.0),
+            (0.5, 50.0), (0.6, 60.0), (0.7, 70.0), (0.8, 80.0),
+        ]
+        value_at_030 = meter_reader.ratio_to_value(
+            0.3, 0.0, 100.0, calibration=calibration)
+        # 38がそのまま採用されていれば38.0に近くなるはずだが、
+        # 20と40の間を等差数列として補間した30.0に近い値になるべき
+        self.assertLess(abs(value_at_030 - 30.0), abs(value_at_030 - 38.0))
+        self.assertAlmostEqual(value_at_030, 30.0, delta=1.0)
+
+    def test_result_stays_monotonic_even_with_outliers(self):
+        calibration = [(0.2, 20.0), (0.5, 5.0), (0.8, 80.0)]
+        values = [
+            meter_reader.ratio_to_value(r, 0.0, 100.0, calibration=calibration)
+            for r in (0.0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0)
+        ]
+        for a, b in zip(values, values[1:]):
+            self.assertLessEqual(a, b)
+
+
+class TestCalibrationToRatios(unittest.TestCase):
+    """OCRで対応付いた目盛りの(角度, 値)を、ratio_to_valueが使える(ratio, 値)へ変換する"""
+
+    # TestArcRatioWithTickAngles と同じ幾何（ゼロ点135度→フル点45度、270度側）
+    ZERO = math.radians(135)
+    FULL = math.radians(45)
+
+    def _ticks(self):
+        return [math.radians((135 + i * 270.0 / 20) % 360) for i in range(21)]
+
+    def test_converts_angles_along_the_scale_to_ratios(self):
+        # ゼロ(135°)から時計回りに225°進んだ位置(=45°=フル)の中間、225°はratio=1/3
+        calibration_angles = [(math.radians(225), 50.0)]
+        result = meter_reader.calibration_to_ratios(
+            calibration_angles, self.ZERO, self.FULL, tick_angles=self._ticks())
+        self.assertEqual(len(result), 1)
+        ratio, value = result[0]
+        self.assertAlmostEqual(ratio, 1.0 / 3.0, places=6)
+        self.assertAlmostEqual(value, 50.0)
+
+    def test_returns_empty_when_direction_cannot_be_resolved(self):
+        """走査方向を確定できる目盛り角度が無ければ、安全に空リストへフォールバックする"""
+        result = meter_reader.calibration_to_ratios(
+            [(math.radians(225), 50.0)], self.ZERO, self.FULL, tick_angles=None)
+        self.assertEqual(result, [])
+
+    def test_returns_empty_for_no_calibration(self):
+        self.assertEqual(
+            meter_reader.calibration_to_ratios(None, self.ZERO, self.FULL), [])
+        self.assertEqual(
+            meter_reader.calibration_to_ratios([], self.ZERO, self.FULL), [])
+
+
 if __name__ == '__main__':
     unittest.main()
