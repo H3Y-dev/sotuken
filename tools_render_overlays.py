@@ -92,6 +92,12 @@ def render(entry, base_dir, use_vlm):
         return None, 'image not found'
 
     result = meter_pipeline.read_meter(img, use_vlm=use_vlm)
+    # center/zero_pt/full_pt等の座標は、read_meter内部でクロップ・向き補正
+    # した「後」の画像を基準にしている。呼び出し元のimg（クロップ・回転前）
+    # にそのまま描画すると座標がズレるため、processed_imgを使う。
+    img = result.get('processed_img')
+    if img is None:
+        img = imread_ja(path)
     out = img.copy()
 
     center = result.get('center')

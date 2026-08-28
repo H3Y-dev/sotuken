@@ -18,6 +18,7 @@ import math
 import numpy as np
 
 import meter_reader
+import orientation
 import scale_value_detect
 import tick_detect
 import vlm_scale_value
@@ -73,6 +74,11 @@ def read_meter(img, use_vlm=True):
         n_ticks      : 検出した目盛り線の本数
         scale_source : 目盛り数値をどう決めたか（'ocr_tick' / 'vlm'）
         cropped      : VLMによる盤面クロップが効いたか
+        processed_img : クロップ・向き補正を適用した後の画像。
+                        center/zero_pt/full_pt等の座標はこの画像を
+                        基準にしている（呼び出し元が渡した元のimgでは
+                        ないので、オーバーレイ描画等に座標を使うときは
+                        必ずこちらを使うこと）
     """
     result = {
         'stage': None,
@@ -89,6 +95,8 @@ def read_meter(img, use_vlm=True):
         'scale_confident': None,
         'center_source': None,
         'cropped': False,
+        'orientation_angle': None,
+        'processed_img': None,
         'error': None,
     }
 
@@ -103,6 +111,20 @@ def read_meter(img, use_vlm=True):
                     result['cropped'] = True
         except Exception:
             pass
+
+    # ── 向きの正規化（90度単位の回転を検出して直す） ──
+    # 4方向でOCRを試し、一番多く数字が読めた向きを採用する。
+    # 中心点検出より前に行う必要がある（回転したままだと目盛りの
+    # 角度配置自体がずれ、中心・目盛り検出の前提が崩れるため）。
+    try:
+        img, orientation_angle, _best_count, _zero_count = (
+            orientation.normalize_orientation(img))
+        result['orientation_angle'] = orientation_angle
+    except Exception:
+        pass
+
+    # クロップ・向き補正が終わった後の画像。以降このimgは書き換わらない
+    result['processed_img'] = img
 
     # ── 中心点 ──
     center, center_source = _detect_center(img)
