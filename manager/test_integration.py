@@ -37,7 +37,7 @@ class TestIntegrationReadMeterAndManager(unittest.TestCase):
         )
 
         # 1. read_meter が正しい引数で呼び出されたか検証
-        mock_read_meter.assert_called_once_with(image_path)
+        mock_read_meter.assert_called_once_with(image_path, use_vlm=False)
 
         # 2. 返却された dict と、その中の MeterReading の属性を検証
         self.assertEqual(result["val"], 75.2)

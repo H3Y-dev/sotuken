@@ -28,14 +28,20 @@ class MeterManager:
         reader_func: Any,
         threshold_max: Optional[float] = None,
         threshold_min: Optional[float] = None,
+        use_vlm: bool = False,
     ) -> Dict[str, Any]:
         """認識処理を実行し、閾値判定を付与した結果を返却"""
-        read_result: Dict[str, Any] = reader_func(image_path)
+        try:
+            read_result: Dict[str, Any] = reader_func(image_path, use_vlm=use_vlm)
+        except TypeError:
+            read_result: Dict[str, Any] = reader_func(image_path)
+
+        save_data = {k: v for k, v in read_result.items() if k != "ticks"}
 
         row_id = self.storage.save_reading(
             device_name=device_name,
             image_path=image_path,
-            read_result=read_result,
+            read_result=save_data,
         )
 
         readings = self.storage.get_all_readings()
