@@ -37,3 +37,9 @@ def export_to_csv(readings, output_path):
         # データを1件ずつ取り出して、表の1行として書き込む
         for r in readings:
             writer.writerow([r.id, r.timestamp, r.device_name, r.value, r.stage, r.image_path])
+def group_by_device(readings):
+    """記録のリストを機器名ごとの辞書にまとめる。"""
+    groups = {}
+    for r in readings:
+        groups.setdefault(r.device_name, []).append(r)
+    return groups

@@ -2,6 +2,7 @@ import csv  # CSVファイルを読み込むための道具
 import os  # ファイルのパスを操作するための道具
 import tempfile  # テスト用の「一時的なファイル」を作るための道具
 import unittest  # テストを自動化するためのPython標準ライブラリ
+from manager.export import export_to_csv, filter_readings, group_by_device
 
 from manager.export import export_to_csv, filter_readings  # filter_readingsを追加！
 
@@ -99,5 +100,20 @@ class TestExportToCsv(unittest.TestCase):
         result = filter_readings(readings)
         # 3. 検証: データがそのまま返ってくることを確認
         self.assertEqual(len(result), 1)
+def test_group_by_device(self):
+        # 1. meter1が2件、meter2が1件のダミーデータを用意
+        readings = [
+            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
+            DummyReading(2, "2026-08-21", "meter2", 20.0, "ok", "b.jpg"),
+            DummyReading(3, "2026-08-22", "meter1", 30.0, "ok", "c.jpg"),
+        ]
+        # 2. グループ分けを実行
+        groups = group_by_device(readings)
+
+        # 3. 検証: meter1に2件、meter2に1件正しく振り分けられているかチェック！
+        self.assertEqual(len(groups["meter1"]), 2)
+        self.assertEqual(len(groups["meter2"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
