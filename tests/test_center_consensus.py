@@ -90,6 +90,45 @@ class TestResolveCenterConsensus(unittest.TestCase):
         )
         self.assertIsNotNone(center)
         self.assertNotEqual(source, "hough")
+        
+    def test_estimate_and_fit_agree_but_both_wrong_hough_is_correct(self):
+        """企業画像で見つかった回帰の再現テスト:
+        ネジのねじ山がticksに混入し、estimateとfitが同じ理由で
+        盤面下部(ネジの位置)に一致してズレるが、Houghは正しい盤面中心を
+        指している場合、Hough側が優先されること('hough_preferred_over_ticks')。
+        """
+        hough = make_hough(320, 240, 100)
+        # estimateとfitが「同じ理由で」盤面下部(ネジ想定位置)にズレて一致
+        # (fit半径はHoughと近い値のままにし、半径比較チェック単体では
+        # 弾かれない状況を再現する)
+        estimate = (321, 339)
+        fit_result = make_fit(319, 341, 95)
+        # ticksの重心自体はまだ盤面中心付近に分布している想定
+        # (ネジ由来の混入点は少数で、目盛り距離チェックはすり抜ける状況)
+        ticks = make_ticks_around(320, 240, 100)
+
+        center, source = resolve_center_consensus(
+            hough, estimate, fit_result, IMG_SHAPE, ticks=ticks
+        )
+        self.assertIsNotNone(center)
+        self.assertEqual(source, "hough_preferred_over_ticks")
+        self.assertAlmostEqual(center[0], 320, delta=1)
+        self.assertAlmostEqual(center[1], 240, delta=1)
+
+    def test_hough_and_one_tick_candidate_agree_still_consensus(self):
+        """回帰確認: Houghがestimateかfitのどちらか一方とでも一致していれば、
+        新しいガードは発動せず従来通り'consensus'のままであること。
+        """
+        hough = make_hough(320, 240, 100)
+        estimate = (321, 241)   # Houghと一致
+        fit_result = make_fit(360, 280, 100)  # estimateとは食い違う
+        ticks = make_ticks_around(320, 240, 100)
+
+        center, source = resolve_center_consensus(
+            hough, estimate, fit_result, IMG_SHAPE, ticks=ticks
+        )
+        self.assertIsNotNone(center)
+        self.assertEqual(source, "consensus")
 
 
 if __name__ == "__main__":

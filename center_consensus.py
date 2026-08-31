@@ -13,10 +13,26 @@ Hough円検出・estimate_center・円フィッティングの3候補から、
     (盤面の外周ベゼルという別の画像特徴)である。
     このため3候補を単純に「3つの独立した投票」として多数決するのではなく、
     「Hough vs (目盛りベースの2手法)」という構造を前提に扱う
-    (2候補しか無い場合の食い違い処理、および下記のネジ誤検出対策に反映されている)。
+    (2候補しか無い場合の食い違い処理、下記のネジ誤検出対策、および
+    n==3のケースでの目盛りベース2候補対策に反映されている)。
 
 一致判定の閾値は、既存のmeter_pipeline._detect_centerが使っていた
 「画像短辺の3%」という考え方をそのまま踏襲する。
+
+追記(2026-08-27): 企業提供画像での回帰を受けた対策
+    結線後、企業提供画像の1枚(丸型温度計)で、中心が盤面中心ではなく
+    盤面下部の取り付けネジ付近に誤検出される事例が見つかった。
+    tick_detect.detect_scale_ticks() がネジのねじ山模様を目盛り線として
+    誤検出し、その汚染されたticksを入力に使うestimate_centerと
+    fit_circle_to_ticksの両方が「同じ理由で」ネジ側にズレて一致して
+    しまい、2候補一致という判定基準のもとで誤って採用されていた。
+
+    これは上記の「Hough vs 目盛りベース2手法」という構造の逆側の
+    ケースであり、既存のHough単独誤検出対策
+    (_check_hough_radius_consistency / _check_hough_tick_distance)では
+    捕捉できない。resolve_center_consensus のn==3のケースに、
+    「estimate-fitのみが一致し、Houghはそのどちらとも一致しない」場合は
+    目盛りベース側の一致を疑いHough側を優先する対策を追加した。
 """
 import math
 
@@ -111,6 +127,9 @@ def resolve_center_consensus(
         (center, source) のペア。
         center は (x, y) の float タプル、採用できなければ None。
         source は 'consensus'(3候補中2つ以上が一致) /
+                  'hough_preferred_over_ticks'(estimate/fitのみ一致だが
+                      Houghがそのどちらとも一致せず、目盛り汚染を疑い
+                      Hough側を優先) /
                   'fallback_2_agree'(2候補のみで一致) /
                   'fallback_2_corrected'(2候補のみで食い違い、目盛りベース側を採用) /
                   'single'(候補が1つのみ) /
@@ -167,6 +186,27 @@ def resolve_center_consensus(
 
     if not agreeing_pairs:
         return None, None
+
+    # 目盛りベース2候補(estimate/fit)対策:
+    # estimate と fit はどちらも同じ tick_detect.detect_scale_ticks の結果に
+    # 依存しているため、独立した2つの情報源ではない。目盛り検出そのものが
+    # 誤っている(例: ネジのねじ山を目盛り線として誤検出する)場合、
+    # estimate と fit は同じ理由で「一緒に」ズレることがある。
+    # このとき単純な多数決では、間違った2候補の一致が正しいHough候補より
+    # 優先されてしまう。
+    #
+    # そこで、「estimate-fitのみが一致し、Houghはそのどちらとも一致しない」
+    # 場合に限り、目盛りベース側の一致を疑い、独立した情報源であるHough側
+    # (この時点で既に_check_hough_radius_consistency /
+    # _check_hough_tick_distance を通過済み)を優先して採用する。
+    # Houghがestimate・fitのどちらか一方とでも一致していれば、それは
+    # 従来通り正常な多数決として扱う(このガードは発動しない)。
+    tick_pair_agrees = ("estimate", "fit") in agreeing_pairs
+    hough_agrees_with_either = (
+        ("hough", "estimate") in agreeing_pairs or ("hough", "fit") in agreeing_pairs
+    )
+    if tick_pair_agrees and not hough_agrees_with_either and "hough" in candidates:
+        return candidates["hough"], "hough_preferred_over_ticks"
 
     agree_keys = set()
     for pair in agreeing_pairs:
