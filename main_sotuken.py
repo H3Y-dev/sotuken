@@ -30,7 +30,8 @@ import scale_value_detect
 import vlm_scale_value
 import detection_logger
 import meter_reader
-from scale_debug_view import build_scale_debug_view
+from scale_debug_view import build_scale_debug_view, build_scale_flow_model
+from scale_flow_canvas import draw_scale_flow
 
 
 class MeterAngleDetector:
@@ -231,12 +232,12 @@ class MeterAngleDetector:
         )
         self.flow_canvas.pack(fill=tk.X)
 
-        tk.Label(
-            self.debug_frame,
-            text='目盛り数値判定の内部フロー: OCR数字検出 → 前処理4条件 → 条件間照合 → LLM照合 → 最終採用',
-            font=('Helvetica', 10, 'bold'), fg='#cdd6f4', bg='#1e1e2e',
-            anchor=tk.W
-        ).pack(fill=tk.X, pady=(8, 2))
+        self.scale_flow_canvas = tk.Canvas(
+            self.debug_frame, height=300, bg='#11111b',
+            highlightthickness=1, highlightbackground='#585b70')
+        self.scale_flow_canvas.pack(fill=tk.X, pady=(8, 2))
+        self.scale_flow_canvas.bind(
+            '<Configure>', lambda _event: self._draw_scale_flow())
 
         self.scale_decision_var = tk.StringVar(value='採用元: 未判定')
         tk.Label(
@@ -302,7 +303,7 @@ class MeterAngleDetector:
             # 通常の画像キャンバスは高さ600pxを要求するため、そのまま下へ
             # デバッグパネルを足すと一般的な画面高で表・ログが切れてしまう。
             # デバッグ中だけ画像領域を縮め、判定詳細まで同じ画面内に収める。
-            self.canvas.config(height=350)
+            self.canvas.config(height=70)
             self.debug_frame.pack(fill=tk.X, after=self.status_frame)
         else:
             self.debug_frame.pack_forget()
@@ -349,6 +350,8 @@ class MeterAngleDetector:
         self.trace_text.delete("1.0", tk.END)
         self.trace_text.config(state=tk.DISABLED)
         self.scale_decision_var.set('採用元: 未判定')
+        self._scale_flow_model = build_scale_flow_model(None, running=False)
+        self.root.after_idle(self._draw_scale_flow)
         for tree in (self.scale_decision_tree, self.ocr_result_tree):
             for item in tree.get_children():
                 tree.delete(item)
@@ -388,6 +391,17 @@ class MeterAngleDetector:
             self.flow_canvas.itemconfig(shape_id, fill=colors[state])
         self.flow_canvas.itemconfig(text_id, text=f"{label}\n{state_labels[state]}")
         self._flow_stage_states[stage_key] = state
+        if stage_key == 'ocr' and state == 'running':
+            self._scale_flow_model = build_scale_flow_model(None, running=True)
+            self._draw_scale_flow()
+
+    def _draw_scale_flow(self):
+        """OCR/VLMの条件分岐と、今回実際に通った経路をCanvasへ描く。"""
+        if not hasattr(self, 'scale_flow_canvas'):
+            return
+        model = getattr(
+            self, '_scale_flow_model', build_scale_flow_model(None))
+        draw_scale_flow(self.scale_flow_canvas, model)
 
     def _trace(self, message):
         """時刻付きのデバッグトレースを1行追加して末尾を表示する。"""
@@ -400,6 +414,9 @@ class MeterAngleDetector:
     def _show_scale_debug_view(self, auto_scale, numbers, diagnostics=None):
         """OCR/VLMの候補・採用判断・生ログをデバッグパネルへ反映する。"""
         view = build_scale_debug_view(auto_scale, numbers, diagnostics)
+        self._scale_flow_model = build_scale_flow_model(
+            auto_scale, diagnostics)
+        self._draw_scale_flow()
         self.scale_decision_var.set(view['summary'])
         for tree, rows in (
                 (self.scale_decision_tree, view['decision_rows']),
