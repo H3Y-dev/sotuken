@@ -86,6 +86,48 @@ def is_within_tolerance(measured, true_value, val_min, val_max,
     return err <= tolerance_percent
 
 
+def classify_scale_sources(diagnostics, true_min, true_max):
+    """
+    正解範囲を基準に、OCR候補とVLM候補を別々に採点する。
+
+    GUIには正解値が無いので一致・不一致までしか表示できない。一方、評価スクリプトは
+    groundtruthを持つため、どちらだけが誤ったかまでここで分類する。
+    """
+    diagnostics = diagnostics or {}
+
+    def source_correct(source):
+        if not source:
+            return None
+        detected_min = source.get('min_value')
+        detected_max = source.get('max_value')
+        if detected_min is None or detected_max is None:
+            return None
+        return (abs(detected_min - true_min) < 1e-6 and
+                abs(detected_max - true_max) < 1e-6)
+
+    ocr_correct = source_correct(diagnostics.get('ocr'))
+    vlm_correct = source_correct(diagnostics.get('vlm'))
+    if ocr_correct is True and vlm_correct is True:
+        code = 'both_correct'
+    elif ocr_correct is False and vlm_correct is True:
+        code = 'ocr_only_wrong'
+    elif ocr_correct is True and vlm_correct is False:
+        code = 'vlm_only_wrong'
+    elif ocr_correct is False and vlm_correct is False:
+        code = 'both_wrong'
+    elif ocr_correct is None and vlm_correct is None:
+        code = 'both_unavailable'
+    elif ocr_correct is None:
+        code = 'ocr_unavailable'
+    else:
+        code = 'vlm_unavailable'
+    return {
+        'code': code,
+        'ocr_correct': ocr_correct,
+        'vlm_correct': vlm_correct,
+    }
+
+
 # ── 集計 ──────────────────────────────────────────────────────
 def _median(values):
     """中央値。外れ値に引きずられないので平均と併記する"""
@@ -163,6 +205,10 @@ def evaluate_entry(entry, base_dir, use_vlm=True):
         'reference_error': None,
         'within_tolerance': False,
         'scale_correct': None,
+        'scale_diagnostics': None,
+        'scale_accuracy_class': None,
+        'ocr_scale_correct': None,
+        'vlm_scale_correct': None,
         'elapsed_sec': None,
     }
 
@@ -191,6 +237,12 @@ def evaluate_entry(entry, base_dir, use_vlm=True):
     row['center_source'] = result['center_source']
     row['detected_min'] = result['min_value']
     row['detected_max'] = result['max_value']
+    row['scale_diagnostics'] = result.get('scale_diagnostics')
+    source_accuracy = classify_scale_sources(
+        row['scale_diagnostics'], entry['min_value'], entry['max_value'])
+    row['scale_accuracy_class'] = source_accuracy['code']
+    row['ocr_scale_correct'] = source_accuracy['ocr_correct']
+    row['vlm_scale_correct'] = source_accuracy['vlm_correct']
 
     # 目盛りの最小/最大を正しく検出できたか（値の誤差とは別の失敗要因なので分けて見る）
     if result['min_value'] is not None:
@@ -216,6 +268,34 @@ def evaluate_entry(entry, base_dir, use_vlm=True):
 
 def _fmt(value, spec='{:.3f}'):
     return spec.format(value) if value is not None else '-'
+
+
+def _source_verdict(value):
+    if value is True:
+        return '正しい'
+    if value is False:
+        return '誤り'
+    return '未実行/判定不能'
+
+
+def _accuracy_label(code):
+    return {
+        'both_correct': '両方正しい',
+        'ocr_only_wrong': 'OCRだけ誤り',
+        'vlm_only_wrong': 'LLMだけ誤り',
+        'both_wrong': '両方誤り',
+        'ocr_unavailable': 'OCR未検出',
+        'vlm_unavailable': 'LLM未実行/未検出',
+        'both_unavailable': '両方未検出',
+    }.get(code, code or '判定不能')
+
+
+def _format_detected_range(source):
+    if not source or source.get('min_value') is None or source.get('max_value') is None:
+        return '-'
+    return '{}〜{}'.format(
+        _fmt(source['min_value'], '{:.4g}'),
+        _fmt(source['max_value'], '{:.4g}'))
 
 
 def print_report(rows, summary, tolerance_percent):
@@ -271,6 +351,20 @@ def print_report(rows, summary, tolerance_percent):
                 os.path.basename(r['image']),
                 r.get('detected_min'), r.get('detected_max'),
                 r['true_min'], r['true_max']))
+
+    source_checked = [r for r in rows if r.get('scale_accuracy_class')]
+    if source_checked:
+        print('')
+        print('OCR / LLM 目盛り範囲の個別判定（groundtruth基準）:')
+        for r in source_checked:
+            diagnostics = r.get('scale_diagnostics') or {}
+            print('    {} : OCR {} [{}] / LLM {} [{}] => {}'.format(
+                os.path.basename(r['image']),
+                _format_detected_range(diagnostics.get('ocr')),
+                _source_verdict(r.get('ocr_scale_correct')),
+                _format_detected_range(diagnostics.get('vlm')),
+                _source_verdict(r.get('vlm_scale_correct')),
+                _accuracy_label(r.get('scale_accuracy_class'))))
     print('=' * 78)
 
 
@@ -279,7 +373,7 @@ def main(argv=None):
         description='アナログメーター読み取りの精度を評価する')
     parser.add_argument('groundtruth', help='正解データのJSONファイル')
     parser.add_argument('--no-vlm', action='store_true',
-                        help='VLMによる盤面クロップを使わない（Ollama無しでも動かす場合）')
+                        help='VLM処理をすべて無効化し、OCR/画像処理だけで評価する')
     parser.add_argument('-o', '--output',
                         help='結果をJSONで保存するパス')
     parser.add_argument('--tolerance', type=float,

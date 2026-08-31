@@ -8,10 +8,83 @@ import math
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import scale_value_detect
+
+
+class TestScaleDiagnostics(unittest.TestCase):
+    """OCR候補をLLMで補正した経路を、採用元まで追跡できるようにする。"""
+
+    @staticmethod
+    def _ocr_result():
+        return {
+            'zero_pt': (10, 20),
+            'full_pt': (30, 40),
+            'min_value': 0.0,
+            'max_value': 108.0,
+            'n_used': 3,
+            'n_total': 4,
+        }
+
+    def test_records_hybrid_decision_per_endpoint(self):
+        diagnostics = {}
+        detected_numbers = [
+            {'value': 108.0, 'score': 0.82, 'x': 30.0, 'y': 40.0},
+        ]
+        with mock.patch.object(
+                scale_value_detect.tick_detect, 'apply_clahe', side_effect=lambda img, _clip: img), \
+             mock.patch.object(
+                 scale_value_detect.tick_detect, 'detect_scale_ticks', return_value=[]), \
+             mock.patch.object(
+                 scale_value_detect, '_run_ocr_tick',
+                 side_effect=lambda *_args, **_kwargs: self._ocr_result()), \
+             mock.patch.object(
+                 scale_value_detect, 'read_scale_numbers', return_value=detected_numbers), \
+             mock.patch.object(
+                 scale_value_detect, 'refine_major_ticks_from_numbers', return_value=[]), \
+             mock.patch.object(
+                 scale_value_detect.vlm_scale_value, 'read_min_max', return_value=(0.0, 100.0)), \
+             mock.patch.object(
+                 scale_value_detect, 'bind_numbers_to_ticks', return_value=[]), \
+             mock.patch.object(
+                 scale_value_detect, '_make_occlusion_check', return_value=None), \
+             mock.patch.object(
+                 scale_value_detect, '_resolve_scale_position', return_value=((50, 60), False)):
+            result = scale_value_detect.detect_scale_values(
+                object(), [], (0, 0), diagnostics_out=diagnostics)
+
+        self.assertEqual('hybrid', result['source'])
+        self.assertEqual(100.0, result['max_value'])
+        self.assertEqual(108.0, diagnostics['ocr']['max_value'])
+        self.assertEqual(100.0, diagnostics['vlm']['max_value'])
+        self.assertEqual(detected_numbers, diagnostics['ocr']['numbers'])
+        self.assertEqual('ocr', diagnostics['decision']['min_source'])
+        self.assertEqual('vlm', diagnostics['decision']['max_source'])
+        self.assertTrue(diagnostics['decision']['fallback_used'])
+        self.assertEqual(diagnostics, result['diagnostics'])
+
+    def test_returns_diagnostics_even_when_no_scale_can_be_adopted(self):
+        diagnostics = {}
+        with mock.patch.object(
+                scale_value_detect.tick_detect, 'apply_clahe', side_effect=lambda img, _clip: img), \
+             mock.patch.object(
+                 scale_value_detect.tick_detect, 'detect_scale_ticks', return_value=[]), \
+             mock.patch.object(scale_value_detect, '_run_ocr_tick', return_value=None), \
+             mock.patch.object(scale_value_detect, 'read_scale_numbers', return_value=[]), \
+             mock.patch.object(
+                 scale_value_detect, 'refine_major_ticks_from_numbers', return_value=[]), \
+             mock.patch.object(
+                 scale_value_detect.vlm_scale_value, 'read_min_max', return_value=None):
+            result = scale_value_detect.detect_scale_values(
+                object(), [], (0, 0), diagnostics_out=diagnostics)
+
+        self.assertIsNone(result)
+        self.assertFalse(diagnostics['ocr']['available'])
+        self.assertFalse(diagnostics['vlm']['available'])
+        self.assertEqual('no_result', diagnostics['decision']['relation'])
 
 
 class TestIsPlausibleFullscale(unittest.TestCase):

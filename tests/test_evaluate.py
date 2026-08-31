@@ -73,6 +73,59 @@ class TestSummarize(unittest.TestCase):
         self.assertIsNone(s['mean_reference_error'])
 
 
+class TestScaleSourceAccuracy(unittest.TestCase):
+    """真値がある評価時は、OCRとVLMのどちらが誤ったかを分ける。"""
+
+    @staticmethod
+    def _diagnostics(ocr_range, vlm_range):
+        return {
+            'ocr': {
+                'min_value': None if ocr_range is None else ocr_range[0],
+                'max_value': None if ocr_range is None else ocr_range[1],
+            },
+            'vlm': {
+                'min_value': None if vlm_range is None else vlm_range[0],
+                'max_value': None if vlm_range is None else vlm_range[1],
+            },
+        }
+
+    def test_classifies_both_correct(self):
+        result = evaluate.classify_scale_sources(
+            self._diagnostics((0, 100), (0, 100)), 0, 100)
+
+        self.assertEqual('both_correct', result['code'])
+        self.assertTrue(result['ocr_correct'])
+        self.assertTrue(result['vlm_correct'])
+
+    def test_classifies_only_ocr_as_wrong(self):
+        result = evaluate.classify_scale_sources(
+            self._diagnostics((0, 108), (0, 100)), 0, 100)
+
+        self.assertEqual('ocr_only_wrong', result['code'])
+        self.assertFalse(result['ocr_correct'])
+        self.assertTrue(result['vlm_correct'])
+
+    def test_classifies_only_vlm_as_wrong(self):
+        result = evaluate.classify_scale_sources(
+            self._diagnostics((0, 100), (0, 108)), 0, 100)
+
+        self.assertEqual('vlm_only_wrong', result['code'])
+
+    def test_classifies_both_wrong(self):
+        result = evaluate.classify_scale_sources(
+            self._diagnostics((0, 108), (10, 100)), 0, 100)
+
+        self.assertEqual('both_wrong', result['code'])
+
+    def test_marks_vlm_as_not_evaluated_when_disabled_or_unavailable(self):
+        result = evaluate.classify_scale_sources(
+            self._diagnostics((0, 100), None), 0, 100)
+
+        self.assertEqual('vlm_unavailable', result['code'])
+        self.assertTrue(result['ocr_correct'])
+        self.assertIsNone(result['vlm_correct'])
+
+
 class TestPipelineRobustness(unittest.TestCase):
 
     def test_blank_image_fails_gracefully_instead_of_raising(self):

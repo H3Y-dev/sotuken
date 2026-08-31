@@ -1001,8 +1001,73 @@ def _find_agreeing_result(results):
     return max(best_group, key=lambda r: r['n_used'])
 
 
+def _scale_attempts(results):
+    """GUI・評価ログへ出すため、OCR各試行の要点だけをコピーする。"""
+    return [
+        {'label': result.get('label', '?'), 'min_value': result['min_value'],
+         'max_value': result['max_value'], 'n_used': result['n_used'],
+         'n_total': result['n_total']}
+        for result in results
+    ]
+
+
+def _range_relation(ocr_data, vlm_data):
+    """OCRとVLMの候補範囲が一致しているかを機械判定用の文字列で返す。"""
+    if not vlm_data['enabled']:
+        return 'disabled'
+    if not ocr_data['available'] and not vlm_data['available']:
+        return 'no_result'
+    if not ocr_data['available']:
+        return 'ocr_unavailable'
+    if not vlm_data['available']:
+        return 'vlm_unavailable'
+    if (abs(ocr_data['min_value'] - vlm_data['min_value']) < 1e-6 and
+            abs(ocr_data['max_value'] - vlm_data['max_value']) < 1e-6):
+        return 'agree'
+    return 'disagree'
+
+
+def _build_scale_diagnostics(results, numbers, ocr_candidate, agreed,
+                             vlm_result, use_vlm):
+    """OCR・VLMの個別候補と、最終採用判断を追跡する入れ物を作る。"""
+    ocr_data = {
+        'available': ocr_candidate is not None,
+        'stable': agreed is not None,
+        'min_value': (ocr_candidate['min_value'] if ocr_candidate is not None else None),
+        'max_value': (ocr_candidate['max_value'] if ocr_candidate is not None else None),
+        'attempts': _scale_attempts(results),
+        'numbers': [dict(number) for number in numbers],
+    }
+    vlm_data = {
+        'enabled': bool(use_vlm),
+        'available': vlm_result is not None,
+        'min_value': (vlm_result[0] if vlm_result is not None else None),
+        'max_value': (vlm_result[1] if vlm_result is not None else None),
+    }
+    return {
+        'ocr': ocr_data,
+        'vlm': vlm_data,
+        'decision': {
+            'relation': _range_relation(ocr_data, vlm_data),
+            'fallback_used': False,
+            'min_source': None,
+            'max_source': None,
+            'reason': '',
+        },
+    }
+
+
+def _publish_scale_diagnostics(diagnostics, diagnostics_out, result=None):
+    """戻り値と、失敗時にも残る呼び出し側のdictへ同じ診断内容を渡す。"""
+    if diagnostics_out is not None:
+        diagnostics_out.clear()
+        diagnostics_out.update(diagnostics)
+    if result is not None:
+        result['diagnostics'] = diagnostics
+
+
 def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
-                        use_vlm=True):
+                        use_vlm=True, diagnostics_out=None):
     """
     元画像と、CLAHE（コントラスト強調）を適用した複数のバリアントそれぞれで
     OCR＋目盛り対応付けを行い、min/maxの判定が一致するかをクロスチェックする。
@@ -1056,15 +1121,20 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     # --no-vlm ではOllamaの応答状態に結果が左右されないよう、補助判定も使わない。
     vlm_result = vlm_scale_value.read_min_max(img) if use_vlm else None
 
+    # 「OCR単独なら何を答えたか」を評価できるよう、VLMで上書きする前の
+    # OCR代表候補を保存する。条件間一致が無い場合は対応点が最も多い候補を使う。
+    ocr_candidate = agreed if agreed is not None else (
+        max(results, key=lambda result: result['n_used']) if results else None)
+    diagnostics = _build_scale_diagnostics(
+        results, numbers, ocr_candidate, agreed, vlm_result, use_vlm)
+
     if agreed is not None:
         agreed['is_confident'] = True
         agreed['source'] = 'ocr_tick'
-        agreed['attempts'] = [
-            {'label': result.get('label', '?'), 'min_value': result['min_value'],
-             'max_value': result['max_value'], 'n_used': result['n_used'],
-             'n_total': result['n_total']}
-            for result in results
-        ]
+        agreed['attempts'] = _scale_attempts(results)
+        decision = diagnostics['decision']
+        decision['min_source'] = 'ocr'
+        decision['max_source'] = 'ocr'
 
         # OCRで読めた最小値が正でも、針との重なりで0の目盛り線だけが
         # 検出から漏れた可能性がある。VLMの値に頼らず、等間隔性から0の
@@ -1080,6 +1150,9 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                 agreed['zero_pt'] = zero_pt
                 agreed['min_value'] = 0.0
                 agreed['needle_overlap_zero'] = zero_overlap
+                diagnostics['ocr']['min_value'] = 0.0
+                diagnostics['decision']['relation'] = _range_relation(
+                    diagnostics['ocr'], diagnostics['vlm'])
 
         if vlm_result is not None:
             # 既に複数条件で一致した結果をVLMの値で上書きするのは、
@@ -1100,6 +1173,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                     agreed['zero_pt'] = pt
                     agreed['min_value'] = vlm_min
                     agreed['needle_overlap_zero'] = overlap
+                    decision['min_source'] = 'vlm'
             if abs(agreed['max_value'] - vlm_max) > 1e-6:
                 if bound is None:
                     bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
@@ -1109,8 +1183,34 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                 if pt is not None:
                     agreed['full_pt'] = pt
                     agreed['max_value'] = vlm_max
+                    decision['max_source'] = 'vlm'
+
+        adopted_vlm = ('vlm' in (decision['min_source'], decision['max_source']))
+        decision['fallback_used'] = adopted_vlm
+        if adopted_vlm:
+            agreed['source'] = 'hybrid'
+            adopted_fields = []
+            if decision['min_source'] == 'vlm':
+                adopted_fields.append('最小値')
+            if decision['max_source'] == 'vlm':
+                adopted_fields.append('最大値')
+            if len(adopted_fields) == 1:
+                decision['reason'] = '{}だけVLM候補の位置を確認して採用'.format(
+                    adopted_fields[0])
+            else:
+                decision['reason'] = '最小値と最大値のVLM候補位置を確認して採用'
+        elif diagnostics['vlm']['available']:
+            if decision['relation'] == 'agree':
+                decision['reason'] = 'OCRとVLMが一致したためOCRの対応付け結果を採用'
+            else:
+                decision['reason'] = 'VLM候補と不一致だが盤面上の位置を確認できず、OCR結果を維持'
+        elif diagnostics['vlm']['enabled']:
+            decision['reason'] = 'VLM候補を取得できなかったためOCR結果を採用'
+        else:
+            decision['reason'] = 'VLMを無効化してOCRのみで判定'
 
         agreed.pop('label', None)
+        _publish_scale_diagnostics(diagnostics, diagnostics_out, agreed)
         return agreed
 
     # 前処理条件間で結果が割れた（不安定）、またはどれも対応付け不足
@@ -1127,7 +1227,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
             is_zero=False, occlusion_check=occlusion_check)
 
         if zero_pt is not None and full_pt is not None:
-            return {
+            result = {
                 'zero_pt': zero_pt,
                 'full_pt': full_pt,
                 'min_value': min_value,
@@ -1140,6 +1240,15 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                 'ticks': ticks,
                 'attempts': [],
             }
+            diagnostics['decision'].update({
+                'fallback_used': True,
+                'min_source': 'vlm',
+                'max_source': 'vlm',
+                'reason': ('OCRの条件間一致が得られなかったため、'
+                           '盤面上の位置を確認できたVLM候補を採用'),
+            })
+            _publish_scale_diagnostics(diagnostics, diagnostics_out, result)
+            return result
 
     # VLMも失敗した場合、条件間で割れた結果のうち一番マシなものを
     # 「低信頼」として返す（無ければNoneのまま手動選択にフォールバック）
@@ -1147,12 +1256,18 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
         best = max(results, key=lambda r: r['n_used'])
         best['is_confident'] = False
         best['source'] = 'ocr_tick'
-        best['attempts'] = [
-            {'label': result.get('label', '?'), 'min_value': result['min_value'],
-             'max_value': result['max_value'], 'n_used': result['n_used'],
-             'n_total': result['n_total']}
-            for result in results
-        ]
+        best['attempts'] = _scale_attempts(results)
+        diagnostics['decision'].update({
+            'fallback_used': False,
+            'min_source': 'ocr',
+            'max_source': 'ocr',
+            'reason': ('OCRの条件間一致が得られず、VLM候補も採用できなかったため、'
+                       '対応点が最も多いOCR候補を低信頼で採用'),
+        })
         best.pop('label', None)
+        _publish_scale_diagnostics(diagnostics, diagnostics_out, best)
         return best
+    diagnostics['decision']['relation'] = 'no_result'
+    diagnostics['decision']['reason'] = 'OCR・VLMとも採用できる目盛り範囲を得られなかった'
+    _publish_scale_diagnostics(diagnostics, diagnostics_out)
     return None

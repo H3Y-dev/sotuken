@@ -72,7 +72,8 @@ def read_meter(img, use_vlm=True):
         min_value/max_value : 自動検出した目盛りの最小値・最大値
         center, zero_pt, full_pt : 検出した各点
         n_ticks      : 検出した目盛り線の本数
-        scale_source : 目盛り数値をどう決めたか（'ocr_tick' / 'vlm'）
+        scale_source : 目盛り数値をどう決めたか（'ocr_tick' / 'vlm' / 'hybrid'）
+        scale_diagnostics : OCR・VLMそれぞれの候補値、採用元、フォールバック理由
         cropped      : VLMによる盤面クロップが効いたか
         processed_img : クロップ・向き補正を適用した後の画像。
                         center/zero_pt/full_pt等の座標はこの画像を
@@ -93,6 +94,7 @@ def read_meter(img, use_vlm=True):
         'n_ticks': 0,
         'scale_source': None,
         'scale_confident': None,
+        'scale_diagnostics': None,
         'center_source': None,
         'cropped': False,
         'orientation_angle': None,
@@ -150,12 +152,15 @@ def read_meter(img, use_vlm=True):
     result['n_ticks'] = len(ticks)
 
     # ── 目盛りの数値（OCR、必要時のみVLMで補助する） ──
+    scale_diagnostics = {}
     try:
         scale = scale_value_detect.detect_scale_values(
-            img, ticks, center, use_vlm=use_vlm)
+            img, ticks, center, use_vlm=use_vlm,
+            diagnostics_out=scale_diagnostics)
     except Exception as e:
         scale = None
         result['error'] = str(e)
+    result['scale_diagnostics'] = scale_diagnostics or None
 
     if scale is None:
         result['stage'] = STAGE_SCALE

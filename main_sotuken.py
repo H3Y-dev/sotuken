@@ -19,7 +19,7 @@ except Exception:
 import cv2
 import numpy as np
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageTk
 import math
 import threading
@@ -30,6 +30,7 @@ import scale_value_detect
 import vlm_scale_value
 import detection_logger
 import meter_reader
+from scale_debug_view import build_scale_debug_view
 
 
 class MeterAngleDetector:
@@ -230,6 +231,55 @@ class MeterAngleDetector:
         )
         self.flow_canvas.pack(fill=tk.X)
 
+        tk.Label(
+            self.debug_frame,
+            text='目盛り数値判定の内部フロー: OCR数字検出 → 前処理4条件 → 条件間照合 → LLM照合 → 最終採用',
+            font=('Helvetica', 10, 'bold'), fg='#cdd6f4', bg='#1e1e2e',
+            anchor=tk.W
+        ).pack(fill=tk.X, pady=(8, 2))
+
+        self.scale_decision_var = tk.StringVar(value='採用元: 未判定')
+        tk.Label(
+            self.debug_frame, textvariable=self.scale_decision_var,
+            font=('Helvetica', 10, 'bold'), fg='#f9e2af', bg='#1e1e2e',
+            anchor=tk.W
+        ).pack(fill=tk.X, pady=(2, 4))
+
+        detail_frame = tk.Frame(self.debug_frame, bg='#1e1e2e')
+        detail_frame.pack(fill=tk.X)
+
+        decision_frame = tk.LabelFrame(
+            detail_frame, text=' OCR / LLM候補と採用結果 ',
+            font=('Helvetica', 9, 'bold'), fg='#cdd6f4', bg='#1e1e2e')
+        decision_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 4))
+        self.scale_decision_tree = ttk.Treeview(
+            decision_frame, columns=('method', 'min', 'max', 'status'),
+            show='headings', height=3)
+        for column, label, width in (
+                ('method', '方式', 80), ('min', '最小値', 75),
+                ('max', '最大値', 75), ('status', '状態・採用元', 210)):
+            self.scale_decision_tree.heading(column, text=label)
+            self.scale_decision_tree.column(column, width=width, anchor=tk.CENTER)
+        self.scale_decision_tree.pack(fill=tk.BOTH, expand=True)
+
+        ocr_frame = tk.LabelFrame(
+            detail_frame, text=' OCRが検出した数字一覧 ',
+            font=('Helvetica', 9, 'bold'), fg='#cdd6f4', bg='#1e1e2e')
+        ocr_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0))
+        self.ocr_result_tree = ttk.Treeview(
+            ocr_frame, columns=('index', 'value', 'score', 'position'),
+            show='headings', height=3)
+        ocr_scrollbar = ttk.Scrollbar(
+            ocr_frame, orient=tk.VERTICAL, command=self.ocr_result_tree.yview)
+        self.ocr_result_tree.configure(yscrollcommand=ocr_scrollbar.set)
+        for column, label, width in (
+                ('index', 'No.', 40), ('value', '値', 70),
+                ('score', '信頼度', 65), ('position', '画像上の位置', 120)):
+            self.ocr_result_tree.heading(column, text=label)
+            self.ocr_result_tree.column(column, width=width, anchor=tk.CENTER)
+        ocr_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.ocr_result_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
         trace_frame = tk.Frame(self.debug_frame, bg="#1e1e2e")
         trace_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
         trace_scrollbar = tk.Scrollbar(trace_frame)
@@ -249,9 +299,14 @@ class MeterAngleDetector:
         """デバッグ用フローチャートとトレースログを表示・非表示にする。"""
         self.debug_visible = not self.debug_visible
         if self.debug_visible:
+            # 通常の画像キャンバスは高さ600pxを要求するため、そのまま下へ
+            # デバッグパネルを足すと一般的な画面高で表・ログが切れてしまう。
+            # デバッグ中だけ画像領域を縮め、判定詳細まで同じ画面内に収める。
+            self.canvas.config(height=350)
             self.debug_frame.pack(fill=tk.X, after=self.status_frame)
         else:
             self.debug_frame.pack_forget()
+            self.canvas.config(height=self.canvas_height)
 
     def _flow_reset(self):
         """フローチャートとトレースログを初期状態へ戻す。"""
@@ -262,7 +317,7 @@ class MeterAngleDetector:
         stages = [
             ("center", "① 中心検出"),
             ("ticks", "② 目盛り検出"),
-            ("ocr", "③ OCR対応付け"),
+            ("ocr", "③ OCR/LLM判定"),
             ("needle", "④ 針検出"),
         ]
         box_width = 145
@@ -293,6 +348,10 @@ class MeterAngleDetector:
         self.trace_text.config(state=tk.NORMAL)
         self.trace_text.delete("1.0", tk.END)
         self.trace_text.config(state=tk.DISABLED)
+        self.scale_decision_var.set('採用元: 未判定')
+        for tree in (self.scale_decision_tree, self.ocr_result_tree):
+            for item in tree.get_children():
+                tree.delete(item)
 
     def _create_flow_box(self, left, top, right, bottom, radius):
         """Canvas上に色を変更できる角丸矩形を描く。"""
@@ -337,6 +396,20 @@ class MeterAngleDetector:
         self.trace_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.trace_text.see(tk.END)
         self.trace_text.config(state=tk.DISABLED)
+
+    def _show_scale_debug_view(self, auto_scale, numbers, diagnostics=None):
+        """OCR/VLMの候補・採用判断・生ログをデバッグパネルへ反映する。"""
+        view = build_scale_debug_view(auto_scale, numbers, diagnostics)
+        self.scale_decision_var.set(view['summary'])
+        for tree, rows in (
+                (self.scale_decision_tree, view['decision_rows']),
+                (self.ocr_result_tree, view['ocr_rows'])):
+            for item in tree.get_children():
+                tree.delete(item)
+            for row in rows:
+                tree.insert('', tk.END, values=row)
+        for line in view['trace_lines']:
+            self._trace(line)
 
     # ── 画像読み込み ──────────────────────────────────────────
     def open_image(self):
@@ -557,6 +630,7 @@ class MeterAngleDetector:
             # メイン画面が「検出中...」のまま無言で固まって見えてしまうため、
             # 何が起きても必ずメインスレッドへ結果（またはエラー）を返す。
             ticks, numbers, center, auto_scale, error = [], [], self.center_point, None, None
+            scale_diagnostics = {}
             vlm_reason = ""
             try:
                 # CLAHEでコントラストを強調してから目盛り線を検出する。
@@ -580,14 +654,11 @@ class MeterAngleDetector:
                 # （信頼度が低い場合はscale_value_detect内部でVLMにも問い合わせる）
                 try:
                     auto_scale = scale_value_detect.detect_scale_values(
-                        self.image_original, ticks, center)
+                        self.image_original, ticks, center,
+                        diagnostics_out=scale_diagnostics)
                 except Exception:
                     auto_scale = None
-
-                try:
-                    numbers = scale_value_detect.read_scale_numbers(self.image_original)
-                except Exception:
-                    numbers = []
+                numbers = scale_diagnostics.get('ocr', {}).get('numbers', [])
 
                 if auto_scale is None:
                     # 自動検出が全滅した場合のみ、VLM（Ollama）が使える状態か診断する。
@@ -605,11 +676,13 @@ class MeterAngleDetector:
             # メインスレッドへ結果を渡す（リセット済みなら無視）
             self.root.after(
                 0, lambda: self._on_ticks_detected(
-                    ticks, numbers, center, auto_scale, error, vlm_reason, request_id))
+                    ticks, numbers, center, auto_scale, scale_diagnostics,
+                    error, vlm_reason, request_id))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_ticks_detected(self, ticks, numbers, center, auto_scale, error, vlm_reason, request_id):
+    def _on_ticks_detected(self, ticks, numbers, center, auto_scale,
+                           scale_diagnostics, error, vlm_reason, request_id):
         """目盛り線・目盛り数値検出スレッドの結果をメインスレッドで受け取る"""
         if request_id != self._scale_request_id:
             return  # リセット・新規画像で無効化済み
@@ -624,10 +697,7 @@ class MeterAngleDetector:
             f"目盛り検出: {len(ticks)}本検出（うち主目盛り候補 {n_major_raw}本、補正前）")
         self._flow_set_stage('ticks', 'ok' if ticks else 'warn')
 
-        numbers_str = ", ".join(
-            f"{number['value']:.4g}(score={number['score']:.2f})" for number in numbers
-        ) or "なし"
-        self._trace(f"OCR検出数字: {numbers_str}")
+        self._show_scale_debug_view(auto_scale, numbers, scale_diagnostics)
         if auto_scale is not None:
             n_major_final = sum(1 for tick in auto_scale.get('ticks', []) if tick.get('is_major'))
             n_synthetic = sum(1 for tick in auto_scale.get('ticks', []) if tick.get('synthetic'))
@@ -639,12 +709,6 @@ class MeterAngleDetector:
             )
             if auto_scale.get('needle_overlap_zero'):
                 self._trace("⚠️ 針が0の目盛りに重なっており、0の位置は目視確認できていません")
-            for attempt in auto_scale.get('attempts', []):
-                self._trace(
-                    f"  試行[{attempt['label']}]: 最小値={attempt['min_value']:.4g} "
-                    f"最大値={attempt['max_value']:.4g} "
-                    f"対応 {attempt['n_used']}/{attempt['n_total']}点"
-                )
             self._flow_set_stage(
                 'ocr',
                 'warn' if (not auto_scale.get('is_confident', True)
