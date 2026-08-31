@@ -3,6 +3,7 @@ import os  # ファイルのパスを操作するための道具
 import tempfile  # テスト用の「一時的なファイル」を作るための道具
 import unittest  # テストを自動化するためのPython標準ライブラリ
 from manager.export import export_to_csv, filter_readings, group_by_device
+from manager.export import export_to_csv, filter_readings, group_by_device, readings_to_series
 
 from manager.export import export_to_csv, filter_readings  # filter_readingsを追加！
 
@@ -113,6 +114,24 @@ def test_group_by_device(self):
         # 3. 検証: meter1に2件、meter2に1件正しく振り分けられているかチェック！
         self.assertEqual(len(groups["meter1"]), 2)
         self.assertEqual(len(groups["meter2"]), 1)
+def test_readings_to_series_normal(self):
+        readings = [
+            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
+            DummyReading(2, "2026-08-21", "meter1", 15.5, "ok", "b.jpg"),
+        ]
+        series = readings_to_series(readings)
+        self.assertEqual(series, {"2026-08-20": 10.0, "2026-08-21": 15.5})
+
+def test_readings_to_series_with_none_value(self):
+        readings = [
+            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
+            DummyReading(2, "2026-08-21", "meter1", None, "error", "b.jpg"),
+        ]
+        series = readings_to_series(readings)
+        self.assertEqual(series, {"2026-08-20": 10.0})
+def test_readings_to_series_empty(self):
+        series = readings_to_series([])
+        self.assertEqual(series, {})
 
 
 if __name__ == "__main__":

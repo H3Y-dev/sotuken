@@ -43,3 +43,15 @@ def group_by_device(readings):
     for r in readings:
         groups.setdefault(r.device_name, []).append(r)
     return groups
+
+
+def readings_to_series(readings):
+    """
+    1つの機器分の記録リストを受け取り、「タイムスタンプ -> 値」の辞書を作成する。
+    value が None の記録（読み取り失敗）は除外する。
+    """
+    series = {}
+    for r in readings:
+        if r.value is not None:
+            series[r.timestamp] = r.value
+    return series
