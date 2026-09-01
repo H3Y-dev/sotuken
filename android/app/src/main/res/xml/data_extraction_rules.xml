@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  撮影画像とキューDBを、クラウドバックアップにも端末間転送にも載せない。
+
+  企業から受け取った画像・工場で撮影した画像を外部へ一切出さない、という
+  大原則（tasks/企業提供画像の取り扱い.md）を、アプリの既定動作の側でも守るための設定。
+  AndroidManifest.xml の android:allowBackup="false" と対で機能する。
+  どちらかを外すと、利用者個人の Google アカウント経由で設備の写真が外へ出る。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

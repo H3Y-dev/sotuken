@@ -16,3 +16,11 @@ eval/overlays/
 eval/overlays_*/
 *_result.jpg
 debug_*.jpg
+
+# ── 作業環境・実験の残骸（2026-09-01追加） ────────────────
+# エディタ設定と、Claude Code のローカル設定。個人の環境依存なので共有しない
+.vscode/
+.claude/
+# agentic loop の実行ログ・実行結果。ソースは loop/ 配下に残る
+loop/runs/
+loop_run_output.log
