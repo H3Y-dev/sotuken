@@ -1,0 +1,2247 @@
+{
+  "scope": "round",
+  "use_vlm": false,
+  "tolerance_percent": 2.5,
+  "control_pair": [
+    "v4",
+    "v5"
+  ],
+  "versions": {
+    "v0": {
+      "summary": {
+        "total": 9,
+        "read_ok": 7,
+        "within_tolerance": 1,
+        "mean_reference_error": 29.956011868963987,
+        "median_reference_error": 19.58987135954634,
+        "mean_excluding_catastrophic": 10.451502145263005,
+        "catastrophic_count": 3,
+        "max_reference_error": 99.6701588697841,
+        "failure_stages": {
+          "image_not_found": 2
+        }
+      },
+      "results": [
+        {
+          "image": "C:/卒研/images/20260817_134647.jpg",
+          "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃（赤マークなし。黒目盛りがそのまま満尺） / 中心が露出している標準的なケース / 針は太い三角形（付け根側）と細く長い線（先端側）から成り、細い方が実際の指針で0〜20の間を指す（true_value=9.0と整合）。太い方を指針と誤読しないよう注意。2026-08-29に本人の目視でこの134647だけが90度回転していると判明したが、2026-08-31にT3-1の向き補正を本番結線したため、round scopeへ復帰した。",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 25.903463213633636,
+          "stage": "ok",
+          "absolute_error": 16.903463213633636,
+          "relative_error": 187.81625792926263,
+          "reference_error": 16.903463213633636,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 29.11,
+          "n_ticks": 72,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 2.0,
+          "detected_max": 111.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134656.jpg",
+          "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 4.060821098203093,
+          "stage": "ok",
+          "absolute_error": 4.939178901796907,
+          "relative_error": 54.87976557552119,
+          "reference_error": 4.939178901796907,
+          "within_tolerance": false,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 33.43,
+          "n_ticks": 82,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134745.jpg",
+          "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 9.373495106075136,
+          "stage": "ok",
+          "absolute_error": 0.37349510607513636,
+          "relative_error": 4.149945623057071,
+          "reference_error": 0.37349510607513636,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 30.94,
+          "n_ticks": 63,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "images/meter1.png",
+          "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近",
+          "true_value": 21.0,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": null,
+          "stage": "image_not_found",
+          "absolute_error": null,
+          "relative_error": null,
+          "reference_error": null,
+          "within_tolerance": false,
+          "scale_correct": null,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": null,
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": null
+        },
+        {
+          "image": "images/meter2.jpg",
+          "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近",
+          "true_value": 30.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": null,
+          "stage": "image_not_found",
+          "absolute_error": null,
+          "relative_error": null,
+          "reference_error": null,
+          "within_tolerance": false,
+          "scale_correct": null,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": null,
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": null
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近",
+          "true_value": 0.16,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 149.66523830467617,
+          "stage": "ok",
+          "absolute_error": 149.50523830467617,
+          "relative_error": 93440.7739404226,
+          "reference_error": 99.6701588697841,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 25.38,
+          "n_ticks": 63,
+          "scale_source": "ocr_tick",
+          "center_source": "corrected",
+          "detected_min": 25.1231,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近",
+          "true_value": 100.75,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 71.36519296068049,
+          "stage": "ok",
+          "absolute_error": 29.38480703931951,
+          "relative_error": 29.16606157748835,
+          "reference_error": 19.58987135954634,
+          "within_tolerance": false,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 24.15,
+          "n_ticks": 61,
+          "scale_source": "ocr_tick",
+          "center_source": "corrected",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近",
+          "true_value": 0.12,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 117.44052017103493,
+          "stage": "ok",
+          "absolute_error": 117.32052017103493,
+          "relative_error": 97767.10014252912,
+          "reference_error": 29.330130042758736,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 23.17,
+          "n_ticks": 50,
+          "scale_source": "ocr_tick",
+          "center_source": "corrected",
+          "detected_min": 100.0,
+          "detected_max": 400.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近",
+          "true_value": 139.55,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 295.09314235661213,
+          "stage": "ok",
+          "absolute_error": 155.54314235661212,
+          "relative_error": 111.4605104669381,
+          "reference_error": 38.88578558915303,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 23.44,
+          "n_ticks": 88,
+          "scale_source": "ocr_tick",
+          "center_source": "corrected",
+          "detected_min": 100.0,
+          "detected_max": 400.0
+        }
+      ]
+    },
+    "v1": {
+      "summary": {
+        "total": 9,
+        "read_ok": 9,
+        "within_tolerance": 8,
+        "mean_reference_error": 2.3611407305194008,
+        "median_reference_error": 1.381397440348413,
+        "mean_excluding_catastrophic": 2.3611407305194008,
+        "catastrophic_count": 0,
+        "max_reference_error": 11.792943704193451,
+        "failure_stages": {}
+      },
+      "results": [
+        {
+          "image": "C:/卒研/images/20260817_134647.jpg",
+          "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃（赤マークなし。黒目盛りがそのまま満尺） / 中心が露出している標準的なケース / 針は太い三角形（付け根側）と細く長い線（先端側）から成り、細い方が実際の指針で0〜20の間を指す（true_value=9.0と整合）。太い方を指針と誤読しないよう注意。2026-08-29に本人の目視でこの134647だけが90度回転していると判明したが、2026-08-31にT3-1の向き補正を本番結線したため、round scopeへ復帰した。",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": -2.7929437041934513,
+          "stage": "ok",
+          "absolute_error": 11.792943704193451,
+          "relative_error": 131.0327078243717,
+          "reference_error": 11.792943704193451,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 19.27,
+          "n_ticks": 44,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": -20.0,
+          "detected_max": 9.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134656.jpg",
+          "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 7.52326109010635,
+          "stage": "ok",
+          "absolute_error": 1.4767389098936503,
+          "relative_error": 16.408210109929446,
+          "reference_error": 1.4767389098936503,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 12.33,
+          "n_ticks": 50,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134745.jpg",
+          "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 8.118145412829206,
+          "stage": "ok",
+          "absolute_error": 0.8818545871707943,
+          "relative_error": 9.798384301897716,
+          "reference_error": 0.8818545871707945,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 9.17,
+          "n_ticks": 34,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "images/meter1.png",
+          "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近",
+          "true_value": 21.0,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 18.92790383947738,
+          "stage": "ok",
+          "absolute_error": 2.0720961605226194,
+          "relative_error": 9.867124573917236,
+          "reference_error": 1.381397440348413,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 5.19,
+          "n_ticks": 10,
+          "scale_source": "vlm",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "images/meter2.jpg",
+          "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近",
+          "true_value": 30.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 31.539660205118036,
+          "stage": "ok",
+          "absolute_error": 1.539660205118036,
+          "relative_error": 5.132200683726786,
+          "reference_error": 1.539660205118036,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 5.57,
+          "n_ticks": 32,
+          "scale_source": "vlm",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近",
+          "true_value": 0.16,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 1.9742598136318592,
+          "stage": "ok",
+          "absolute_error": 1.8142598136318593,
+          "relative_error": 1133.912383519912,
+          "reference_error": 1.2095065424212395,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 9.51,
+          "n_ticks": 37,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近",
+          "true_value": 100.75,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 97.77164571751294,
+          "stage": "ok",
+          "absolute_error": 2.978354282487061,
+          "relative_error": 2.9561829106571325,
+          "reference_error": 1.9855695216580407,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 10.2,
+          "n_ticks": 52,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近",
+          "true_value": 0.12,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 3.191704376215234,
+          "stage": "ok",
+          "absolute_error": 3.071704376215234,
+          "relative_error": 2559.7536468460285,
+          "reference_error": 0.7679260940538085,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 7.24,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近",
+          "true_value": 139.55,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 140.4086782792687,
+          "stage": "ok",
+          "absolute_error": 0.8586782792687018,
+          "relative_error": 0.6153194405365114,
+          "reference_error": 0.21466956981717544,
+          "within_tolerance": true,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 7.97,
+          "n_ticks": 39,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 100.0,
+          "detected_max": 400.0
+        }
+      ]
+    },
+    "v2": {
+      "summary": {
+        "total": 9,
+        "read_ok": 9,
+        "within_tolerance": 6,
+        "mean_reference_error": 4.721093751571469,
+        "median_reference_error": 1.4711694312731245,
+        "mean_excluding_catastrophic": 4.721093751571469,
+        "catastrophic_count": 0,
+        "max_reference_error": 24.97,
+        "failure_stages": {}
+      },
+      "results": [
+        {
+          "image": "C:/卒研/images/20260817_134647.jpg",
+          "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃（赤マークなし。黒目盛りがそのまま満尺） / 中心が露出している標準的なケース / 針は太い三角形（付け根側）と細く長い線（先端側）から成り、細い方が実際の指針で0〜20の間を指す（true_value=9.0と整合）。太い方を指針と誤読しないよう注意。2026-08-29に本人の目視でこの134647だけが90度回転していると判明したが、2026-08-31にT3-1の向き補正を本番結線したため、round scopeへ復帰した。",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 2.0,
+          "stage": "ok",
+          "absolute_error": 7.0,
+          "relative_error": 77.77777777777779,
+          "reference_error": 7.000000000000001,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 30.02,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 2.0,
+          "detected_max": 111.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134656.jpg",
+          "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 7.5288305687268755,
+          "stage": "ok",
+          "absolute_error": 1.4711694312731245,
+          "relative_error": 16.346327014145828,
+          "reference_error": 1.4711694312731245,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 29.89,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134745.jpg",
+          "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 8.52444275964793,
+          "stage": "ok",
+          "absolute_error": 0.47555724035206914,
+          "relative_error": 5.283969337245212,
+          "reference_error": 0.47555724035206914,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.01,
+          "n_ticks": 49,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "images/meter1.png",
+          "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近",
+          "true_value": 21.0,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 19.005730206978754,
+          "stage": "ok",
+          "absolute_error": 1.994269793021246,
+          "relative_error": 9.496522823910695,
+          "reference_error": 1.3295131953474975,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 25.66,
+          "n_ticks": 74,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "images/meter2.jpg",
+          "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近",
+          "true_value": 30.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 27.93606985113472,
+          "stage": "ok",
+          "absolute_error": 2.0639301488652784,
+          "relative_error": 6.879767162884261,
+          "reference_error": 2.0639301488652784,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 29.4,
+          "n_ticks": 85,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近",
+          "true_value": 0.16,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 0.0,
+          "stage": "ok",
+          "absolute_error": 0.16,
+          "relative_error": 100.0,
+          "reference_error": 0.10666666666666667,
+          "within_tolerance": true,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 33.52,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近",
+          "true_value": 100.75,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 108.0,
+          "stage": "ok",
+          "absolute_error": 7.25,
+          "relative_error": 7.196029776674938,
+          "reference_error": 4.833333333333333,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 32.35,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 108.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近",
+          "true_value": 0.12,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 100.0,
+          "stage": "ok",
+          "absolute_error": 99.88,
+          "relative_error": 83233.33333333334,
+          "reference_error": 24.97,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 25.24,
+          "n_ticks": 39,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 100.0,
+          "detected_max": 400.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近",
+          "true_value": 139.55,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 140.508694993221,
+          "stage": "ok",
+          "absolute_error": 0.9586949932210018,
+          "relative_error": 0.6869903211902556,
+          "reference_error": 0.23967374830525046,
+          "within_tolerance": true,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 26.23,
+          "n_ticks": 40,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 100.0,
+          "detected_max": 400.0
+        }
+      ]
+    },
+    "v3": {
+      "summary": {
+        "total": 9,
+        "read_ok": 9,
+        "within_tolerance": 7,
+        "mean_reference_error": 2.0699585392026565,
+        "median_reference_error": 1.1055358612495731,
+        "mean_excluding_catastrophic": 2.0699585392026565,
+        "catastrophic_count": 0,
+        "max_reference_error": 7.000000000000001,
+        "failure_stages": {}
+      },
+      "results": [
+        {
+          "image": "C:/卒研/images/20260817_134647.jpg",
+          "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃（赤マークなし。黒目盛りがそのまま満尺） / 中心が露出している標準的なケース / 針は太い三角形（付け根側）と細く長い線（先端側）から成り、細い方が実際の指針で0〜20の間を指す（true_value=9.0と整合）。太い方を指針と誤読しないよう注意。2026-08-29に本人の目視でこの134647だけが90度回転していると判明したが、2026-08-31にT3-1の向き補正を本番結線したため、round scopeへ復帰した。",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 2.0,
+          "stage": "ok",
+          "absolute_error": 7.0,
+          "relative_error": 77.77777777777779,
+          "reference_error": 7.000000000000001,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 28.98,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 2.0,
+          "detected_max": 111.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134656.jpg",
+          "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 7.534058847863414,
+          "stage": "ok",
+          "absolute_error": 1.465941152136586,
+          "relative_error": 16.288235023739844,
+          "reference_error": 1.465941152136586,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.33,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134745.jpg",
+          "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 10.019252850087124,
+          "stage": "ok",
+          "absolute_error": 1.019252850087124,
+          "relative_error": 11.325031667634713,
+          "reference_error": 1.019252850087124,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 26.03,
+          "n_ticks": 49,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "images/meter1.png",
+          "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近",
+          "true_value": 21.0,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 22.65830379187436,
+          "stage": "ok",
+          "absolute_error": 1.65830379187436,
+          "relative_error": 7.896684723211238,
+          "reference_error": 1.1055358612495731,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 24.44,
+          "n_ticks": 74,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "images/meter2.jpg",
+          "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近",
+          "true_value": 30.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 30.660340026222862,
+          "stage": "ok",
+          "absolute_error": 0.6603400262228618,
+          "relative_error": 2.2011334207428725,
+          "reference_error": 0.6603400262228618,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 26.33,
+          "n_ticks": 85,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近",
+          "true_value": 0.16,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 0.0,
+          "stage": "ok",
+          "absolute_error": 0.16,
+          "relative_error": 100.0,
+          "reference_error": 0.10666666666666667,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.58,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近",
+          "true_value": 100.75,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 108.0,
+          "stage": "ok",
+          "absolute_error": 7.25,
+          "relative_error": 7.196029776674938,
+          "reference_error": 4.833333333333333,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 28.34,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 108.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近",
+          "true_value": 0.12,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 8.415035085275182,
+          "stage": "ok",
+          "absolute_error": 8.295035085275183,
+          "relative_error": 6912.529237729319,
+          "reference_error": 2.0737587713187957,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 25.37,
+          "n_ticks": 39,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近",
+          "true_value": 139.55,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 141.00919276723587,
+          "stage": "ok",
+          "absolute_error": 1.4591927672358622,
+          "relative_error": 1.045641538685677,
+          "reference_error": 0.36479819180896556,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 29.06,
+          "n_ticks": 40,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        }
+      ]
+    },
+    "v4": {
+      "summary": {
+        "total": 9,
+        "read_ok": 9,
+        "within_tolerance": 8,
+        "mean_reference_error": 1.367382494116113,
+        "median_reference_error": 1.019252850087124,
+        "mean_excluding_catastrophic": 1.367382494116113,
+        "catastrophic_count": 0,
+        "max_reference_error": 4.833333333333333,
+        "failure_stages": {}
+      },
+      "results": [
+        {
+          "image": "C:/卒研/images/20260817_134647.jpg",
+          "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃（赤マークなし。黒目盛りがそのまま満尺） / 中心が露出している標準的なケース / 針は太い三角形（付け根側）と細く長い線（先端側）から成り、細い方が実際の指針で0〜20の間を指す（true_value=9.0と整合）。太い方を指針と誤読しないよう注意。2026-08-29に本人の目視でこの134647だけが90度回転していると判明したが、2026-08-31にT3-1の向き補正を本番結線したため、round scopeへ復帰した。",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 8.284662842527846,
+          "stage": "ok",
+          "absolute_error": 0.7153371574721543,
+          "relative_error": 7.948190638579493,
+          "reference_error": 0.7153371574721543,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 33.62,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134656.jpg",
+          "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 7.534058847863414,
+          "stage": "ok",
+          "absolute_error": 1.465941152136586,
+          "relative_error": 16.288235023739844,
+          "reference_error": 1.465941152136586,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 30.61,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134745.jpg",
+          "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 10.019252850087124,
+          "stage": "ok",
+          "absolute_error": 1.019252850087124,
+          "relative_error": 11.325031667634713,
+          "reference_error": 1.019252850087124,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 28.75,
+          "n_ticks": 49,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "images/meter1.png",
+          "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近",
+          "true_value": 21.0,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 22.600521446997796,
+          "stage": "ok",
+          "absolute_error": 1.6005214469977957,
+          "relative_error": 7.621530699989504,
+          "reference_error": 1.0670142979985304,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 23.66,
+          "n_ticks": 69,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "images/meter2.jpg",
+          "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近",
+          "true_value": 30.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 30.660340026222862,
+          "stage": "ok",
+          "absolute_error": 0.6603400262228618,
+          "relative_error": 2.2011334207428725,
+          "reference_error": 0.6603400262228618,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 23.67,
+          "n_ticks": 85,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近",
+          "true_value": 0.16,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 0.0,
+          "stage": "ok",
+          "absolute_error": 0.16,
+          "relative_error": 100.0,
+          "reference_error": 0.10666666666666667,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.86,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近",
+          "true_value": 100.75,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 108.0,
+          "stage": "ok",
+          "absolute_error": 7.25,
+          "relative_error": 7.196029776674938,
+          "reference_error": 4.833333333333333,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 35.14,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 108.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近",
+          "true_value": 0.12,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 8.415035085275182,
+          "stage": "ok",
+          "absolute_error": 8.295035085275183,
+          "relative_error": 6912.529237729319,
+          "reference_error": 2.0737587713187957,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.3,
+          "n_ticks": 39,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近",
+          "true_value": 139.55,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 141.00919276723587,
+          "stage": "ok",
+          "absolute_error": 1.4591927672358622,
+          "relative_error": 1.045641538685677,
+          "reference_error": 0.36479819180896556,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": null,
+          "scale_accuracy_class": "both_unavailable",
+          "ocr_scale_correct": null,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 28.57,
+          "n_ticks": 40,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        }
+      ]
+    },
+    "v5": {
+      "summary": {
+        "total": 9,
+        "read_ok": 9,
+        "within_tolerance": 8,
+        "mean_reference_error": 1.367382494116113,
+        "median_reference_error": 1.019252850087124,
+        "mean_excluding_catastrophic": 1.367382494116113,
+        "catastrophic_count": 0,
+        "max_reference_error": 4.833333333333333,
+        "failure_stages": {}
+      },
+      "results": [
+        {
+          "image": "C:/卒研/images/20260817_134647.jpg",
+          "note": "丸型 温度計 SATO KEIRYOKI 0〜100℃（赤マークなし。黒目盛りがそのまま満尺） / 中心が露出している標準的なケース / 針は太い三角形（付け根側）と細く長い線（先端側）から成り、細い方が実際の指針で0〜20の間を指す（true_value=9.0と整合）。太い方を指針と誤読しないよう注意。2026-08-29に本人の目視でこの134647だけが90度回転していると判明したが、2026-08-31にT3-1の向き補正を本番結線したため、round scopeへ復帰した。",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 8.284662842527846,
+          "stage": "ok",
+          "absolute_error": 0.7153371574721543,
+          "relative_error": 7.948190638579493,
+          "reference_error": 0.7153371574721543,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 100.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 4,
+                  "n_total": 6
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 4,
+                  "n_total": 6
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 4,
+                  "n_total": 6
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 4,
+                  "n_total": 6
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 100.0,
+                  "x": 1006.3625183105469,
+                  "y": 1839.2136840820312,
+                  "score": 0.99999
+                },
+                {
+                  "value": 0.0,
+                  "x": 1426.6017456054688,
+                  "y": 1821.5725708007812,
+                  "score": 0.99977
+                },
+                {
+                  "value": 8.0,
+                  "x": 914.875,
+                  "y": 2099.7984008789062,
+                  "score": 0.99996
+                },
+                {
+                  "value": 20.0,
+                  "x": 1506.0250244140625,
+                  "y": 2084.6773681640625,
+                  "score": 1.0
+                },
+                {
+                  "value": 9.0,
+                  "x": 1071.7107238769531,
+                  "y": 2309.475830078125,
+                  "score": 0.99994
+                },
+                {
+                  "value": 40.0,
+                  "x": 1353.2107543945312,
+                  "y": 2311.491943359375,
+                  "score": 0.99999
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 32.46,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134656.jpg",
+          "note": "丸型 温度計 0〜100℃ 遠景カット / 90度回転 / 盤面が小さく写る条件の確認用 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 7.534058847863414,
+          "stage": "ok",
+          "absolute_error": 1.465941152136586,
+          "relative_error": 16.288235023739844,
+          "reference_error": 1.465941152136586,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 100.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 8
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 8
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 6
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 5,
+                  "n_total": 5
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 40.0,
+                  "x": 1047.5821533203125,
+                  "y": 1706.6531982421875,
+                  "score": 0.99998
+                },
+                {
+                  "value": 0.0,
+                  "x": 1142.0857543945312,
+                  "y": 1697.5806579589844,
+                  "score": 0.62477
+                },
+                {
+                  "value": 60.0,
+                  "x": 1248.653564453125,
+                  "y": 1709.1734008789062,
+                  "score": 0.99999
+                },
+                {
+                  "value": 20.0,
+                  "x": 928.9499816894531,
+                  "y": 1876.008056640625,
+                  "score": 0.99998
+                },
+                {
+                  "value": 80.0,
+                  "x": 1370.3018188476562,
+                  "y": 1865.9274291992188,
+                  "score": 0.99999
+                },
+                {
+                  "value": 1111.0,
+                  "x": 920.9071350097656,
+                  "y": 2089.7177124023438,
+                  "score": 0.90298
+                },
+                {
+                  "value": 0.0,
+                  "x": 987.2607116699219,
+                  "y": 2067.540283203125,
+                  "score": 0.99965
+                },
+                {
+                  "value": 100.0,
+                  "x": 1297.9160766601562,
+                  "y": 2058.4677124023438,
+                  "score": 0.99999
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 29.95,
+          "n_ticks": 51,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/20260817_134745.jpg",
+          "note": "丸型 温度計 0〜100℃ 近景カット / 90度回転 / 134647と同一の指針（同一時刻・同一計器と推定）なのでtrue_value=9.0を踏襲",
+          "true_value": 9.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 10.019252850087124,
+          "stage": "ok",
+          "absolute_error": 1.019252850087124,
+          "relative_error": 11.325031667634713,
+          "reference_error": 1.019252850087124,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 100.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 6
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 6
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 6
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 6,
+                  "n_total": 6
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 60.0,
+                  "x": 1282.835693359375,
+                  "y": 1677.4193725585938,
+                  "score": 0.99999
+                },
+                {
+                  "value": 40.0,
+                  "x": 930.4580383300781,
+                  "y": 1692.540283203125,
+                  "score": 0.99999
+                },
+                {
+                  "value": 80.0,
+                  "x": 1505.0196533203125,
+                  "y": 1925.4031982421875,
+                  "score": 0.99999
+                },
+                {
+                  "value": 20.0,
+                  "x": 759.0446472167969,
+                  "y": 1962.7015991210938,
+                  "score": 0.99999
+                },
+                {
+                  "value": 100.0,
+                  "x": 1405.4893188476562,
+                  "y": 2228.83056640625,
+                  "score": 0.99999
+                },
+                {
+                  "value": 0.0,
+                  "x": 882.7035827636719,
+                  "y": 2263.60888671875,
+                  "score": 0.99948
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 28.62,
+          "n_ticks": 49,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "images/meter1.png",
+          "note": "丸型 円形温度計（0,10,...150の目盛り、単位℃）。中心露出・正立（回転なし）のストック画像。以前のVLMモデル比較検証でも使用実績あり。参考:針は20〜22付近",
+          "true_value": 21.0,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 22.600521446997796,
+          "stage": "ok",
+          "absolute_error": 1.6005214469977957,
+          "relative_error": 7.621530699989504,
+          "reference_error": 1.0670142979985304,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 150.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 12,
+                  "n_total": 17
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 12,
+                  "n_total": 17
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 14,
+                  "n_total": 16
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 13,
+                  "n_total": 16
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 20.0,
+                  "x": 139.0,
+                  "y": 47.75,
+                  "score": 0.99999
+                },
+                {
+                  "value": 30.0,
+                  "x": 177.5,
+                  "y": 45.0,
+                  "score": 0.99999
+                },
+                {
+                  "value": 40.0,
+                  "x": 216.5,
+                  "y": 54.75,
+                  "score": 0.99999
+                },
+                {
+                  "value": 1.0,
+                  "x": 94.25,
+                  "y": 63.0,
+                  "score": 0.99994
+                },
+                {
+                  "value": 0.0,
+                  "x": 110.75,
+                  "y": 63.0,
+                  "score": 0.99994
+                },
+                {
+                  "value": 50.0,
+                  "x": 249.0,
+                  "y": 75.5,
+                  "score": 0.99999
+                },
+                {
+                  "value": 0.0,
+                  "x": 73.0,
+                  "y": 87.0,
+                  "score": 0.9504
+                },
+                {
+                  "value": 0.0,
+                  "x": 274.0,
+                  "y": 108.0,
+                  "score": 0.78198
+                },
+                {
+                  "value": 10.0,
+                  "x": 289.0,
+                  "y": 145.0,
+                  "score": 0.81159
+                },
+                {
+                  "value": 8.0,
+                  "x": 290.0,
+                  "y": 184.0,
+                  "score": 0.9147
+                },
+                {
+                  "value": 6.0,
+                  "x": 278.0,
+                  "y": 223.25,
+                  "score": 0.68212
+                },
+                {
+                  "value": 150.0,
+                  "x": 74.5,
+                  "y": 250.0,
+                  "score": 0.99999
+                },
+                {
+                  "value": 140.0,
+                  "x": 106.0,
+                  "y": 275.5,
+                  "score": 0.99998
+                },
+                {
+                  "value": 100.0,
+                  "x": 253.5,
+                  "y": 256.75,
+                  "score": 0.99999
+                },
+                {
+                  "value": 130.0,
+                  "x": 142.0,
+                  "y": 289.0,
+                  "score": 0.99999
+                },
+                {
+                  "value": 120.0,
+                  "x": 182.5,
+                  "y": 290.5,
+                  "score": 0.99998
+                },
+                {
+                  "value": 110.0,
+                  "x": 221.25,
+                  "y": 279.5,
+                  "score": 0.99996
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 23.64,
+          "n_ticks": 69,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "images/meter2.jpg",
+          "note": "丸型 圧力計（PRESSURE GAUGE、単位psi）。中心露出・正立（回転なし）のストック画像。参考:針は28〜30付近",
+          "true_value": 30.0,
+          "true_min": 0.0,
+          "true_max": 100.0,
+          "value": 30.660340026222862,
+          "stage": "ok",
+          "absolute_error": 0.6603400262228618,
+          "relative_error": 2.2011334207428725,
+          "reference_error": 0.6603400262228618,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 100.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 10,
+                  "n_total": 11
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 10,
+                  "n_total": 11
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 10,
+                  "n_total": 11
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 100.0,
+                  "n_used": 10,
+                  "n_total": 11
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 50.0,
+                  "x": 221.0,
+                  "y": 96.5,
+                  "score": 1.0
+                },
+                {
+                  "value": 40.0,
+                  "x": 169.5,
+                  "y": 113.5,
+                  "score": 1.0
+                },
+                {
+                  "value": 60.0,
+                  "x": 281.0,
+                  "y": 112.0,
+                  "score": 0.99998
+                },
+                {
+                  "value": 38.0,
+                  "x": 129.0,
+                  "y": 152.0,
+                  "score": 0.66513
+                },
+                {
+                  "value": 70.0,
+                  "x": 317.0,
+                  "y": 145.0,
+                  "score": 0.99996
+                },
+                {
+                  "value": 20.0,
+                  "x": 109.0,
+                  "y": 198.0,
+                  "score": 0.99999
+                },
+                {
+                  "value": 80.0,
+                  "x": 340.5,
+                  "y": 196.5,
+                  "score": 0.99999
+                },
+                {
+                  "value": 5.0,
+                  "x": 193.5,
+                  "y": 216.5,
+                  "score": 0.91786
+                },
+                {
+                  "value": 10.0,
+                  "x": 117.5,
+                  "y": 253.0,
+                  "score": 0.99992
+                },
+                {
+                  "value": 90.0,
+                  "x": 333.5,
+                  "y": 255.5,
+                  "score": 0.99996
+                },
+                {
+                  "value": 0.0,
+                  "x": 143.5,
+                  "y": 304.5,
+                  "score": 0.99927
+                },
+                {
+                  "value": 100.0,
+                  "x": 299.5,
+                  "y": 301.0,
+                  "score": 0.99999
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 23.74,
+          "n_ticks": 85,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 100.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧前。参考:針は0付近",
+          "true_value": 0.16,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 0.0,
+          "stage": "ok",
+          "absolute_error": 0.16,
+          "relative_error": 100.0,
+          "reference_error": 0.10666666666666667,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 150.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 150.0,
+                  "n_used": 4,
+                  "n_total": 4
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 50.0,
+                  "x": 473.5,
+                  "y": 303.0,
+                  "score": 1.0
+                },
+                {
+                  "value": 100.0,
+                  "x": 818.5,
+                  "y": 308.0,
+                  "score": 0.99999
+                },
+                {
+                  "value": 0.0,
+                  "x": 446.0,
+                  "y": 629.0,
+                  "score": 0.99779
+                },
+                {
+                  "value": 150.0,
+                  "x": 809.5,
+                  "y": 639.5,
+                  "score": 0.99998
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.46,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 150.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/気密試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜150MPa（日本製鋼所 M&E、機器番号A-101）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。気密試験・昇圧後（昇圧前と同一計器）。参考:針は100〜110付近",
+          "true_value": 100.75,
+          "true_min": 0.0,
+          "true_max": 150.0,
+          "value": 108.0,
+          "stage": "ok",
+          "absolute_error": 7.25,
+          "relative_error": 7.196029776674938,
+          "reference_error": 4.833333333333333,
+          "within_tolerance": false,
+          "scale_correct": false,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 108.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 0.0,
+                  "max_value": 108.0,
+                  "n_used": 3,
+                  "n_total": 3
+                },
+                {
+                  "label": "original",
+                  "min_value": 0.0,
+                  "max_value": 108.0,
+                  "n_used": 3,
+                  "n_total": 3
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 0.0,
+                  "max_value": 108.0,
+                  "n_used": 3,
+                  "n_total": 3
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 0.0,
+                  "max_value": 108.0,
+                  "n_used": 3,
+                  "n_total": 3
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 50.0,
+                  "x": 451.5,
+                  "y": 273.5,
+                  "score": 1.0
+                },
+                {
+                  "value": 108.0,
+                  "x": 822.5,
+                  "y": 288.0,
+                  "score": 0.9238
+                },
+                {
+                  "value": 0.0,
+                  "x": 420.0,
+                  "y": 619.5,
+                  "score": 0.99133
+                },
+                {
+                  "value": 150.0,
+                  "x": 802.5,
+                  "y": 635.5,
+                  "score": 0.99994
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": false,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 28.01,
+          "n_ticks": 23,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 108.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧前圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧前。参考:針は0付近",
+          "true_value": 0.12,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 8.415035085275182,
+          "stage": "ok",
+          "absolute_error": 8.295035085275183,
+          "relative_error": 6912.529237729319,
+          "reference_error": 2.0737587713187957,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 400.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "original",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 200.0,
+                  "x": 638.5,
+                  "y": 236.5,
+                  "score": 0.99999
+                },
+                {
+                  "value": 100.0,
+                  "x": 449.0,
+                  "y": 352.5,
+                  "score": 0.99998
+                },
+                {
+                  "value": 300.0,
+                  "x": 825.0,
+                  "y": 355.0,
+                  "score": 0.99998
+                },
+                {
+                  "value": 400.0,
+                  "x": 835.0,
+                  "y": 565.5,
+                  "score": 0.99999
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 26.26,
+          "n_ticks": 39,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        },
+        {
+          "image": "C:/卒研/images/recieved_meter/耐圧試験_昇圧後圧力計.jpg",
+          "note": "丸型 圧力計 PRESSURE GAUGE 0〜400MPa（日本製鋼所 M&E、機器番号A-400）。中心露出・正立だが、盤面ではなくモニター画面越しの撮影で映り込み・グレアあり。企業から提供された実写真（2026-08-24受領）。耐圧試験・昇圧後（昇圧前と同一計器）。参考:針は180〜190付近",
+          "true_value": 139.55,
+          "true_min": 0.0,
+          "true_max": 400.0,
+          "value": 141.00919276723587,
+          "stage": "ok",
+          "absolute_error": 1.4591927672358622,
+          "relative_error": 1.045641538685677,
+          "reference_error": 0.36479819180896556,
+          "within_tolerance": true,
+          "scale_correct": true,
+          "scale_diagnostics": {
+            "ocr": {
+              "available": true,
+              "stable": true,
+              "min_value": 0.0,
+              "max_value": 400.0,
+              "attempts": [
+                {
+                  "label": "input_ticks",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "original",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "clahe1.5",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                },
+                {
+                  "label": "clahe2.5",
+                  "min_value": 100.0,
+                  "max_value": 400.0,
+                  "n_used": 4,
+                  "n_total": 4
+                }
+              ],
+              "numbers": [
+                {
+                  "value": 200.0,
+                  "x": 635.0,
+                  "y": 226.0,
+                  "score": 0.99999
+                },
+                {
+                  "value": 100.0,
+                  "x": 430.5,
+                  "y": 352.0,
+                  "score": 0.99993
+                },
+                {
+                  "value": 300.0,
+                  "x": 841.5,
+                  "y": 353.5,
+                  "score": 0.99998
+                },
+                {
+                  "value": 400.0,
+                  "x": 855.0,
+                  "y": 589.0,
+                  "score": 0.99999
+                }
+              ]
+            },
+            "vlm": {
+              "enabled": false,
+              "available": false,
+              "min_value": null,
+              "max_value": null
+            },
+            "decision": {
+              "relation": "disabled",
+              "fallback_used": false,
+              "min_source": "ocr",
+              "max_source": "ocr",
+              "reason": "VLMを無効化してOCRのみで判定"
+            }
+          },
+          "scale_accuracy_class": "vlm_unavailable",
+          "ocr_scale_correct": true,
+          "vlm_scale_correct": null,
+          "elapsed_sec": 27.26,
+          "n_ticks": 40,
+          "scale_source": "ocr_tick",
+          "center_source": "hough",
+          "detected_min": 0.0,
+          "detected_max": 400.0
+        }
+      ]
+    }
+  }
+}
