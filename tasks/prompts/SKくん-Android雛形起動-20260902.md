@@ -28,8 +28,8 @@ SKくんの今回の担当範囲は、Android雛形を実機で起動して確�
 
 1. Android Studioを入れ、初回設定は `Standard` を選んでAndroid SDKとPlatform-Toolsを入れます。
 2. Android Studioで **リポジトリのルートではなく** `C:\卒研\git_stk\sotuken\android` を開きます。
-3. SDKを求められたら場所を指定し、`Tools > SDK Manager` で `Android 15.0 (API 35)` のSDK Platformを入れます。JDKはAndroid Studio同梱のJDK 17を使います。
-4. `Sync Now` でGradle同期を終え、`Build > Make Project` でビルドします。コマンドなら、PowerShellで `cd C:\卒研\git_stk\sotuken\android` の後に `./gradlew.bat assembleDebug` です。
+3. SDKを求められたら場所を指定し、`Tools > SDK Manager` で `Android 16.0 (API 36)` のSDK Platformを入れます。**API 36 です。35ではありません**（2026-09-03に修正。古い指示ではAPI 35と書いてありました）。JDKはAndroid Studio同梱のもの（JBR）を使います。自分で入れたJDKを指定するとバージョンが古くて失敗します。
+4. `Sync Now` でGradle同期を終え、`Build > Make Project` でビルドします。コマンドなら、PowerShellで `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"` → `cd C:\卒研\git_stk\sotuken\android` → `.\gradlew.bat assembleDebug` です。`JAVA_HOME` を省くとPATHの古いJDKが使われて失敗します。詰まったら `android/README.md` の「ビルドで詰まったときは」を読んでください。
 5. Android端末で開発者向けオプションとUSBデバッグを有効にし、USB接続後に端末側のRSAキー許可をします。
 6. Android Studioのデバイス選択で端末を選び、Runを押します。起動後に「メーター撮影」と「キュー: 0件」が表示されることを確認します。
 
