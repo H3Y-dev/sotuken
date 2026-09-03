@@ -1,24 +1,14 @@
 import csv  # CSVファイルを読み書きするための標準ライブラリを呼び出す
 
-def filter_readings(readings, device_name=None, start_date=None, end_date=None):
-    """記録のリストを機器名・日付の範囲で絞り込む。
-
-    指定しなかった条件は絞り込まない（Noneのままなら全件通す）。
-    """
+def filter_readings(readings, start_date=None, end_date=None, device_name=None):
+    """記録リストを指定条件で絞り込む。"""
     result = readings
-
-    # 1. 機器名が指定されていれば絞り込む
-    if device_name is not None:
+    if start_date:
+        result = [r for r in result if r.captured_at >= start_date]
+    if end_date:
+        result = [r for r in result if r.captured_at <= end_date]
+    if device_name:
         result = [r for r in result if r.device_name == device_name]
-
-    # 2. 開始日が指定されていれば、それ以降のデータを残す
-    if start_date is not None:
-        result = [r for r in result if r.timestamp >= start_date]
-
-    # 3. 終了日が指定されていれば、それ以前のデータを残す
-    if end_date is not None:
-        result = [r for r in result if r.timestamp <= end_date]
-
     return result
 def export_to_csv(readings, output_path):
     """
@@ -47,11 +37,11 @@ def group_by_device(readings):
 
 def readings_to_series(readings):
     """
-    1つの機器分の記録リストを受け取り、「タイムスタンプ -> 値」の辞書を作成する。
+    1つの機器分の記録リストを受け取り、「撮影日時 -> 値」の辞書を作成する。
     value が None の記録（読み取り失敗）は除外する。
     """
     series = {}
     for r in readings:
         if r.value is not None:
-            series[r.timestamp] = r.value
+            series[r.captured_at] = r.value
     return series

@@ -10,14 +10,22 @@ from manager.export import export_to_csv, filter_readings  # filter_readingsを�
 
 # テスト用の偽データ（ダミー）の型を定義
 class DummyReading:
-
-    def __init__(self, id, timestamp, device_name, value, stage, image_path):
-        self.id = id
-        self.timestamp = timestamp
+    def __init__(self, reading_id, captured_at, device_name, value, status="ok", image_path="", stage="test"):
+        self.reading_id = reading_id
+        self.captured_at = captured_at
         self.device_name = device_name
         self.value = value
-        self.stage = stage
+        self.status = status
         self.image_path = image_path
+        self.stage = stage
+
+    @property
+    def id(self):
+        return self.reading_id
+
+    @property
+    def timestamp(self):
+        return self.captured_at
 
 
 # テストケースの本体
@@ -116,19 +124,19 @@ def test_group_by_device(self):
         self.assertEqual(len(groups["meter2"]), 1)
 def test_readings_to_series_normal(self):
         readings = [
-            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
-            DummyReading(2, "2026-08-21", "meter1", 15.5, "ok", "b.jpg"),
+            DummyReading(1, "2026-08-20T10:00:00", "meter1", 10.0),
+            DummyReading(2, "2026-08-21T10:00:00", "meter1", 15.5),
         ]
         series = readings_to_series(readings)
-        self.assertEqual(series, {"2026-08-20": 10.0, "2026-08-21": 15.5})
+        self.assertEqual(series, {"2026-08-20T10:00:00": 10.0, "2026-08-21T10:00:00": 15.5})
 
 def test_readings_to_series_with_none_value(self):
         readings = [
-            DummyReading(1, "2026-08-20", "meter1", 10.0, "ok", "a.jpg"),
-            DummyReading(2, "2026-08-21", "meter1", None, "error", "b.jpg"),
+            DummyReading(1, "2026-08-20T10:00:00", "meter1", 10.0),
+            DummyReading(2, "2026-08-21T10:00:00", "meter1", None, status="failed"),
         ]
         series = readings_to_series(readings)
-        self.assertEqual(series, {"2026-08-20": 10.0})
+        self.assertEqual(series, {"2026-08-20T10:00:00": 10.0})
 def test_readings_to_series_empty(self):
         series = readings_to_series([])
         self.assertEqual(series, {})
