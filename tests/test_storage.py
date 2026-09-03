@@ -1,11 +1,6 @@
-import os
-import sys
 import unittest
 
-# manager ディレクトリを検索パスに追加
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from storage import Storage
+from manager.storage import Storage
 
 
 class TestStorage(unittest.TestCase):

@@ -1,11 +1,7 @@
-import os
-import sys
 import unittest
 from unittest.mock import MagicMock
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from manager import MeterManager
+from manager.manager import MeterManager
 
 
 class TestIntegrationReadMeterAndManager(unittest.TestCase):
