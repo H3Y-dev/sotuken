@@ -9,12 +9,12 @@ plugins {
 
 android {
     namespace = "jp.sotuken.metercapture"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "jp.sotuken.metercapture"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -54,6 +54,8 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
-
