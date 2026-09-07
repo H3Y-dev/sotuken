@@ -126,6 +126,103 @@ class RoomQueueStoreInstrumentedTest {
         }
     }
 
+    @Test
+    fun markSendingUpdatesStateInRoom() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(context, CaptureDatabase::class.java).build()
+        val imageFile = File.createTempFile("room-queue-", ".jpg", context.cacheDir)
+
+        try {
+            val store = RoomQueueStore(database.queueItemDao())
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            store.markSending(localId)
+
+            val item = database.queueItemDao().findById(localId)
+            assertEquals(SendState.SENDING, item?.sendState)
+        } finally {
+            database.close()
+            imageFile.delete()
+        }
+    }
+
+    @Test
+    fun fullHappyPathTransitionsPersistInRoom() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(context, CaptureDatabase::class.java).build()
+        val imageFile = File.createTempFile("room-queue-", ".jpg", context.cacheDir)
+
+        try {
+            val dao = database.queueItemDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+            assertEquals(SendState.PENDING, dao.findById(localId)?.sendState)
+
+            store.markSending(localId)
+            assertEquals(SendState.SENDING, dao.findById(localId)?.sendState)
+
+            store.markSent(localId)
+            val sentItem = dao.findById(localId)
+            assertEquals(SendState.SENT, sentItem?.sendState)
+            assertNotNull(sentItem?.sentAt)
+        } finally {
+            database.close()
+            imageFile.delete()
+        }
+    }
+
+    @Test
+    fun markFailedThenRetryRoundTripsThroughRoom() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(context, CaptureDatabase::class.java).build()
+        val imageFile = File.createTempFile("room-queue-", ".jpg", context.cacheDir)
+
+        try {
+            val dao = database.queueItemDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            store.markSending(localId)
+            store.markFailed(localId, "network error")
+
+            val failedItem = dao.findById(localId)
+            assertEquals(SendState.FAILED, failedItem?.sendState)
+            assertEquals("network error", failedItem?.lastError)
+            assertEquals(1, failedItem?.retryCount)
+
+            store.retry(localId)
+
+            val retriedItem = dao.findById(localId)
+            assertEquals(SendState.PENDING, retriedItem?.sendState)
+            assertNull(retriedItem?.lastError)
+        } finally {
+            database.close()
+            imageFile.delete()
+        }
+    }
+
+    @Test
+    fun illegalTransitionThrowsAndRoomStateUnchanged() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(context, CaptureDatabase::class.java).build()
+        val imageFile = File.createTempFile("room-queue-", ".jpg", context.cacheDir)
+
+        try {
+            val dao = database.queueItemDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            var threw = false
+            try {
+                store.markSent(localId)
+            } catch (e: IllegalStateException) {
+                threw = true
+            }
+
+            assertTrue(threw)
+            assertEquals(SendState.PENDING, dao.findById(localId)?.sendState)
+        } finally {
+            database.close()
+            imageFile.delete()
+        }
+    }
+
     private fun emptyMeta() = CaptureMeta(
         deviceName = null,
         operatorValue = null,

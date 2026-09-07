@@ -11,6 +11,10 @@ import kotlinx.coroutines.flow.Flow
 interface QueueStore {
     suspend fun enqueue(imageFile: File, meta: CaptureMeta): String
     fun observeQueue(): Flow<List<QueueItem>>
+    suspend fun markSending(localId: String)
+    suspend fun markSent(localId: String)
+    suspend fun markFailed(localId: String, error: String)
+    suspend fun retry(localId: String)
 }
 
 class RoomQueueStore(
@@ -36,5 +40,44 @@ class RoomQueueStore(
     }
 
     override fun observeQueue(): Flow<List<QueueItem>> = queueDao.observeAll()
+
+    override suspend fun markSending(localId: String) {
+        val item = requireItem(localId)
+        check(item.sendState == SendState.PENDING) {
+            "cannot mark sending from state ${item.sendState}"
+        }
+        queueDao.update(item.copy(sendState = SendState.SENDING))
+    }
+
+    override suspend fun markSent(localId: String) {
+        val item = requireItem(localId)
+        check(item.sendState == SendState.SENDING) {
+            "cannot mark sent from state ${item.sendState}"
+        }
+        queueDao.update(
+            item.copy(sendState = SendState.SENT, sentAt = Instant.now().toString(), lastError = null),
+        )
+    }
+
+    override suspend fun markFailed(localId: String, error: String) {
+        val item = requireItem(localId)
+        check(item.sendState == SendState.SENDING) {
+            "cannot mark failed from state ${item.sendState}"
+        }
+        queueDao.update(
+            item.copy(sendState = SendState.FAILED, lastError = error, retryCount = item.retryCount + 1),
+        )
+    }
+
+    override suspend fun retry(localId: String) {
+        val item = requireItem(localId)
+        check(item.sendState == SendState.FAILED) {
+            "cannot retry from state ${item.sendState}"
+        }
+        queueDao.update(item.copy(sendState = SendState.PENDING, lastError = null))
+    }
+
+    private suspend fun requireItem(localId: String): QueueItem =
+        requireNotNull(queueDao.findById(localId)) { "QueueItem with localId $localId not found" }
 }
 
