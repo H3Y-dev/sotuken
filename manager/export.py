@@ -11,22 +11,15 @@ def filter_readings(readings, start_date=None, end_date=None, device_name=None):
         result = [r for r in result if r.device_name == device_name]
     return result
 def export_to_csv(readings, output_path):
-    """
-    記録のリストをCSVファイルに書き出す関数
+    """記録リストをCSVファイルへ出力する。"""
+    import csv
 
-    readings: MeterReadingのリスト（データが詰まった配列）
-    output_path: 書き出すCSVファイルの保存先パス（例: "test_output.csv"）
-    """
-    with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-        # "utf-8-sig" を指定することで、Excelで開いたときの日本語文字化けを防ぐ
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-
-        # 表の一番上の行（ヘッダー項目名）を書き込む
-        writer.writerow(["ID", "日時", "機器名", "値", "ステージ", "画像パス"])
-
-        # データを1件ずつ取り出して、表の1行として書き込む
+        # ヘッダー行（新スキーマに対応）
+        writer.writerow(["reading_id", "captured_at", "device_name", "value", "stage", "image_path"])
         for r in readings:
-            writer.writerow([r.id, r.timestamp, r.device_name, r.value, r.stage, r.image_path])
+            writer.writerow([r.reading_id, r.captured_at, r.device_name, r.value, r.stage, r.image_path])
 def group_by_device(readings):
     """記録のリストを機器名ごとの辞書にまとめる。"""
     groups = {}
