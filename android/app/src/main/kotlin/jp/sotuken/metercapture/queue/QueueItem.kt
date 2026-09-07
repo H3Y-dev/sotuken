@@ -18,7 +18,7 @@ data class QueueItem(
 )
 
 // 状態遷移: PENDING -> SENDING -> SENT、失敗時 SENDING -> FAILED、再送時 FAILED -> PENDING。
-// TODO(本人): キューの状態遷移を実装する。Sprint 3
+// 実装は QueueStore.markSending/markSent/markFailed/retry。不正な遷移は IllegalStateException。
 enum class SendState {
     PENDING,
     SENDING,

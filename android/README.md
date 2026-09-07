@@ -152,3 +152,24 @@ sdk.dir=C:/Users/<自分のユーザー名>/AppData/Local/Android/Sdk
 ### PATHのJDKが古い
 
 `gradlew` は `JAVA_HOME` のJDKを使います。指定しないとPATHにある古いJDK（この環境では11でした）が使われ、AGP 8.13.2 が要求するJDK 17以上を満たさず失敗します。上のコマンド例のように毎回 `JAVA_HOME` を指定するか、環境変数に設定しておいてください。Android Studioから実行する場合は同梱JDKが使われるので、この問題は起きません。
+
+### JBR（Android Studio同梱JDK）が新しすぎて `IllegalArgumentException: 25.0.2` 等で落ちる
+
+2026-09-07、SKくんの環境で発生。エラー例:
+
+```
+* What went wrong:
+25.0.2
+
+* Exception is:
+java.lang.IllegalArgumentException: 25.0.2
+        at org.jetbrains.kotlin.com.intellij.util.lang.JavaVersion.parse(JavaVersion.java:307)
+```
+
+**原因**: Android Studioが自動更新され、同梱JDK（JBR）がJava 25系まで上がると、Gradle 8.13のKotlin DSL（`build.gradle.kts` のコンパイル処理）がこの新しいバージョン文字列を解釈できず例外になります。JBRのバージョンはAndroid Studioの更新時期によって人ごとに異なるため、全員が同じ問題に当たるとは限りません（本人の環境ではJBRはまだ21.0.10でした）。
+
+**対処（Gradle・AGPは上げない）**: このプロジェクトのGradle/AGPバージョンは上の表の組み合わせに固定されています。Gradle側を新しいJDKに対応させるためだけにバージョンを上げると、他のメンバーの古いAndroid Studioで開けなくなるリスクが再発します（AGPを上げない理由と同じ）。**代わりに `JAVA_HOME` をJBR以外の固定JDK（Temurin JDK 17か21のLTS版）に向けてください。**
+
+1. [Adoptium Temurin](https://adoptium.net/) からJDK 17またはJDK 21（LTS）をインストールする
+2. ビルド時の `JAVA_HOME` をそのJDKのインストール先に向ける（例: `$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.x.x-hotspot"`）。Android Studio内蔵のJBRではなく、この単体インストールしたJDKを使うのがポイントです
+3. `java -version` で意図したバージョン（17系または21系）になっていることを確認してからビルドし直す

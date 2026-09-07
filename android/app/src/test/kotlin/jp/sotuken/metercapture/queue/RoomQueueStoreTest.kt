@@ -5,7 +5,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class RoomQueueStoreTest {
@@ -111,6 +113,166 @@ class RoomQueueStoreTest {
 
             assertEquals(2, items.size)
             assertEquals(setOf(firstLocalId, secondLocalId), items.map { it.localId }.toSet())
+        }
+    }
+
+    // --- markSending ---
+
+    @Test
+    fun markSendingTransitionsPendingToSending() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            store.markSending(localId)
+
+            assertEquals(SendState.SENDING, dao.findById(localId)?.sendState)
+        }
+    }
+
+    @Test
+    fun markSendingFromNonPendingStateThrows() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+
+            try {
+                store.markSending(localId)
+                fail("expected IllegalStateException")
+            } catch (e: IllegalStateException) {
+                // 期待どおり: SENDING状態からのmarkSendingは許可されない
+            }
+        }
+    }
+
+    // --- markSent ---
+
+    @Test
+    fun markSentTransitionsSendingToSentAndSetsSentAt() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+
+            store.markSent(localId)
+
+            val item = dao.findById(localId)
+            assertEquals(SendState.SENT, item?.sendState)
+            assertNotNull(item?.sentAt)
+        }
+    }
+
+    @Test
+    fun markSentFromPendingStateThrows() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            try {
+                store.markSent(localId)
+                fail("expected IllegalStateException")
+            } catch (e: IllegalStateException) {
+                // 期待どおり: PENDING状態から直接markSentは許可されない
+            }
+        }
+    }
+
+    // --- markFailed ---
+
+    @Test
+    fun markFailedTransitionsSendingToFailedAndSetsErrorAndRetryCount() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+
+            store.markFailed(localId, "timeout")
+
+            val item = dao.findById(localId)
+            assertEquals(SendState.FAILED, item?.sendState)
+            assertEquals("timeout", item?.lastError)
+            assertEquals(1, item?.retryCount)
+        }
+    }
+
+    @Test
+    fun markFailedFromPendingStateThrows() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            try {
+                store.markFailed(localId, "timeout")
+                fail("expected IllegalStateException")
+            } catch (e: IllegalStateException) {
+                // 期待どおり: PENDING状態から直接markFailedは許可されない
+            }
+        }
+    }
+
+    // --- retry ---
+
+    @Test
+    fun retryTransitionsFailedToPendingAndClearsErrorButKeepsRetryCount() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+            store.markFailed(localId, "timeout")
+
+            store.retry(localId)
+
+            val item = dao.findById(localId)
+            assertEquals(SendState.PENDING, item?.sendState)
+            assertNull(item?.lastError)
+            assertEquals(1, item?.retryCount)
+        }
+    }
+
+    @Test
+    fun retryFromPendingStateThrows() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            try {
+                store.retry(localId)
+                fail("expected IllegalStateException")
+            } catch (e: IllegalStateException) {
+                // 期待どおり: PENDING状態から直接retryは許可されない
+            }
+        }
+    }
+
+    // --- unknown localId ---
+
+    @Test
+    fun markSendingWithUnknownLocalIdThrowsIllegalArgumentException() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        try {
+            store.markSending("unknown-local-id")
+            fail("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            // 期待どおり: 存在しないlocalIdはIllegalArgumentException
         }
     }
 
