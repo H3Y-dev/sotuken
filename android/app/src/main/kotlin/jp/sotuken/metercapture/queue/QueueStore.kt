@@ -15,6 +15,10 @@ interface QueueStore {
     suspend fun markSent(localId: String)
     suspend fun markFailed(localId: String, error: String)
     suspend fun retry(localId: String)
+
+    // アプリが送信中にクラッシュ・強制終了すると SENDING のまま残る項目がある。
+    // 実際には送信されていない前提で、次回起動時に PENDING へ戻して再送させる。
+    suspend fun recoverInterruptedSends()
 }
 
 class RoomQueueStore(
@@ -75,6 +79,10 @@ class RoomQueueStore(
             "cannot retry from state ${item.sendState}"
         }
         queueDao.update(item.copy(sendState = SendState.PENDING, lastError = null))
+    }
+
+    override suspend fun recoverInterruptedSends() {
+        queueDao.resetState(from = SendState.SENDING, to = SendState.PENDING)
     }
 
     private suspend fun requireItem(localId: String): QueueItem =

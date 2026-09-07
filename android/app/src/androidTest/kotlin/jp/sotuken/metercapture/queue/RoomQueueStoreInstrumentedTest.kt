@@ -223,6 +223,31 @@ class RoomQueueStoreInstrumentedTest {
         }
     }
 
+    @Test
+    fun recoverInterruptedSendsResetsSendingItemsInRoom() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(context, CaptureDatabase::class.java).build()
+        val imageFile = File.createTempFile("room-queue-", ".jpg", context.cacheDir)
+
+        try {
+            val dao = database.queueItemDao()
+            val store = RoomQueueStore(dao)
+            val sendingId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(sendingId)
+
+            val sentId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(sentId)
+            store.markSent(sentId)
+
+            store.recoverInterruptedSends()
+
+            assertEquals(SendState.PENDING, dao.findById(sendingId)?.sendState)
+            assertEquals(SendState.SENT, dao.findById(sentId)?.sendState)
+        } finally {
+            database.close()
+            imageFile.delete()
+        }
+    }
+
     private fun emptyMeta() = CaptureMeta(
         deviceName = null,
         operatorValue = null,
