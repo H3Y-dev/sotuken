@@ -43,15 +43,17 @@ C:\卒研\meter_inbox
 
 * **利用できる部分（実装済み）:**
   * 指定フォルダ内の画像を一括取得し、順次パイプラインへ引き渡すループ構造。
-  * DBと連携した重複取り込み防止（スキップ）ロジック。
-  * 処理結果のカウントおよび単体テスト（`manager/test_batch.py`）による基本検証構造。
+  * 画像のハッシュ値（SHA-256チャンク読み込み）とDB照合による重複取り込み防止（スキップ）ロジック（SR-03にて絶対パス基準からハッシュ基準へ改修済み）。
+  * 処理結果のカウントおよび単体テスト（`tests/test_batch.py`）による重複除外・別名コピー除外の検証構造。
 * **未完部分（今後のSRタスクでの実装対象）:**
   * `incoming\`, `processing\`, `done\`, `error\` 間の実際のファイル移動（ステータス遷移）処理。
   * サイドカーJSONファイルの読み込みおよびメタデータ抽出処理との連動。
   * フォルダのリアルタイム監視（ポーリングまたは watchdog 等による自動常時監視）機能。
+  * 重複判定用ハッシュ値のDB永続化方法（DBスキーマ拡張か別管理テーブルか等）の確定・実装。
 
 ---
 
 ## 5. 検証結果
 * **事前準備:** `git fetch origin` および `git rebase origin/main` 完了。
-* **全体テスト:** `venv\Scripts\python.exe -m unittest discover -s tests` を実行し、83件全件パス（`OK`）を確認済み。
+* **全体テスト:** `venv\Scripts\python.exe -m unittest discover -s tests` を実行し、93件全件パス（`OK`）を確認済み。
+* **孤立テスト確認:** `venv\Scripts\python.exe -m unittest discover -s manager -p "test_*.py"` を実行し、0件（移設漏れなし）を確認済み。
