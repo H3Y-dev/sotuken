@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 import streamlit as st
+from manager.export import group_by_device, readings_to_series
 from manager.manager import MeterManager
 
 try:
@@ -98,3 +99,26 @@ with tab2:
                 )
     else:
         st.info("履歴データが存在しません。")
+
+    st.header("📈 機器別の時系列グラフ")
+    raw_readings = manager.get_history()
+    grouped_readings = group_by_device(raw_readings)
+
+    if not grouped_readings:
+        st.info("表示できるデータがありません")
+    else:
+        selected_device = st.selectbox(
+            "機器を選択してください", options=list(grouped_readings.keys())
+        )
+        target_readings = grouped_readings.get(selected_device, [])
+        series_data = readings_to_series(target_readings)
+
+        if not series_data:
+            st.info("表示できるデータがありません")
+        else:
+            chart_df = pd.DataFrame(
+                list(series_data.items()), columns=["captured_at", "value"]
+            )
+            chart_df["captured_at"] = pd.to_datetime(chart_df["captured_at"])
+            chart_df = chart_df.sort_values("captured_at").set_index("captured_at")
+            st.line_chart(chart_df)
