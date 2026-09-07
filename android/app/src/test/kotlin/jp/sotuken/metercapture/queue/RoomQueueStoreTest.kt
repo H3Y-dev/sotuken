@@ -276,6 +276,45 @@ class RoomQueueStoreTest {
         }
     }
 
+    @Test
+    fun recoverInterruptedSendsResetsOnlySendingItemsToPending() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val sendingId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(sendingId)
+
+            val pendingId = store.enqueue(imageFile, emptyMeta())
+
+            store.recoverInterruptedSends()
+
+            assertEquals(SendState.PENDING, dao.findById(sendingId)?.sendState)
+            assertEquals(SendState.PENDING, dao.findById(pendingId)?.sendState)
+        }
+    }
+
+    @Test
+    fun recoverInterruptedSendsDoesNotAffectSentOrFailedItems() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val sentId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(sentId)
+            store.markSent(sentId)
+
+            val failedId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(failedId)
+            store.markFailed(failedId, "network error")
+
+            store.recoverInterruptedSends()
+
+            assertEquals(SendState.SENT, dao.findById(sentId)?.sendState)
+            assertEquals(SendState.FAILED, dao.findById(failedId)?.sendState)
+        }
+    }
+
     private suspend fun withTemporaryImage(block: suspend (File) -> Unit) {
         val imageFile = File.createTempFile("queue-store-test-", ".jpg")
         try {

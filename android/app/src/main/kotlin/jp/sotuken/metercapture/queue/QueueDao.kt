@@ -24,5 +24,8 @@ interface QueueDao {
 
     @Query("SELECT * FROM queue_items ORDER BY capturedAt DESC")
     fun observeAll(): Flow<List<QueueItem>>
+
+    @Query("UPDATE queue_items SET sendState = :to WHERE sendState = :from")
+    suspend fun resetState(from: SendState, to: SendState)
 }
 
