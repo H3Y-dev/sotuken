@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 import streamlit as st
-from manager.export import group_by_device, readings_to_series
+from manager.export import export_to_csv, group_by_device, readings_to_series
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
@@ -88,7 +88,8 @@ with tab2:
         st.dataframe(df, use_container_width=True)
 
         if st.button("CSV形式でエクスポート準備"):
-            csv_path = manager.export_to_csv()
+            csv_path = "readings_export.csv"
+            export_to_csv(manager.get_history(), csv_path)
             with open(csv_path, "rb") as f:
                 st.download_button(
                     label="CSVファイルをダウンロード",
