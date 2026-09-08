@@ -1,10 +1,11 @@
 ﻿import os
 import time
-from typing import Callable, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from manager.sidecar import load_sidecar, SidecarMetadata
+from manager.pipeline_caller import execute_pipeline
 
 VALID_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
@@ -40,11 +41,17 @@ class FolderWatcher:
         watch_dir: str,
         on_image_detected: Optional[Callable[[str], None]] = None,
         on_item_detected: Optional[Callable[[str, Optional[SidecarMetadata]], None]] = None,
+        on_pipeline_result: Optional[Callable[[str, Optional[SidecarMetadata], Dict[str, Any]], None]] = None,
+        auto_run_pipeline: bool = False,
+        use_vlm: bool = False,
         valid_exts: tuple = VALID_IMAGE_EXTENSIONS,
     ):
         self.watch_dir = os.path.abspath(watch_dir)
         self.on_image_detected = on_image_detected
         self.on_item_detected = on_item_detected
+        self.on_pipeline_result = on_pipeline_result
+        self.auto_run_pipeline = auto_run_pipeline
+        self.use_vlm = use_vlm
         self.valid_exts = tuple(ext.lower() for ext in valid_exts)
         self.detected_images: List[str] = []
         self._detected_set: Set[str] = set()
@@ -65,6 +72,10 @@ class FolderWatcher:
                 self.on_image_detected(abs_path)
             if self.on_item_detected:
                 self.on_item_detected(abs_path, sidecar)
+            if self.auto_run_pipeline or self.on_pipeline_result:
+                result = execute_pipeline(abs_path, use_vlm=self.use_vlm)
+                if self.on_pipeline_result:
+                    self.on_pipeline_result(abs_path, sidecar, result)
 
     def scan_existing(self) -> List[str]:
         """現在監視フォルダ内に存在する未検出の新規画像を走査して検出する"""
@@ -84,6 +95,10 @@ class FolderWatcher:
                         self.on_image_detected(full_path)
                     if self.on_item_detected:
                         self.on_item_detected(full_path, sidecar)
+                    if self.auto_run_pipeline or self.on_pipeline_result:
+                        result = execute_pipeline(full_path, use_vlm=self.use_vlm)
+                        if self.on_pipeline_result:
+                            self.on_pipeline_result(full_path, sidecar, result)
         return new_found
 
     def start(self):
