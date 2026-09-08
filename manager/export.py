@@ -1,4 +1,5 @@
 import csv  # CSVファイルを読み書きするための標準ライブラリを呼び出す
+import json
 
 def filter_readings(readings, start_date=None, end_date=None, device_name=None):
     """記録リストを指定条件で絞り込む。"""
@@ -12,14 +13,32 @@ def filter_readings(readings, start_date=None, end_date=None, device_name=None):
     return result
 def export_to_csv(readings, output_path):
     """記録リストをCSVファイルへ出力する。"""
-    import csv
-
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-        # ヘッダー行（新スキーマに対応）
-        writer.writerow(["reading_id", "captured_at", "device_name", "value", "stage", "image_path"])
+        # ヘッダー行（確定スキーマに対応）
+        writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path"])
         for r in readings:
-            writer.writerow([r.reading_id, r.captured_at, r.device_name, r.value, r.stage, r.image_path])
+            writer.writerow([r.reading_id, r.captured_at, r.device_name, r.value, r.status, r.failure_stage, r.image_path])
+
+
+def export_to_jsonl(readings, output_path):
+    """記録リストをJSON Lines（1行1JSON）ファイルへ出力する。"""
+    fields = [
+        "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
+        "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
+        "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
+    ]
+    with open(output_path, "w", encoding="utf-8") as f:
+        for r in readings:
+            row_dict = {}
+            for field in fields:
+                if isinstance(r, dict):
+                    val = r.get(field, None)
+                else:
+                    val = getattr(r, field, None)
+                row_dict[field] = val
+            f.write(json.dumps(row_dict, ensure_ascii=False) + "\n")
+
 def group_by_device(readings):
     """記録のリストを機器名ごとの辞書にまとめる。"""
     groups = {}
