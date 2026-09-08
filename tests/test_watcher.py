@@ -1,4 +1,5 @@
-﻿import os
+﻿import json
+import os
 import tempfile
 import time
 import unittest
@@ -80,6 +81,49 @@ class TestFolderWatcher(unittest.TestCase):
             self.assertEqual(len(detected), 0)
             self.assertEqual(len(watcher.detected_images), 0)
 
+        finally:
+            watcher.stop()
+
+    def test_detection_with_sidecar_metadata(self):
+        items = []
+        watcher = FolderWatcher(
+            self.watch_dir,
+            on_item_detected=lambda p, s: items.append((p, s)),
+        )
+        watcher.start()
+
+        try:
+            base_name = "20260908T010000_loc-1"
+            json_path = os.path.join(self.watch_dir, f"{base_name}.json")
+            img_path = os.path.join(self.watch_dir, f"{base_name}.jpg")
+
+            # Android側の仕様に沿ってJSONを先に書き込み、画像を後に配置
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "local_id": "loc-1",
+                    "captured_at": "2026-09-08T01:00:00Z",
+                    "device_name": "圧力計X",
+                    "operator_value": 1.23,
+                    "operator_note": "正常点検",
+                }, f)
+
+            with open(img_path, "wb") as f:
+                f.write(b"fake image data")
+
+            timeout = 3.0
+            start_t = time.time()
+            while time.time() - start_t < timeout:
+                if len(items) > 0:
+                    break
+                time.sleep(0.1)
+
+            self.assertEqual(len(items), 1)
+            detected_path, sidecar = items[0]
+            self.assertEqual(detected_path, os.path.abspath(img_path))
+            self.assertIsNotNone(sidecar)
+            self.assertEqual(sidecar.device_name, "圧力計X")
+            self.assertEqual(sidecar.operator_value, 1.23)
+            self.assertEqual(sidecar.operator_note, "正常点検")
         finally:
             watcher.stop()
 
