@@ -4,6 +4,8 @@ from typing import Callable, List, Optional, Set
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+from manager.sidecar import load_sidecar, SidecarMetadata
+
 VALID_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 
@@ -37,10 +39,12 @@ class FolderWatcher:
         self,
         watch_dir: str,
         on_image_detected: Optional[Callable[[str], None]] = None,
+        on_item_detected: Optional[Callable[[str, Optional[SidecarMetadata]], None]] = None,
         valid_exts: tuple = VALID_IMAGE_EXTENSIONS,
     ):
         self.watch_dir = os.path.abspath(watch_dir)
         self.on_image_detected = on_image_detected
+        self.on_item_detected = on_item_detected
         self.valid_exts = tuple(ext.lower() for ext in valid_exts)
         self.detected_images: List[str] = []
         self._detected_set: Set[str] = set()
@@ -56,8 +60,11 @@ class FolderWatcher:
         if abs_path not in self._detected_set:
             self._detected_set.add(abs_path)
             self.detected_images.append(abs_path)
+            sidecar = load_sidecar(abs_path)
             if self.on_image_detected:
                 self.on_image_detected(abs_path)
+            if self.on_item_detected:
+                self.on_item_detected(abs_path, sidecar)
 
     def scan_existing(self) -> List[str]:
         """現在監視フォルダ内に存在する未検出の新規画像を走査して検出する"""
@@ -72,8 +79,11 @@ class FolderWatcher:
                     self._detected_set.add(full_path)
                     self.detected_images.append(full_path)
                     new_found.append(full_path)
+                    sidecar = load_sidecar(full_path)
                     if self.on_image_detected:
                         self.on_image_detected(full_path)
+                    if self.on_item_detected:
+                        self.on_item_detected(full_path, sidecar)
         return new_found
 
     def start(self):

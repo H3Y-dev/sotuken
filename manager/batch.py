@@ -1,7 +1,8 @@
-import hashlib
+﻿import hashlib
 import os
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 from manager.manager import MeterManager
+from manager.sidecar import load_sidecar, SidecarMetadata
 
 
 def calculate_file_hash(filepath: str, chunk_size: int = 65536) -> str:
@@ -59,13 +60,25 @@ class BatchProcessor:
 
         return unprocessed
 
-    def process_all(self, reader_func, device_name: str = "BatchDevice") -> Dict[str, int]:
-        """未処理画像の一括読み取りを実行"""
+    def process_all(
+        self,
+        reader_func,
+        default_device_name: str = "BatchDevice",
+    ) -> Dict[str, int]:
+        """
+        未処理画像の一括読み取りを実行。
+        サイドカーJSONが存在する場合はそのメタデータ（device_name等）を優先して使用する。
+        """
         targets = self.get_unprocessed_images()
         results = {"success": 0, "failed": 0, "skipped": 0}
 
         for img_path in targets:
             abs_path = os.path.abspath(img_path)
+            sidecar = load_sidecar(abs_path)
+            device_name = default_device_name
+            if sidecar and sidecar.device_name:
+                device_name = sidecar.device_name
+
             res = self.manager.process_image(
                 image_path=abs_path,
                 device_name=device_name,
