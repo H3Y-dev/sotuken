@@ -93,15 +93,31 @@ venvと混ざることはありません。作成後、念のためバージョ�
 # venvを有効化（PowerShellの場合）
 .\venv\Scripts\Activate.ps1
 
+# 先にpipを新しくする。venvを作った直後のpipは古く(20.2.3)、
+# requirements.txtの日本語コメントをcp932で読もうとして
+# UnicodeDecodeError で失敗することがある
+python -m pip install --upgrade pip
+
 # ライブラリをインストール
 python -m pip install -r requirements.txt
-
-# rapidocrが依存関係として opencv-python を引き込んでしまい、
-# 既に入れた opencv-contrib-python と衝突する(cv2の挙動がおかしくなり
-# main_sotuken.pyの針検出が壊れる)。以下の2行で必ず解消しておく。
-python -m pip uninstall -y opencv-python
-python -m pip install --force-reinstall --no-deps opencv-contrib-python==4.10.0.84
 ```
+
+> [!note] opencvのバージョンについて（2026-09-08、手動手順は不要になりました）
+> `rapidocr` が `opencv-python` をバージョン指定なしで依存に持つため、放っておくと
+> **opencv-python 5系が後から入って `cv2` の中身が上書きされます。**
+> その状態では `HoughLinesP` の戻り値の形が変わり、`meter_reader.detect_needle` が
+> `TypeError: cannot unpack non-iterable numpy.int32` で落ちます。
+>
+> 以前はここに `opencv-python` をアンインストールする手順を書いていましたが、
+> **`requirements.txt` に `opencv-python==4.10.0.84` のピンを追加したので不要になりました。**
+> `pip install -r requirements.txt` だけで正しい版に固定されます。
+>
+> インストール後、次で確認できます。**`4.10.0` と出れば正常です。**
+> ```powershell
+> .\venv\Scripts\python.exe -c "import cv2; print(cv2.__version__)"
+> ```
+> `5.0.0` と出た場合は、ピンが入る前の古い `requirements.txt` を使っています。
+> `git pull` してから入れ直してください。
 
 > [!warning]
 > `opencv-python`と`opencv-contrib-python`は同じ`cv2`という名前を提供する別パッケージで、

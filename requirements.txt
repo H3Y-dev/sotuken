@@ -1,4 +1,4 @@
-# main_sotuken.py と tick_detect/scale_value_detect/vlm_scale_value が
+﻿# main_sotuken.py と tick_detect/scale_value_detect/vlm_scale_value が
 # 動作に必要とするパッケージ一覧。venv（Python 3.8）向けに固定したバージョン。
 #
 # セットアップ:
@@ -8,6 +8,12 @@
 # `ollama pull qwen3-vl:4b-instruct` でのモデル取得が別途必要（ollamaパッケージはOllamaサーバーへのクライアント）。
 
 opencv-contrib-python==4.10.0.84
+# rapidocr が opencv-python をバージョン指定なしで依存に持つため、ピンが無いと
+# あとから opencv-python 5系が追加インストールされ、cv2 の中身が上書きされる。
+# その状態では HoughLinesP の戻り値の形が変わり meter_reader.detect_needle が
+# TypeError で落ちる（2026-09-08、venvを新規作成したメンバーの環境で発覚）。
+# opencv-contrib-python と同じバージョンで固定すること。
+opencv-python==4.10.0.84
 numpy==1.24.4
 pillow==10.4.0
 
