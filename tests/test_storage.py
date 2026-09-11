@@ -110,6 +110,7 @@ class TestStorage(unittest.TestCase):
         self.assertEqual(self.storage.get_all_readings()[0].image_sha256, image_sha256)
         self.assertEqual(self.storage.get_processed_hashes(), {image_sha256})
 
+<<<<<<< HEAD
     def test_save_and_get_image_truth(self):
         self.storage.save_image_truth(
             image_sha256="a" * 64,
@@ -183,6 +184,8 @@ class TestStorage(unittest.TestCase):
 
         self.assertIsNotNone(self.storage.get_all_readings()[0].reading_id)
 
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
     def test_existing_database_is_migrated_without_losing_rows(self):
         fd, db_path = tempfile.mkstemp()
         os.close(fd)
@@ -222,8 +225,11 @@ class TestStorage(unittest.TestCase):
             finally:
                 conn.close()
             self.assertIn("image_sha256", columns)
+<<<<<<< HEAD
             self.assertIn("reading_id", columns)
             self.assertIn("status", columns)
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
         finally:
             os.remove(db_path)
 

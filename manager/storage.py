@@ -4,8 +4,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
+<<<<<<< HEAD
 
 from manager.record import ImageTruth
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
 
 
 def _json_safe(obj):
@@ -33,6 +36,7 @@ class MeterReading:
     timestamp: Optional[str] = None
     raw_data: Optional[Dict[str, Any]] = None
     image_sha256: Optional[str] = None
+<<<<<<< HEAD
     reading_id: Optional[str] = None
     status: Optional[str] = None
     input_method: Optional[str] = None
@@ -43,6 +47,8 @@ class MeterReading:
     pipeline_version: Optional[str] = None
     log_path: Optional[str] = None
     overlay_path: Optional[str] = None
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
 
 
 class Storage:
@@ -75,6 +81,7 @@ class Storage:
                 stage TEXT NOT NULL,
                 image_path TEXT NOT NULL,
                 raw_data_json TEXT,
+<<<<<<< HEAD
                 image_sha256 TEXT,
                 reading_id TEXT,
                 status TEXT,
@@ -117,6 +124,15 @@ class Storage:
         ):
             if column not in columns:
                 cursor.execute(f"ALTER TABLE meter_readings ADD COLUMN {column} {definition}")
+=======
+                image_sha256 TEXT
+            )
+            """
+        )
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
+        if "image_sha256" not in columns:
+            cursor.execute("ALTER TABLE meter_readings ADD COLUMN image_sha256 TEXT")
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
         conn.commit()
 
     def _init_db(self) -> None:
@@ -132,7 +148,10 @@ class Storage:
         image_path: str,
         read_result: Dict[str, Any],
         image_sha256: Optional[str] = None,
+<<<<<<< HEAD
         reading_id: Optional[str] = None,
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
     ) -> int:
         """read_meterが返すdictをそのまま受け取って保存する"""
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -146,6 +165,7 @@ class Storage:
         cursor.execute(
             """
             INSERT INTO meter_readings 
+<<<<<<< HEAD
             (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
              reading_id, status, input_method, confidence, failure_stage, failure_code,
              failure_detail, pipeline_version, log_path, overlay_path)
@@ -159,6 +179,12 @@ class Storage:
                 read_result.get("pipeline_version"), read_result.get("log_path"),
                 read_result.get("overlay_path"),
             ),
+=======
+            (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (now_str, device_name, value, stage, image_path, raw_data_json, image_sha256),
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
         )
         conn.commit()
         last_id = cursor.lastrowid
@@ -209,9 +235,13 @@ class Storage:
         cursor = conn.cursor()
         cursor.execute(
             """
+<<<<<<< HEAD
             SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
                    reading_id, status, input_method, confidence, failure_stage, failure_code,
                    failure_detail, pipeline_version, log_path, overlay_path
+=======
+            SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
             FROM meter_readings
             ORDER BY id DESC
             """
@@ -233,6 +263,7 @@ class Storage:
                     image_path=row[5],
                     raw_data=raw_data,
                     image_sha256=row[7],
+<<<<<<< HEAD
                     reading_id=row[8],
                     status=row[9],
                     input_method=row[10],
@@ -243,10 +274,13 @@ class Storage:
                     pipeline_version=row[15],
                     log_path=row[16],
                     overlay_path=row[17],
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
                 )
             )
         return results
 
+<<<<<<< HEAD
     def get_all_image_truths(self) -> List[ImageTruth]:
         """保存されているすべての画像教師データを取得する。"""
         conn = self._get_connection()
@@ -273,6 +307,8 @@ class Storage:
             for row in rows
         ]
 
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
     def get_processed_hashes(self) -> Set[str]:
         """保存済み画像のSHA-256ハッシュ一覧を取得する"""
         conn = self._get_connection()

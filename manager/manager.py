@@ -30,8 +30,11 @@ class MeterManager:
         threshold_min: Optional[float] = None,
         use_vlm: bool = False,
         image_sha256: Optional[str] = None,
+<<<<<<< HEAD
         overlays_dir: Optional[str] = None,
         images_dir: Optional[str] = None,
+=======
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
     ) -> Dict[str, Any]:
         """認識処理を実行し、閾値判定を付与した結果を返却
 
@@ -156,3 +159,33 @@ class MeterManager:
             for r in readings
         ]
 
+<<<<<<< HEAD
+=======
+    def export_to_csv(self, output_path: str = "readings_export.csv") -> str:
+        """保存されている全履歴を CSV ファイルに出力する"""
+        readings = self.get_history()
+        fieldnames = [
+            "id",
+            "timestamp",
+            "device_name",
+            "stage",
+            "value",
+            "image_path",
+        ]
+
+        with open(output_path, mode="w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in readings:
+                writer.writerow(
+                    {
+                        "id": r.id,
+                        "timestamp": r.timestamp,
+                        "device_name": r.device_name,
+                        "stage": r.stage,
+                        "value": r.value if r.value is not None else "",
+                        "image_path": r.image_path,
+                    }
+                )
+        return os.path.abspath(output_path)
+>>>>>>> 49de6f1 (SR-06: 重複排除ハッシュをDB列(image_sha256)に持たせる)
