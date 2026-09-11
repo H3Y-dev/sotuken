@@ -63,6 +63,24 @@ class TestBatchProcessor(unittest.TestCase):
         res2 = processor.process_all(reader_func=mock_reader)
         self.assertEqual(res2["success"], 0)
 
+    def test_deduplication_survives_deletion_of_original_image(self):
+        original = os.path.join(self.temp_dir.name, "original.jpg")
+        with open(original, "wb") as f:
+            f.write(b"persisted hash must outlive source image")
+
+        def mock_reader(path, **kwargs):
+            return {"stage": "ok", "value": 50.0, "error": None}
+
+        processor = BatchProcessor(self.manager, self.temp_dir.name)
+        self.assertEqual(processor.process_all(reader_func=mock_reader)["success"], 1)
+        os.remove(original)
+
+        duplicate = os.path.join(self.temp_dir.name, "duplicate.jpg")
+        with open(duplicate, "wb") as f:
+            f.write(b"persisted hash must outlive source image")
+
+        self.assertEqual(BatchProcessor(self.manager, self.temp_dir.name).get_unprocessed_images(), [])
+
     def test_calculate_file_hash(self):
         test_file = os.path.join(self.temp_dir.name, "hash_test.dat")
         with open(test_file, "wb") as f:

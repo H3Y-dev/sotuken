@@ -24,13 +24,7 @@ class BatchProcessor:
         """既存DBの履歴および本インスタンスの処理済みハッシュ一覧を取得"""
         hashes = set(self.processed_hashes)
         if self.manager:
-            for row in self.manager.format_history_for_ui():
-                path = row.get("image_path")
-                if path and os.path.exists(path):
-                    try:
-                        hashes.add(calculate_file_hash(path))
-                    except (OSError, IOError):
-                        pass
+            hashes.update(self.manager.storage.get_processed_hashes())
         return hashes
 
     def get_unprocessed_images(self) -> List[str]:
@@ -74,6 +68,10 @@ class BatchProcessor:
 
         for img_path in targets:
             abs_path = os.path.abspath(img_path)
+            try:
+                image_sha256 = calculate_file_hash(abs_path)
+            except (OSError, IOError):
+                image_sha256 = None
             sidecar = load_sidecar(abs_path)
             device_name = default_device_name
             if sidecar and sidecar.device_name:
@@ -84,13 +82,12 @@ class BatchProcessor:
                 device_name=device_name,
                 reader_func=reader_func,
                 use_vlm=False,
+                image_sha256=image_sha256,
             )
             if res["stage"] == "ok":
                 results["success"] += 1
-                try:
-                    self.processed_hashes.add(calculate_file_hash(abs_path))
-                except (OSError, IOError):
-                    pass
+                if image_sha256:
+                    self.processed_hashes.add(image_sha256)
             else:
                 results["failed"] += 1
 

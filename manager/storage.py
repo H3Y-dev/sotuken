@@ -2,7 +2,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 
 @dataclass
@@ -16,6 +16,7 @@ class MeterReading:
     id: Optional[int] = None
     timestamp: Optional[str] = None
     raw_data: Optional[Dict[str, Any]] = None
+    image_sha256: Optional[str] = None
 
 
 class Storage:
@@ -47,10 +48,14 @@ class Storage:
                 value REAL,
                 stage TEXT NOT NULL,
                 image_path TEXT NOT NULL,
-                raw_data_json TEXT
+                raw_data_json TEXT,
+                image_sha256 TEXT
             )
             """
         )
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
+        if "image_sha256" not in columns:
+            cursor.execute("ALTER TABLE meter_readings ADD COLUMN image_sha256 TEXT")
         conn.commit()
 
     def _init_db(self) -> None:
@@ -59,7 +64,11 @@ class Storage:
             self._init_db_with_conn(conn)
 
     def save_reading(
-        self, device_name: str, image_path: str, read_result: Dict[str, Any]
+        self,
+        device_name: str,
+        image_path: str,
+        read_result: Dict[str, Any],
+        image_sha256: Optional[str] = None,
     ) -> int:
         """read_meterが返すdictをそのまま受け取って保存する"""
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -72,10 +81,10 @@ class Storage:
         cursor.execute(
             """
             INSERT INTO meter_readings 
-            (timestamp, device_name, value, stage, image_path, raw_data_json)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (now_str, device_name, value, stage, image_path, raw_data_json),
+            (now_str, device_name, value, stage, image_path, raw_data_json, image_sha256),
         )
         conn.commit()
         last_id = cursor.lastrowid
@@ -89,7 +98,7 @@ class Storage:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json
+            SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256
             FROM meter_readings
             ORDER BY id DESC
             """
@@ -110,6 +119,19 @@ class Storage:
                     stage=row[4],
                     image_path=row[5],
                     raw_data=raw_data,
+                    image_sha256=row[7],
                 )
             )
         return results
+
+    def get_processed_hashes(self) -> Set[str]:
+        """保存済み画像のSHA-256ハッシュ一覧を取得する"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT image_sha256 FROM meter_readings WHERE image_sha256 IS NOT NULL"
+        )
+        hashes = {row[0] for row in cursor.fetchall()}
+        if not self._conn:
+            conn.close()
+        return hashes
