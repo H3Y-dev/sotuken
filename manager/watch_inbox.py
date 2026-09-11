@@ -1,4 +1,4 @@
-﻿"""
+"""
 フォルダ監視および既存meter_pipeline呼び出し（SR-03/SR-04/SR-05）の手動検証用スクリプト。
 指定フォルダ（デフォルト: incoming/）を監視し、新規画像およびサイドカーJSONを検出して
 既存の meter_pipeline を自動実行し、戻り値（成功/失敗結果）を記録・表示します。
@@ -15,6 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager.watcher import FolderWatcher
 from manager.sidecar import SidecarMetadata
+from manager.ingest import ingest_result
+from manager.storage import Storage
 
 
 def main():
@@ -23,6 +25,16 @@ def main():
         "--watch-dir",
         default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "incoming"),
         help="監視対象ディレクトリ（デフォルト: リポジトリ直下の incoming/）",
+    )
+    parser.add_argument(
+        "--db",
+        default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "manager.db"),
+        help="取り込み結果を保存するSQLite DBのパス（デフォルト: リポジトリ直下の manager.db）",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="DBへ保存せず表示だけ行う（従来の動作）",
     )
     parser.add_argument(
         "--use-vlm",
@@ -38,6 +50,10 @@ def main():
     print("[SR-05 Watcher] 画像ファイルを配置すると、meter_pipeline が自動実行されます。")
     print("[SR-05 Watcher] 停止するには Ctrl+C を押してください。")
 
+    storage = None if args.no_save else Storage(args.db)
+    if storage:
+        print(f"[SR-05 Watcher] 保存先DB: {os.path.abspath(args.db)}")
+
     detected_count = 0
 
     def on_pipeline_result(img_path: str, sidecar: Optional[SidecarMetadata], result: Dict[str, Any]):
@@ -48,6 +64,10 @@ def main():
             print(f"  [メタデータ] 機器名: {sidecar.device_name}, 真値: {sidecar.operator_value}, メモ: {sidecar.operator_note}")
         else:
             print("  [メタデータ] なし（サイドカーJSON未配置）")
+
+        if storage is not None:
+            row_id = ingest_result(storage, img_path, sidecar, result)
+            print(f"  [DB保存] id={row_id}")
 
         stage = result.get("stage")
         val = result.get("value")
