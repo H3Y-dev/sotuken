@@ -7,18 +7,17 @@ import pandas as pd
 import streamlit as st
 from manager.manager import MeterManager
 
-try:
-    from reader import read_meter
-except ImportError:
+from manager.pipeline_caller import execute_pipeline
 
-    def read_meter(image_path):
-        return {
-            "stage": "ok",
-            "value": 42.5,
-            "ratio": 0.425,
-            "angle_deg": 120.0,
-            "error": None,
-        }
+
+def read_meter(image_path, use_vlm=False):
+    """UIからの解析要求を、実際のパイプライン(meter_pipeline)へ渡す。
+
+    以前はここが `from reader import read_meter` の失敗時に 42.5 を返す
+    ダミー実装へ落ちる作りになっていた。reader.py はリポジトリに存在せず、
+    UIは常にダミー値を表示していた（画面上はそれと分からない）。
+    """
+    return execute_pipeline(image_path, use_vlm=use_vlm)
 
 
 st.set_page_config(page_title="メーター自動読み取りシステム", layout="wide")
