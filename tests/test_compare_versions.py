@@ -51,6 +51,34 @@ class TestBuildComparisonRows(unittest.TestCase):
         self.assertEqual('-', rows[0]['catastrophic_count'])
 
 
+class TestBuildPerImageErrorRows(unittest.TestCase):
+
+    def test_builds_rows_for_each_image_and_version(self):
+        results = [
+            {
+                'version': 'v1',
+                'results': [
+                    {'image': 'b.jpg', 'reference_error': 1.234},
+                    {'image': 'a.jpg', 'reference_error': None},
+                ],
+            },
+            {
+                'version': 'v2',
+                'results': [
+                    {'image': 'a.jpg', 'reference_error': 2.0},
+                    {'image': 'b.jpg', 'reference_error': 12.345},
+                ],
+            },
+        ]
+
+        rows = compare_versions.build_per_image_error_rows(results)
+
+        self.assertEqual([
+            {'image': 'a.jpg', 'v1': '-', 'v2': '2.00'},
+            {'image': 'b.jpg', 'v1': '1.23', 'v2': '12.35'},
+        ], rows)
+
+
 class TestV4V5ValuesMatch(unittest.TestCase):
 
     def test_returns_true_when_each_image_has_the_same_reading(self):
