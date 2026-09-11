@@ -56,8 +56,9 @@ def build_comparison_rows(version_results: List[Dict[str, Any]]) -> List[Dict[st
     return rows
 
 
-def _values_by_image(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """評価結果から画像ごとの読み取り値を取り出す。異常なJSONは None。"""
+def _values_by_image(result: Dict[str, Any],
+                     entry_key: str = 'value') -> Optional[Dict[str, Any]]:
+    """評価結果から画像ごとの指定値を取り出す。異常なJSONは None。"""
     entries = result.get('results')
     if not isinstance(entries, list):
         return None
@@ -69,8 +70,31 @@ def _values_by_image(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         image = entry.get('image')
         if image is None or image in values:
             return None
-        values[image] = entry.get('value')
+        values[image] = entry.get(entry_key)
     return values
+
+
+def build_per_image_error_rows(
+        version_results: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """評価JSON由来の画像別引用誤差を、比較表の行へ変換する。"""
+    values_by_version = {}  # type: Dict[str, Dict[str, Any]]
+    images = set()
+    versions = []  # type: List[str]
+    for result in version_results:
+        version = str(result.get('version', '-'))
+        values = _values_by_image(result, 'reference_error')
+        versions.append(version)
+        values_by_version[version] = values or {}
+        if values is not None:
+            images.update(values.keys())
+
+    rows = []  # type: List[Dict[str, str]]
+    for image in sorted(images):
+        row = {'image': str(image)}
+        for version in versions:
+            row[version] = _format_number(values_by_version[version].get(image))
+        rows.append(row)
+    return rows
 
 
 def v4_v5_values_match(v4_result: Dict[str, Any],
@@ -97,6 +121,28 @@ def print_comparison_table(rows: List[Dict[str, str]]) -> None:
             row['mean_reference_error'], row['median_reference_error'],
             row['catastrophic_count']))
     print('=' * 96)
+
+
+def print_per_image_error_table(rows: List[Dict[str, str]],
+                                versions: List[str]) -> None:
+    """画像ごと・版ごとの引用誤差表を標準出力へ表示する。"""
+    image_width = max(
+        [len('画像')] + [len(row['image']) for row in rows])
+    column_width = 10
+    table_width = image_width + 1 + (column_width + 1) * len(versions)
+    print('')
+    print('=' * table_width)
+    print('{:<{}} {}'.format(
+        '画像', image_width,
+        ' '.join('{:>{}}'.format(version, column_width)
+                 for version in versions)))
+    print('-' * table_width)
+    for row in rows:
+        print('{:<{}} {}'.format(
+            row['image'], image_width,
+            ' '.join('{:>{}}'.format(row[version], column_width)
+                     for version in versions)))
+    print('=' * table_width)
 
 
 def _run_command(command: List[str], cwd: str) -> None:
@@ -154,6 +200,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         '--versions', nargs='+', default=DEFAULT_VERSIONS,
         help='比較するgitタグ名（既定: {}）'.format(' '.join(DEFAULT_VERSIONS)))
+    parser.add_argument(
+        '--per-image', action='store_true',
+        help='画像ごと・版ごとの引用誤差表も出力する')
     args = parser.parse_args(argv)
 
     if len(args.versions) != len(set(args.versions)):
@@ -185,6 +234,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         print('v4/v5の読み取り値一致を確認しました')
 
     print_comparison_table(build_comparison_rows(summaries))
+    if args.per_image:
+        version_results = []  # type: List[Dict[str, Any]]
+        for version in args.versions:
+            result = dict(results_by_version[version])
+            result['version'] = version
+            version_results.append(result)
+        print_per_image_error_table(
+            build_per_image_error_rows(version_results), args.versions)
     return 0
 
 
