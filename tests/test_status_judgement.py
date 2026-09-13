@@ -19,12 +19,12 @@ class TestStatusJudgement(unittest.TestCase):
 
     def test_unconfident_scale_is_low_confidence(self):
         self.assertEqual(
-            "low_confidence", judge_status({"stage": "ok", "value": 1.0, "is_confident": False})
+            "low_confidence", judge_status({"stage": "ok", "value": 1.0, "scale_confident": False})
         )
 
     def test_confident_scale_is_ok(self):
         self.assertEqual(
-            "ok", judge_status({"stage": "ok", "value": 1.0, "is_confident": True})
+            "ok", judge_status({"stage": "ok", "value": 1.0, "scale_confident": True})
         )
 
     def test_missing_confidence_flag_is_ok(self):
@@ -64,7 +64,7 @@ class TestStatusJudgement(unittest.TestCase):
 
         result = meter_pipeline.read_meter(np.zeros((10, 10, 3), dtype=np.uint8), use_vlm=False)
 
-        self.assertIs(result["is_confident"], False)
+        self.assertIs(result["scale_confident"], False)
 
 
 class TestIngestStatusJudgement(unittest.TestCase):

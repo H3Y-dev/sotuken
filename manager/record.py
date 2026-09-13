@@ -6,7 +6,7 @@ def judge_status(pipeline_result: Mapping[str, Any]) -> str:
     """自動読み取りの結果だけから記録状態を決める。"""
     if pipeline_result.get("stage") != "ok" or pipeline_result.get("value") is None:
         return "failed"
-    if pipeline_result.get("is_confident") is False:
+    if pipeline_result.get("scale_confident") is False:
         return "low_confidence"
     return "ok"
 
