@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -25,7 +26,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import jp.sotuken.metercapture.capture.CapturedImage
+import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueStore
+import kotlinx.coroutines.launch
 
 @Composable
 fun MeterCaptureApp(queueStore: QueueStore) {
@@ -39,6 +42,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     }
     var capturedImage by remember { mutableStateOf<CapturedImage?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -64,9 +68,24 @@ fun MeterCaptureApp(queueStore: QueueStore) {
 
                 if (hasCameraPermission) {
                     CameraCapturePanel(
-                        onSaved = {
-                            capturedImage = it
-                            errorMessage = null
+                        onSaved = { image ->
+                            coroutineScope.launch {
+                                try {
+                                    queueStore.enqueue(
+                                        imageFile = image.file,
+                                        meta = CaptureMeta(
+                                            deviceName = null,
+                                            operatorValue = null,
+                                            operatorNote = null,
+                                        ),
+                                    )
+                                    capturedImage = image
+                                    errorMessage = null
+                                } catch (error: Exception) {
+                                    capturedImage = null
+                                    errorMessage = "キューへの追加に失敗しました: ${error.message ?: error}"
+                                }
+                            }
                         },
                         onError = {
                             capturedImage = null
@@ -80,7 +99,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                     }
                 }
 
-                capturedImage?.let { Text("保存しました: ${it.file.name}") }
+                capturedImage?.let { Text("キューに追加しました: ${it.file.name}") }
                 errorMessage?.let {
                     Text(text = it, color = MaterialTheme.colorScheme.error)
                 }
