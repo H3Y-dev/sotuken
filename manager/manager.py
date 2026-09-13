@@ -29,6 +29,7 @@ class MeterManager:
         threshold_max: Optional[float] = None,
         threshold_min: Optional[float] = None,
         use_vlm: bool = False,
+        image_sha256: Optional[str] = None,
     ) -> Dict[str, Any]:
         """認識処理を実行し、閾値判定を付与した結果を返却"""
         try:
@@ -42,6 +43,7 @@ class MeterManager:
             device_name=device_name,
             image_path=image_path,
             read_result=save_data,
+            image_sha256=image_sha256,
         )
 
         readings = self.storage.get_all_readings()
