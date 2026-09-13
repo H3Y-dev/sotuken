@@ -5,12 +5,51 @@ import numpy as np
 
 import meter_pipeline
 from manager.ingest import ingest_result
-from manager.record import judge_input_method, judge_status
+from manager.record import judge_failure, judge_input_method, judge_status
 from manager.sidecar import SidecarMetadata
 from manager.storage import Storage
 
 
 class TestStatusJudgement(unittest.TestCase):
+
+    def test_failure_stages_map_to_fixed_failure_metadata(self):
+        cases = {
+            "center": ("center", "center_not_found"),
+            "scale": ("scale", "scale_range_unresolved"),
+            "needle": ("needle", "needle_not_detected"),
+        }
+
+        for pipeline_stage, expected in cases.items():
+            with self.subTest(pipeline_stage=pipeline_stage):
+                self.assertEqual(expected, judge_failure({"stage": pipeline_stage, "value": None})[:2])
+
+    def test_failure_detail_uses_pipeline_error(self):
+        self.assertEqual(
+            ("scale", "scale_range_unresolved", "OCR timed out"),
+            judge_failure({"stage": "scale", "value": None, "error": "OCR timed out"}),
+        )
+
+    def test_unmapped_failure_stage_is_unknown(self):
+        self.assertEqual(
+            ("unknown", "unknown_failure", None),
+            judge_failure({"stage": "other", "value": None}),
+        )
+
+    def test_success_has_no_failure_metadata(self):
+        self.assertEqual(
+            (None, None, None),
+            judge_failure({"stage": "ok", "value": 1.0, "scale_confident": True}),
+        )
+
+    def test_low_confidence_is_not_a_failure(self):
+        self.assertEqual(
+            (None, None, None),
+            judge_failure({"stage": "ok", "value": 1.0, "scale_confident": False}),
+        )
+
+    def test_failure_code_is_machine_readable(self):
+        failure_code = judge_failure({"stage": "needle", "value": None})[1]
+        self.assertRegex(failure_code, r"^[A-Za-z0-9_]+$")
     def test_non_ok_stage_is_failed(self):
         self.assertEqual("failed", judge_status({"stage": "needle", "value": 1.0}))
 
@@ -77,6 +116,9 @@ class TestIngestStatusJudgement(unittest.TestCase):
         saved = storage.get_all_readings()[0].raw_data
         self.assertEqual("failed", saved["status"])
         self.assertEqual("manual", saved["input_method"])
+        self.assertEqual("scale", saved["failure_stage"])
+        self.assertEqual("scale_range_unresolved", saved["failure_code"])
+        self.assertIsNone(saved["failure_detail"])
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager.sidecar import SidecarMetadata
 from manager.storage import Storage
-from manager.record import judge_input_method, judge_status
+from manager.record import judge_failure, judge_input_method, judge_status
 
 UNKNOWN_DEVICE = "unknown"
 
@@ -41,6 +41,10 @@ def ingest_result(
     operator_value = getattr(sidecar, "operator_value", None) if sidecar is not None else None
     save_data["status"] = judge_status(result)
     save_data["input_method"] = judge_input_method(result.get("value"), operator_value)
+    failure_stage, failure_code, failure_detail = judge_failure(result)
+    save_data["failure_stage"] = failure_stage
+    save_data["failure_code"] = failure_code
+    save_data["failure_detail"] = failure_detail
     if operator_value is not None:
         save_data["operator_value"] = operator_value
     return storage.save_reading(
