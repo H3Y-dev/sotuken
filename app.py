@@ -1,11 +1,12 @@
 import os
 import sys
+from datetime import date, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 import streamlit as st
-from manager.export import export_to_csv, group_by_device, readings_to_series
+from manager.export import export_to_csv, filter_readings, group_by_device, readings_to_series
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
@@ -81,10 +82,33 @@ with tab1:
 
 with tab2:
     st.header("読み取り履歴")
-    history_data = manager.format_history_for_ui()
+    history = manager.get_history()
+    device_options = ["すべて"] + sorted({reading.device_name for reading in history})
+    history_dates = [datetime.fromisoformat(reading.timestamp).date() for reading in history]
+    default_date_from = min(history_dates) if history_dates else date.today()
+    default_date_to = max(history_dates) if history_dates else date.today()
 
-    if history_data:
-        df = pd.DataFrame(history_data)
+    filter_device, filter_date_from, filter_date_to = st.columns(3)
+    with filter_device:
+        selected_history_device = st.selectbox("機器名", options=device_options)
+    with filter_date_from:
+        selected_date_from = st.date_input("開始日", value=default_date_from)
+    with filter_date_to:
+        selected_date_to = st.date_input("終了日", value=default_date_to)
+
+    if history:
+        filtered_history = filter_readings(
+            history,
+            device_name=selected_history_device,
+            date_from=selected_date_from,
+            date_to=selected_date_to,
+        )
+        filtered_ids = {reading.id for reading in filtered_history}
+        history_data = manager.format_history_for_ui()
+        filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
+
+        st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
+        df = pd.DataFrame(filtered_history_data)
         st.dataframe(df, use_container_width=True)
 
         if st.button("CSV形式でエクスポート準備"):
@@ -98,6 +122,7 @@ with tab2:
                     mime="text/csv",
                 )
     else:
+        st.caption("0件 / 全0件")
         st.info("履歴データが存在しません。")
 
     st.header("📈 機器別の時系列グラフ")

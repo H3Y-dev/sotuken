@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import date
 from manager.export import (
     export_to_csv,
     export_to_jsonl,
@@ -9,12 +10,14 @@ from manager.export import (
     group_by_device,
     readings_to_series,
 )
+from manager.storage import MeterReading
 
 
 class DummyReading:
     def __init__(self, reading_id, captured_at, device_name, value, status="ok", failure_stage=None, image_path="", stage="test"):
         self.reading_id = reading_id
         self.captured_at = captured_at
+        self.timestamp = captured_at
         self.device_name = device_name
         self.value = value
         self.status = status
@@ -70,7 +73,7 @@ class TestExportToCsv(unittest.TestCase):
             DummyReading(2, "2026-08-21 10:00:00", "meter1", 20.0),
             DummyReading(3, "2026-08-22 10:00:00", "meter1", 30.0),
         ]
-        result = filter_readings(readings, start_date="2026-08-21 00:00:00", end_date="2026-08-21 23:59:59")
+        result = filter_readings(readings, date_from=date(2026, 8, 21), date_to=date(2026, 8, 21))
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].reading_id, 2)
 
@@ -110,6 +113,38 @@ class TestExportToCsv(unittest.TestCase):
     def test_readings_to_series_empty(self):
         series = readings_to_series([])
         self.assertEqual(series, {})
+
+
+class TestFilterReadings(unittest.TestCase):
+    def setUp(self):
+        self.readings = [
+            MeterReading("meter1", 10.0, "ok", "a.jpg", id=1, timestamp="2026-08-20 23:59:59"),
+            MeterReading("meter1", 20.0, "ok", "b.jpg", id=2, timestamp="2026-08-21 00:00:00"),
+            MeterReading("meter2", 30.0, "ok", "c.jpg", id=3, timestamp="2026-08-21 23:59:59"),
+            MeterReading("meter1", 40.0, "ok", "d.jpg", id=4, timestamp="2026-08-22 00:00:00"),
+        ]
+
+    def test_filters_by_device_name(self):
+        result = filter_readings(self.readings, device_name="meter1")
+        self.assertEqual([reading.id for reading in result], [1, 2, 4])
+
+    def test_filters_by_date_range_including_both_boundaries(self):
+        result = filter_readings(
+            self.readings, date_from=date(2026, 8, 21), date_to=date(2026, 8, 21)
+        )
+        self.assertEqual([reading.id for reading in result], [2, 3])
+
+    def test_filters_by_device_name_and_date_range(self):
+        result = filter_readings(
+            self.readings,
+            device_name="meter1",
+            date_from=date(2026, 8, 21),
+            date_to=date(2026, 8, 21),
+        )
+        self.assertEqual([reading.id for reading in result], [2])
+
+    def test_returns_all_readings_without_filters(self):
+        self.assertEqual(filter_readings(self.readings, device_name="すべて"), self.readings)
 
 
 class TestExportToJsonl(unittest.TestCase):
@@ -193,4 +228,4 @@ class TestExportToJsonl(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main()
