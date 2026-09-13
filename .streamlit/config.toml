@@ -8,8 +8,5 @@ textColor = "#23291F"
 primaryColor = "#B23A28"
 font = "sans serif"
 
-[server]
-headless = true
-
 [browser]
 gatherUsageStats = false
