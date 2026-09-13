@@ -5,6 +5,19 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+def _json_safe(obj):
+    """json.dumps が扱えない値を、保存できる形へ落とす。
+
+    meter_pipeline の戻り値には numpy の配列やスカラーが混ざる（中心座標・
+    目盛りの配列など）。素の json.dumps は ndarray で TypeError を投げるため、
+    フォルダ監視からの取り込みが1枚目で必ず落ちていた。
+    テストは dict のモックを渡していたので numpy が入らず、素通りしていた。
+    """
+    if hasattr(obj, "tolist"):  # numpy の ndarray・スカラーはこれで素の型になる
+        return obj.tolist()
+    return str(obj)
+
+
 @dataclass
 class MeterReading:
     """1件のメーター読み取り結果を表すデータモデル"""
@@ -65,7 +78,7 @@ class Storage:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         value = read_result.get("value")
         stage = read_result.get("stage", "unknown")
-        raw_data_json = json.dumps(read_result, ensure_ascii=False)
+        raw_data_json = json.dumps(read_result, ensure_ascii=False, default=_json_safe)
 
         conn = self._get_connection()
         cursor = conn.cursor()
