@@ -1,5 +1,44 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Mapping, Optional, Tuple
+
+
+def judge_status(pipeline_result: Mapping[str, Any]) -> str:
+    """自動読み取りの結果だけから記録状態を決める。"""
+    if pipeline_result.get("stage") != "ok" or pipeline_result.get("value") is None:
+        return "failed"
+    if pipeline_result.get("scale_confident") is False:
+        return "low_confidence"
+    return "ok"
+
+
+def judge_failure(
+    pipeline_result: Mapping[str, Any],
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """(failure_stage, failure_code, failure_detail) を返す。
+
+    read_meter の失敗 stage は center -> center_not_found、
+    scale -> scale_range_unresolved、needle -> needle_not_detected。
+    それ以外の失敗は unknown -> unknown_failure として保存する。
+    """
+    if judge_status(pipeline_result) in ("ok", "low_confidence"):
+        return None, None, None
+
+    stage_and_code = {
+        "center": ("center", "center_not_found"),
+        "scale": ("scale", "scale_range_unresolved"),
+        "needle": ("needle", "needle_not_detected"),
+    }
+    failure_stage, failure_code = stage_and_code.get(
+        pipeline_result.get("stage"), ("unknown", "unknown_failure")
+    )
+    return failure_stage, failure_code, pipeline_result.get("error")
+
+
+def judge_input_method(auto_value: Optional[float], operator_value: Optional[float]) -> str:
+    """最終採用値の出所を、自動値と現場入力値の有無から決める。"""
+    if auto_value is None:
+        return "manual" if operator_value is not None else "auto"
+    return "corrected" if operator_value is not None else "auto"
 
 
 @dataclass
