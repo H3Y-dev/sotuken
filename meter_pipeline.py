@@ -94,6 +94,7 @@ def read_meter(img, use_vlm=True):
         'n_ticks': 0,
         'scale_source': None,
         'scale_confident': None,
+        'is_confident': None,
         'scale_diagnostics': None,
         'center_source': None,
         'cropped': False,
@@ -178,6 +179,7 @@ def read_meter(img, use_vlm=True):
     result['max_value'] = scale['max_value']
     result['scale_source'] = scale.get('source')
     result['scale_confident'] = scale.get('is_confident')
+    result['is_confident'] = scale.get('is_confident')
 
     # ── 針 ──
     # 目盛りの角度を渡すことで、スケールがどちら回りかを推測せず確定できる。

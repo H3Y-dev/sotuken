@@ -1,5 +1,21 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Mapping, Optional
+
+
+def judge_status(pipeline_result: Mapping[str, Any]) -> str:
+    """自動読み取りの結果だけから記録状態を決める。"""
+    if pipeline_result.get("stage") != "ok" or pipeline_result.get("value") is None:
+        return "failed"
+    if pipeline_result.get("is_confident") is False:
+        return "low_confidence"
+    return "ok"
+
+
+def judge_input_method(auto_value: Optional[float], operator_value: Optional[float]) -> str:
+    """最終採用値の出所を、自動値と現場入力値の有無から決める。"""
+    if auto_value is None:
+        return "manual" if operator_value is not None else "auto"
+    return "corrected" if operator_value is not None else "auto"
 
 
 @dataclass
