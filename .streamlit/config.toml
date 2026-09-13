@@ -1,0 +1,12 @@
+# 画面の配色。工場の記録計（チャートレコーダー）の記録紙から採っている。
+# わずかに緑がかった紙、記録ペンの濃緑黒、振り切れを示す赤ペン。
+[theme]
+base = "light"
+backgroundColor = "#EDEFE8"
+secondaryBackgroundColor = "#E3E6DC"
+textColor = "#23291F"
+primaryColor = "#B23A28"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
