@@ -121,5 +121,41 @@ class TestIngestStatusJudgement(unittest.TestCase):
         self.assertIsNone(saved["failure_detail"])
 
 
+class TestFailureStageMatchesPipeline(unittest.TestCase):
+    """judge_failure の対応表が meter_pipeline の stage 定数と乖離していないこと。
+
+    judge_failure は 'center' / 'scale' / 'needle' という文字列を直接持っている。
+    meter_pipeline 側の定数が変わっても、judge_failure は黙って unknown を返すだけで
+    エラーにならない。他のテストも同じ文字列をハードコードしているため、
+    乖離しても全部緑のまま failure_stage が全件 unknown になる。
+    そこで実際の定数を読み込んで突き合わせる。
+    """
+
+    def test_pipeline_failure_stages_are_all_mapped(self):
+        import meter_pipeline
+
+        for stage in (
+            meter_pipeline.STAGE_CENTER,
+            meter_pipeline.STAGE_SCALE,
+            meter_pipeline.STAGE_NEEDLE,
+        ):
+            failure_stage, failure_code, _ = judge_failure(
+                {"stage": stage, "value": None, "error": "dummy"}
+            )
+            self.assertEqual(
+                stage, failure_stage,
+                "meter_pipeline の stage '{}' が judge_failure の対応表から漏れている".format(stage),
+            )
+            self.assertNotEqual("unknown_failure", failure_code)
+
+    def test_pipeline_ok_stage_is_not_a_failure(self):
+        import meter_pipeline
+
+        self.assertEqual(
+            (None, None, None),
+            judge_failure({"stage": meter_pipeline.STAGE_OK, "value": 1.0}),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
