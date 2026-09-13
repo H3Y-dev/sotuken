@@ -144,6 +144,34 @@ python -m pip install -r requirements.txt
 > `app.py`（T6のWeb UI）を使わない場合、この2つは無くても
 > `main_sotuken.py`の動作には影響しません。
 
+### Web UI（`app.py`）の起動
+
+```
+venv\Scripts\python.exe -m streamlit run app.py
+```
+
+ブラウザが開きます（開かない場合は `http://localhost:8501`）。停止は `Ctrl+C`。
+
+> [!important] 初回起動でメールアドレスの入力を求められたら
+> Streamlitは初回に `Email:` と聞いてきて、**入力待ちのまま止まります。**
+> 起動しないように見えるので、先に次のファイルを作っておいてください。
+>
+> **`C:\Users\<ユーザー名>\.streamlit\credentials.toml`**
+>
+> ```toml
+> [general]
+> email = ""
+> ```
+>
+> **リポジトリ内の `.streamlit/` に置いても効きません。** Streamlitは
+> `credentials.toml` だけはホームディレクトリのものしか読まないためです
+> （`config.toml` はリポジトリ内のものが効くので、配色の設定はそちらに入っています）。
+> 空のままでよく、Streamlitへ何も送信されません。
+
+画面の配色は `.streamlit/config.toml`、細かい見た目は `ui_style.css` にあります。
+
+---
+
 > 旧スクリプト（`ocr_meter.py`, `paddletest.py`）専用の依存関係（`pytesseract`等）は
 > 現行パイプラインでは使わないため`requirements.txt`から外してあります。これらの
 > スクリプトを使う予定がなければ気にしなくて大丈夫です。
