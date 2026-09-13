@@ -1,32 +1,55 @@
 import csv  # CSVファイルを読み書きするための標準ライブラリを呼び出す
+import json
+from datetime import datetime, time
 
-def filter_readings(readings, start_date=None, end_date=None, device_name=None):
-    """記録リストを指定条件で絞り込む。"""
-    result = readings
-    if start_date:
-        result = [r for r in result if r.captured_at >= start_date]
-    if end_date:
-        result = [r for r in result if r.captured_at <= end_date]
-    if device_name:
-        result = [r for r in result if r.device_name == device_name]
+
+def filter_readings(readings, device_name=None, date_from=None, date_to=None):
+    """記録リストを機器名と日付範囲で絞り込む。"""
+    start = datetime.combine(date_from, time.min) if date_from else None
+    end = datetime.combine(date_to, time.max) if date_to else None
+
+    result = []
+    for reading in readings:
+        if device_name not in (None, "すべて") and reading.device_name != device_name:
+            continue
+
+        timestamp = datetime.fromisoformat(reading.timestamp)
+        if start and timestamp < start:
+            continue
+        if end and timestamp > end:
+            continue
+        result.append(reading)
     return result
+
+
 def export_to_csv(readings, output_path):
-    """
-    記録のリストをCSVファイルに書き出す関数
-
-    readings: MeterReadingのリスト（データが詰まった配列）
-    output_path: 書き出すCSVファイルの保存先パス（例: "test_output.csv"）
-    """
-    with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
-        # "utf-8-sig" を指定することで、Excelで開いたときの日本語文字化けを防ぐ
+    """記録リストをCSVファイルへ出力する。"""
+    with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
-
-        # 表の一番上の行（ヘッダー項目名）を書き込む
-        writer.writerow(["ID", "日時", "機器名", "値", "ステージ", "画像パス"])
-
-        # データを1件ずつ取り出して、表の1行として書き込む
+        # ヘッダー行（確定スキーマに対応）
+        writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path"])
         for r in readings:
-            writer.writerow([r.id, r.timestamp, r.device_name, r.value, r.stage, r.image_path])
+            writer.writerow([r.reading_id, r.captured_at, r.device_name, r.value, r.status, r.failure_stage, r.image_path])
+
+
+def export_to_jsonl(readings, output_path):
+    """記録リストをJSON Lines（1行1JSON）ファイルへ出力する。"""
+    fields = [
+        "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
+        "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
+        "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
+    ]
+    with open(output_path, "w", encoding="utf-8") as f:
+        for r in readings:
+            row_dict = {}
+            for field in fields:
+                if isinstance(r, dict):
+                    val = r.get(field, None)
+                else:
+                    val = getattr(r, field, None)
+                row_dict[field] = val
+            f.write(json.dumps(row_dict, ensure_ascii=False) + "\n")
+
 def group_by_device(readings):
     """記録のリストを機器名ごとの辞書にまとめる。"""
     groups = {}
