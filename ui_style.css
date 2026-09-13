@@ -1,0 +1,182 @@
+/* 画面の見た目は、工場の記録計（チャートレコーダー）が吐く記録紙から採っている。
+   わずかに緑がかった方眼紙、記録ペンの濃緑黒、振り切れを示す赤ペン。
+   装飾のための方眼ではなく、このシステムが扱う対象（計器の記録）そのものの見た目。 */
+
+@import url('https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=M+PLUS+1+Code:wght@400;500;700&display=swap');
+
+:root {
+  --paper:      #EDEFE8;
+  --grid:       #DDE2D6;
+  --grid-major: #C6CEBA;
+  --ink:        #23291F;
+  --ink-soft:   #5A6152;
+  --pen-red:    #B23A28;
+  --pen-blue:   #2B4A6F;
+  --panel:      #F6F7F2;
+
+  --face-ui:   "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", sans-serif;
+  --face-num:  "M PLUS 1 Code", "Consolas", monospace;
+}
+
+/* ── 記録紙の方眼 ───────────────────────────────── */
+[data-testid="stAppViewContainer"] {
+  background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(to right,  var(--grid) 0 1px, transparent 1px 100%),
+    repeating-linear-gradient(to bottom, var(--grid) 0 1px, transparent 1px 100%),
+    repeating-linear-gradient(to right,  var(--grid-major) 0 1px, transparent 1px 100%),
+    repeating-linear-gradient(to bottom, var(--grid-major) 0 1px, transparent 1px 100%);
+  background-size: 13px 13px, 13px 13px, 65px 65px, 65px 65px;
+}
+[data-testid="stHeader"] { background: transparent; height: 0; }
+/* 上端の虹色バーは、この画面の性格に合わないので消す */
+[data-testid="stDecoration"] { display: none; }
+[data-testid="stToolbar"] { right: 6px; }
+.block-container { padding-top: 1.6rem !important; padding-bottom: 2.5rem !important; max-width: 1180px; }
+
+html, body, [data-testid="stAppViewContainer"] * {
+  font-family: var(--face-ui);
+  color: var(--ink);
+}
+
+/* ── 銘板（ヘッダー）─────────────────────────────
+   計器に貼られている銘板を模している。下端の刻みは目盛り。 */
+.nameplate {
+  background: var(--panel);
+  border: 1px solid var(--ink);
+  border-bottom: none;
+  padding: 18px 22px 14px;
+  margin-bottom: 0;
+}
+.nameplate-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.nameplate h1 {
+  font-size: 1.32rem; font-weight: 700; letter-spacing: .04em;
+  margin: 0; line-height: 1.3;
+}
+.nameplate .sub {
+  font-family: var(--face-num); font-size: .72rem; color: var(--ink-soft);
+  letter-spacing: .08em; white-space: nowrap;
+}
+/* 目盛り。5本ごとに長い（主目盛り）。計器の目盛盤と同じ刻み方。 */
+.tickrule {
+  height: 13px; margin: 0 0 26px; border: 1px solid var(--ink); border-top: none;
+  background:
+    repeating-linear-gradient(to right, var(--ink) 0 1px, transparent 1px 10px) top left / 100% 5px no-repeat,
+    repeating-linear-gradient(to right, var(--ink) 0 1px, transparent 1px 50px) top left / 100% 9px no-repeat,
+    var(--panel);
+}
+
+/* ── 伝票面。方眼の上に置いた紙 ───────────────── */
+.stTabs [data-baseweb="tab-panel"] {
+  background: var(--panel);
+  border: 1px solid var(--grid-major);
+  padding: 22px 24px 26px;
+}
+
+/* ── タブ ─────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] { gap: 0; background: transparent; border-bottom: none; }
+.stTabs [data-baseweb="tab"] {
+  background: transparent; border: 1px solid var(--grid-major); border-bottom: none;
+  border-radius: 0; margin-right: -1px; padding: 7px 20px; height: auto;
+  font-size: .86rem; letter-spacing: .06em; color: var(--ink-soft);
+}
+.stTabs [aria-selected="true"] {
+  background: var(--panel); color: var(--ink); font-weight: 700;
+  box-shadow: inset 0 3px 0 var(--pen-red);
+}
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
+
+/* ── 見出し ───────────────────────────────────── */
+h2, h3, [data-testid="stHeadingWithActionElements"] h2 {
+  font-size: .82rem !important; font-weight: 700; letter-spacing: .16em;
+  color: var(--ink-soft) !important; text-transform: none;
+  border-bottom: 1px solid var(--grid-major); padding-bottom: 6px; margin-bottom: 18px;
+}
+
+/* ── 入力 ─────────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stDateInput"] input,
+[data-baseweb="select"] > div {
+  background: #FFF !important; border: 1px solid var(--ink-soft) !important;
+  border-radius: 0 !important; font-family: var(--face-num); color: var(--ink) !important;
+}
+[data-testid="stWidgetLabel"] p {
+  font-size: .72rem !important; letter-spacing: .1em; color: var(--ink-soft) !important;
+}
+[data-testid="stFileUploaderDropzone"] {
+  background: #FFF; border: 1px dashed var(--ink-soft); border-radius: 0;
+}
+/* アップローダーの文言はStreamlitが英語で固定しているため、ここで日本語に差し替える。
+   画面の他の文言と言語が揃っていないと、作りかけに見えるため。 */
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span { display: none; }
+[data-testid="stFileUploaderDropzoneInstructions"] > div::before {
+  content: "画像をここにドロップ";
+  font-family: var(--face-ui); font-size: .92rem; color: var(--ink);
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div > small { display: none; }
+[data-testid="stFileUploaderDropzoneInstructions"] > div::after {
+  content: "JPG・JPEG・PNG ／ 1ファイル 200MB まで";
+  display: block; margin-top: 3px;
+  font-family: var(--face-num); font-size: .7rem; color: var(--ink-soft); letter-spacing: .04em;
+}
+[data-testid="stFileUploaderDropzone"] button {
+  border-radius: 0; border: 1px solid var(--ink); background: var(--panel);
+  color: transparent; font-size: 0; position: relative; padding: 6px 18px;
+  box-shadow: 3px 3px 0 var(--grid-major);
+}
+[data-testid="stFileUploaderDropzone"] button::after {
+  content: "ファイルを選ぶ"; color: var(--ink);
+  font-family: var(--face-ui); font-size: .82rem; font-weight: 700; letter-spacing: .08em;
+}
+[data-testid="stFileUploaderDropzone"] button:hover { background: var(--ink); }
+[data-testid="stFileUploaderDropzone"] button:hover::after { color: var(--paper); }
+
+/* ── ボタン。押すと何が起きるかを赤ペンで示す ── */
+.stButton button, .stDownloadButton button {
+  border-radius: 0; border: 1px solid var(--ink); background: var(--panel);
+  color: var(--ink); font-weight: 700; letter-spacing: .1em; padding: 6px 26px;
+  white-space: nowrap; width: auto; min-width: max-content;
+  box-shadow: 3px 3px 0 var(--grid-major); transition: none;
+}
+.stButton button:hover, .stDownloadButton button:hover {
+  background: var(--ink); color: var(--paper); box-shadow: 3px 3px 0 var(--pen-red);
+}
+.stButton button[kind="primary"] {
+  background: var(--pen-red); border-color: var(--pen-red); color: #FFF;
+}
+.stButton button[kind="primary"]:hover { background: var(--ink); border-color: var(--ink); }
+
+/* ── 計測値。等幅で桁を揃える ─────────────────── */
+[data-testid="stMetricValue"] {
+  font-family: var(--face-num) !important; font-weight: 500;
+  font-size: 2.1rem !important; color: var(--pen-blue) !important;
+  font-variant-numeric: tabular-nums;
+}
+[data-testid="stMetricLabel"] p {
+  font-size: .7rem !important; letter-spacing: .12em; color: var(--ink-soft) !important;
+}
+[data-testid="stMetric"] {
+  background: #FFF; border: 1px solid var(--grid-major);
+  border-left: 3px solid var(--pen-blue); padding: 12px 16px;
+}
+
+/* ── 記録の表 ─────────────────────────────────── */
+[data-testid="stDataFrame"] { border: 1px solid var(--ink); }
+[data-testid="stDataFrame"] * { font-family: var(--face-num) !important; font-size: .78rem !important; }
+[data-testid="stCaptionContainer"] p {
+  font-family: var(--face-num); font-size: .74rem !important;
+  letter-spacing: .06em; color: var(--ink-soft) !important;
+}
+
+/* ── 通知 ─────────────────────────────────────── */
+[data-testid="stAlert"] { border-radius: 0; border-left: 3px solid var(--ink); }
+
+/* 画面幅が狭いとき、銘板の情報を折り返す */
+@media (max-width: 640px) {
+  .nameplate-row { flex-direction: column; gap: 6px; }
+  .nameplate h1 { font-size: 1.08rem; }
+}

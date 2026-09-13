@@ -22,6 +22,24 @@ def filter_readings(readings, device_name=None, date_from=None, date_to=None):
     return result
 
 
+def _field(reading, *names, **kwargs):
+    """新旧どちらのレコード型からも値を取れるようにする。
+
+    確定スキーマ(manager/record.py の Reading)とDB層(manager/storage.py の
+    MeterReading)でフィールド名が違う箇所がある（captured_at / timestamp、
+    reading_id / id、status / stage）。app.py は DB層の型を渡すため、
+    片方の名前だけを直接参照すると AttributeError で画面が落ちる
+    （2026-09-13、履歴画面のグラフとCSV出力で実際に発生した）。
+    名前を順に試し、最初に見つかった値を返す。
+    """
+    default = kwargs.get("default")
+    for name in names:
+        value = reading.get(name) if isinstance(reading, dict) else getattr(reading, name, None)
+        if value is not None:
+            return value
+    return default
+
+
 def export_to_csv(readings, output_path):
     """記録リストをCSVファイルへ出力する。"""
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
@@ -29,7 +47,15 @@ def export_to_csv(readings, output_path):
         # ヘッダー行（確定スキーマに対応）
         writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path"])
         for r in readings:
-            writer.writerow([r.reading_id, r.captured_at, r.device_name, r.value, r.status, r.failure_stage, r.image_path])
+            writer.writerow([
+                _field(r, "reading_id", "id"),
+                _field(r, "captured_at", "timestamp"),
+                _field(r, "device_name"),
+                _field(r, "value"),
+                _field(r, "status", "stage"),
+                _field(r, "failure_stage"),
+                _field(r, "image_path"),
+            ])
 
 
 def export_to_jsonl(readings, output_path):
@@ -66,5 +92,5 @@ def readings_to_series(readings):
     series = {}
     for r in readings:
         if r.value is not None:
-            series[r.captured_at] = r.value
+            series[_field(r, "captured_at", "timestamp")] = r.value
     return series
