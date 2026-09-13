@@ -1,16 +1,27 @@
 import csv  # CSVファイルを読み書きするための標準ライブラリを呼び出す
 import json
+from datetime import datetime, time
 
-def filter_readings(readings, start_date=None, end_date=None, device_name=None):
-    """記録リストを指定条件で絞り込む。"""
-    result = readings
-    if start_date:
-        result = [r for r in result if r.captured_at >= start_date]
-    if end_date:
-        result = [r for r in result if r.captured_at <= end_date]
-    if device_name:
-        result = [r for r in result if r.device_name == device_name]
+
+def filter_readings(readings, device_name=None, date_from=None, date_to=None):
+    """記録リストを機器名と日付範囲で絞り込む。"""
+    start = datetime.combine(date_from, time.min) if date_from else None
+    end = datetime.combine(date_to, time.max) if date_to else None
+
+    result = []
+    for reading in readings:
+        if device_name not in (None, "すべて") and reading.device_name != device_name:
+            continue
+
+        timestamp = datetime.fromisoformat(reading.timestamp)
+        if start and timestamp < start:
+            continue
+        if end and timestamp > end:
+            continue
+        result.append(reading)
     return result
+
+
 def export_to_csv(readings, output_path):
     """記録リストをCSVファイルへ出力する。"""
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
