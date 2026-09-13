@@ -21,7 +21,6 @@ class MainActivity : ComponentActivity() {
             queueStore.recoverInterruptedSends()
         }
 
-        // TODO(SKくん): CAMERA権限などの実行時リクエストを実装する。Sprint 3
         setContent {
             MeterCaptureApp(queueStore)
         }
