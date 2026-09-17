@@ -16,6 +16,10 @@ eval/overlays/
 eval/overlays_*/
 *_result.jpg
 debug_*.jpg
+# manager/image_store.py が原画像をSHA-256名で恒久保存する先(YM-03、2026-09-17配線)。
+# 実運用では企業提供の実機写真がそのまま貯まるため、上記と同じ理由でリポジトリに含めない。
+images/
+readings_export.jsonl
 
 # ── 作業環境・実験の残骸（2026-09-01追加） ────────────────
 # エディタ設定と、Claude Code のローカル設定。個人の環境依存なので共有しない
