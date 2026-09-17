@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 import streamlit as st
-from manager.export import export_to_csv, filter_readings, group_by_device, readings_to_series
+from manager.export import export_to_csv, export_to_jsonl, filter_readings, group_by_device, readings_to_series
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
@@ -178,6 +178,17 @@ with tab2:
                     data=f,
                     file_name="readings_export.csv",
                     mime="text/csv",
+                )
+
+        if st.button("JSONLを書き出す"):
+            jsonl_path = "readings_export.jsonl"
+            export_to_jsonl(manager.get_history(), jsonl_path)
+            with open(jsonl_path, "rb") as f:
+                st.download_button(
+                    label="JSONLを保存",
+                    data=f,
+                    file_name="readings_export.jsonl",
+                    mime="application/x-ndjson",
                 )
     else:
         st.caption("0件 / 全0件")
