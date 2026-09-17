@@ -85,6 +85,26 @@ class TestMeterManager(unittest.TestCase):
         self.assertEqual(ui_output[0]["status"], "FAILED")  # 降順のため先頭はNGデータ
         self.assertEqual(ui_output[1]["status"], "SUCCESS")
 
+    def test_ui_history_uses_saved_status_and_failure_metadata(self):
+        self.manager.storage.save_reading(
+            device_name="GaugeA",
+            image_path="/tmp/low-confidence.jpg",
+            read_result={
+                "stage": "ok",
+                "value": 42.5,
+                "status": "low_confidence",
+                "failure_stage": "scale",
+                "failure_code": "scale_range_unresolved",
+                "failure_detail": "OCR uncertain",
+            },
+        )
+
+        ui_row = self.manager.format_history_for_ui()[0]
+        self.assertEqual("LOW_CONFIDENCE", ui_row["status"])
+        self.assertEqual("scale", ui_row["failure_stage"])
+        self.assertEqual("scale_range_unresolved", ui_row["failure_code"])
+        self.assertEqual("OCR uncertain", ui_row["failure_detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

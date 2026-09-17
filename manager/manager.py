@@ -102,7 +102,16 @@ class MeterManager:
                 "stage": r.stage,
                 "value": r.value,
                 "image_path": r.image_path,
-                "status": "SUCCESS" if r.stage == "ok" else "FAILED",
+                "status": (
+                    {"ok": "SUCCESS", "low_confidence": "LOW_CONFIDENCE", "failed": "FAILED"}.get(
+                        r.status, r.status
+                    )
+                    if r.status is not None
+                    else ("SUCCESS" if r.stage == "ok" else "FAILED")
+                ),
+                "failure_stage": r.failure_stage,
+                "failure_code": r.failure_code,
+                "failure_detail": r.failure_detail,
             }
             for r in readings
         ]

@@ -5,12 +5,14 @@ SR-05までで「監視→パイプライン実行」までは繋がっていた
 """
 import os
 import sys
+import json
+import uuid
 from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager.sidecar import SidecarMetadata
-from manager.storage import Storage
+from manager.storage import Storage, _json_safe
 from manager.record import judge_failure, judge_input_method, judge_status
 
 UNKNOWN_DEVICE = "unknown"
@@ -45,6 +47,19 @@ def ingest_result(
     save_data["failure_stage"] = failure_stage
     save_data["failure_code"] = failure_code
     save_data["failure_detail"] = failure_detail
+    reading_id = str(uuid.uuid4())
+    save_data["reading_id"] = reading_id
+    log_path = None
+    try:
+        os.makedirs("logs", exist_ok=True)
+        log_path = f"logs/{reading_id}.log"
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            json.dump(result, log_file, ensure_ascii=False, default=_json_safe, indent=2)
+    except Exception:
+        log_path = None
+    save_data["log_path"] = log_path
+    # オーバーレイ生成は未実装。YM-06の残作業。
+    save_data["overlay_path"] = None
     if operator_value is not None:
         save_data["operator_value"] = operator_value
     return storage.save_reading(
