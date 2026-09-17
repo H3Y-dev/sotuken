@@ -110,6 +110,47 @@ class TestStorage(unittest.TestCase):
         self.assertEqual(self.storage.get_all_readings()[0].image_sha256, image_sha256)
         self.assertEqual(self.storage.get_processed_hashes(), {image_sha256})
 
+    def test_saves_and_returns_extended_reading_fields(self):
+        self.storage.save_reading(
+            device_name="TestDevice",
+            image_path="/path/to/img.jpg",
+            read_result={
+                "stage": "ok",
+                "value": 10.5,
+                "reading_id": "reading-123",
+                "status": "low_confidence",
+                "input_method": "corrected",
+                "confidence": 0.75,
+                "failure_stage": "scale",
+                "failure_code": "scale_range_unresolved",
+                "failure_detail": "OCR timed out",
+                "pipeline_version": "v1.2.3",
+                "log_path": "logs/reading-123.log",
+                "overlay_path": None,
+            },
+        )
+
+        reading = self.storage.get_all_readings()[0]
+        self.assertEqual("reading-123", reading.reading_id)
+        self.assertEqual("low_confidence", reading.status)
+        self.assertEqual("corrected", reading.input_method)
+        self.assertEqual(0.75, reading.confidence)
+        self.assertEqual("scale", reading.failure_stage)
+        self.assertEqual("scale_range_unresolved", reading.failure_code)
+        self.assertEqual("OCR timed out", reading.failure_detail)
+        self.assertEqual("v1.2.3", reading.pipeline_version)
+        self.assertEqual("logs/reading-123.log", reading.log_path)
+        self.assertIsNone(reading.overlay_path)
+
+    def test_generates_reading_id_when_result_omits_it(self):
+        self.storage.save_reading(
+            device_name="TestDevice",
+            image_path="/path/to/img.jpg",
+            read_result={"stage": "ok", "value": 10.5},
+        )
+
+        self.assertIsNotNone(self.storage.get_all_readings()[0].reading_id)
+
     def test_existing_database_is_migrated_without_losing_rows(self):
         fd, db_path = tempfile.mkstemp()
         os.close(fd)
@@ -149,6 +190,8 @@ class TestStorage(unittest.TestCase):
             finally:
                 conn.close()
             self.assertIn("image_sha256", columns)
+            self.assertIn("reading_id", columns)
+            self.assertIn("status", columns)
         finally:
             os.remove(db_path)
 

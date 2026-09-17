@@ -62,6 +62,24 @@ class TestIngestResult(unittest.TestCase):
 
         self.assertNotIn("ticks", self.storage.get_all_readings()[0].raw_data)
 
+    def test_writes_pipeline_log_and_saves_its_relative_path(self):
+        old_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                os.chdir(temp_dir)
+                ingest_result(
+                    self.storage, "C:/tmp/c.jpg", None,
+                    {"stage": "ok", "value": 3.0, "detail": "kept in log"},
+                )
+                reading = self.storage.get_all_readings()[0]
+                self.assertIsNotNone(reading.reading_id)
+                self.assertEqual(f"logs/{reading.reading_id}.log", reading.log_path)
+                with open(reading.log_path, encoding="utf-8") as log_file:
+                    self.assertIn("kept in log", log_file.read())
+                self.assertIsNone(reading.overlay_path)
+            finally:
+                os.chdir(old_cwd)
+
 
 class TestWatcherToDatabase(unittest.TestCase):
     """監視フォルダに画像が置かれてからDBに残るまでの通し。"""

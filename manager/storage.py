@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
@@ -30,6 +31,16 @@ class MeterReading:
     timestamp: Optional[str] = None
     raw_data: Optional[Dict[str, Any]] = None
     image_sha256: Optional[str] = None
+    reading_id: Optional[str] = None
+    status: Optional[str] = None
+    input_method: Optional[str] = None
+    confidence: Optional[float] = None
+    failure_stage: Optional[str] = None
+    failure_code: Optional[str] = None
+    failure_detail: Optional[str] = None
+    pipeline_version: Optional[str] = None
+    log_path: Optional[str] = None
+    overlay_path: Optional[str] = None
 
 
 class Storage:
@@ -62,13 +73,36 @@ class Storage:
                 stage TEXT NOT NULL,
                 image_path TEXT NOT NULL,
                 raw_data_json TEXT,
-                image_sha256 TEXT
+                image_sha256 TEXT,
+                reading_id TEXT,
+                status TEXT,
+                input_method TEXT,
+                confidence REAL,
+                failure_stage TEXT,
+                failure_code TEXT,
+                failure_detail TEXT,
+                pipeline_version TEXT,
+                log_path TEXT,
+                overlay_path TEXT
             )
             """
         )
         columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
-        if "image_sha256" not in columns:
-            cursor.execute("ALTER TABLE meter_readings ADD COLUMN image_sha256 TEXT")
+        for column, definition in (
+            ("image_sha256", "TEXT"),
+            ("reading_id", "TEXT"),
+            ("status", "TEXT"),
+            ("input_method", "TEXT"),
+            ("confidence", "REAL"),
+            ("failure_stage", "TEXT"),
+            ("failure_code", "TEXT"),
+            ("failure_detail", "TEXT"),
+            ("pipeline_version", "TEXT"),
+            ("log_path", "TEXT"),
+            ("overlay_path", "TEXT"),
+        ):
+            if column not in columns:
+                cursor.execute(f"ALTER TABLE meter_readings ADD COLUMN {column} {definition}")
         conn.commit()
 
     def _init_db(self) -> None:
@@ -82,11 +116,13 @@ class Storage:
         image_path: str,
         read_result: Dict[str, Any],
         image_sha256: Optional[str] = None,
+        reading_id: Optional[str] = None,
     ) -> int:
         """read_meterが返すdictをそのまま受け取って保存する"""
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         value = read_result.get("value")
         stage = read_result.get("stage", "unknown")
+        reading_id = reading_id or read_result.get("reading_id") or str(uuid.uuid4())
         raw_data_json = json.dumps(read_result, ensure_ascii=False, default=_json_safe)
 
         conn = self._get_connection()
@@ -94,10 +130,19 @@ class Storage:
         cursor.execute(
             """
             INSERT INTO meter_readings 
-            (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
+             reading_id, status, input_method, confidence, failure_stage, failure_code,
+             failure_detail, pipeline_version, log_path, overlay_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (now_str, device_name, value, stage, image_path, raw_data_json, image_sha256),
+            (
+                now_str, device_name, value, stage, image_path, raw_data_json, image_sha256,
+                reading_id, read_result.get("status"), read_result.get("input_method"),
+                read_result.get("confidence"), read_result.get("failure_stage"),
+                read_result.get("failure_code"), read_result.get("failure_detail"),
+                read_result.get("pipeline_version"), read_result.get("log_path"),
+                read_result.get("overlay_path"),
+            ),
         )
         conn.commit()
         last_id = cursor.lastrowid
@@ -111,7 +156,9 @@ class Storage:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256
+            SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
+                   reading_id, status, input_method, confidence, failure_stage, failure_code,
+                   failure_detail, pipeline_version, log_path, overlay_path
             FROM meter_readings
             ORDER BY id DESC
             """
@@ -133,6 +180,16 @@ class Storage:
                     image_path=row[5],
                     raw_data=raw_data,
                     image_sha256=row[7],
+                    reading_id=row[8],
+                    status=row[9],
+                    input_method=row[10],
+                    confidence=row[11],
+                    failure_stage=row[12],
+                    failure_code=row[13],
+                    failure_detail=row[14],
+                    pipeline_version=row[15],
+                    log_path=row[16],
+                    overlay_path=row[17],
                 )
             )
         return results
