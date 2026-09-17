@@ -30,9 +30,10 @@ _COLUMN_LABELS = {
     "device_name": "機器名",
     "stage": "判定",
     "value": "読み取り値",
+    "pipeline_version": "版",
     "image_path": "画像",
 }
-_COLUMN_ORDER = ["記録番号", "取込日時", "機器名", "判定", "読み取り値", "画像"]
+_COLUMN_ORDER = ["記録番号", "取込日時", "機器名", "判定", "読み取り値", "版", "画像"]
 
 
 def _to_display_table(rows):
@@ -44,6 +45,8 @@ def _to_display_table(rows):
     if "画像" in df.columns:
         # フルパスは横幅を食うだけで、記録を見る用途では file 名で足りる
         df["画像"] = df["画像"].map(lambda v: os.path.basename(str(v)) if v else "")
+    if "版" in df.columns:
+        df["版"] = df["版"].fillna("")
     return df[[c for c in _COLUMN_ORDER if c in df.columns]]
 
 

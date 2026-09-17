@@ -105,6 +105,20 @@ class TestMeterManager(unittest.TestCase):
         self.assertEqual("scale_range_unresolved", ui_row["failure_code"])
         self.assertEqual("OCR uncertain", ui_row["failure_detail"])
 
+    def test_ui_history_includes_pipeline_version(self):
+        self.manager.storage.save_reading(
+            device_name="GaugeA",
+            image_path="/tmp/reprocessed.jpg",
+            read_result={
+                "stage": "ok",
+                "value": 42.5,
+                "pipeline_version": "v2.1.0",
+            },
+        )
+
+        ui_row = self.manager.format_history_for_ui()[0]
+        self.assertEqual("v2.1.0", ui_row["pipeline_version"])
+
 
 if __name__ == "__main__":
     unittest.main()

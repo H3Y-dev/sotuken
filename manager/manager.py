@@ -101,6 +101,7 @@ class MeterManager:
                 "device_name": r.device_name,
                 "stage": r.stage,
                 "value": r.value,
+                "pipeline_version": r.pipeline_version,
                 "image_path": r.image_path,
                 "status": (
                     {"ok": "SUCCESS", "low_confidence": "LOW_CONFIDENCE", "failed": "FAILED"}.get(
