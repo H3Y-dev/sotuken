@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from manager.sidecar import SidecarMetadata
 from manager.storage import Storage, _json_safe
 from manager.record import judge_failure, judge_input_method, judge_status
+from manager.batch import calculate_file_hash
+from manager.image_store import store_image
 
 UNKNOWN_DEVICE = "unknown"
 
@@ -33,12 +35,24 @@ def ingest_result(
     image_path: str,
     sidecar: Optional[SidecarMetadata],
     result: Dict[str, Any],
-) -> int:
-    """パイプラインの戻り値を1件の記録としてDBへ保存し、行IDを返す。
+    images_dir: str = "images",
+) -> Optional[int]:
+    """パイプライン結果を保存し、重複画像なら None を返す。
 
     失敗した結果（stage が ok 以外）も捨てずに保存する。どの画像がどの段で落ちたかが
     分からなくなると、撮り直しの判断も失敗率の集計もできなくなるため。
     """
+    image_sha256 = None
+    stored_image_path = image_path
+    try:
+        image_sha256 = calculate_file_hash(image_path)
+        if image_sha256 in storage.get_processed_hashes():
+            return None
+        stored_image_path = store_image(image_path, images_dir)
+    except Exception as exc:
+        print(f"[画像保存] ハッシュ計算または恒久保存に失敗: {exc}")
+        image_sha256 = None
+
     save_data = {k: v for k, v in result.items() if k != "ticks"}
     operator_value = getattr(sidecar, "operator_value", None) if sidecar is not None else None
     save_data["status"] = judge_status(result)
@@ -64,6 +78,7 @@ def ingest_result(
         save_data["operator_value"] = operator_value
     return storage.save_reading(
         device_name=device_name_from_sidecar(sidecar),
-        image_path=image_path,
+        image_path=stored_image_path,
         read_result=save_data,
+        image_sha256=image_sha256,
     )

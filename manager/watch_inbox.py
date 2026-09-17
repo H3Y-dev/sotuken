@@ -32,6 +32,11 @@ def main():
         help="取り込み結果を保存するSQLite DBのパス（デフォルト: リポジトリ直下の manager.db）",
     )
     parser.add_argument(
+        "--images-dir",
+        default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "images"),
+        help="原画像の恒久保存先（デフォルト: リポジトリ直下の images/）",
+    )
+    parser.add_argument(
         "--no-save",
         action="store_true",
         help="DBへ保存せず表示だけ行う（従来の動作）",
@@ -66,8 +71,11 @@ def main():
             print("  [メタデータ] なし（サイドカーJSON未配置）")
 
         if storage is not None:
-            row_id = ingest_result(storage, img_path, sidecar, result)
-            print(f"  [DB保存] id={row_id}")
+            row_id = ingest_result(storage, img_path, sidecar, result, args.images_dir)
+            if row_id is None:
+                print("  [DB保存] 重複画像のためスキップしました")
+            else:
+                print(f"  [DB保存] id={row_id}")
 
         stage = result.get("stage")
         val = result.get("value")

@@ -7,6 +7,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager import watcher as watcher_module
+from manager.batch import calculate_file_hash
 from manager.ingest import ingest_result, device_name_from_sidecar
 from manager.sidecar import SidecarMetadata
 from manager.storage import Storage
@@ -80,6 +81,44 @@ class TestIngestResult(unittest.TestCase):
             finally:
                 os.chdir(old_cwd)
 
+    def test_saves_image_hash_and_permanent_image_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "meter.jpg")
+            images_dir = os.path.join(temp_dir, "images")
+            with open(image_path, "wb") as image_file:
+                image_file.write(b"meter-image")
+
+            row_id = ingest_result(
+                self.storage, image_path, None, {"stage": "ok", "value": 3.0}, images_dir,
+            )
+
+            image_hash = calculate_file_hash(image_path)
+            reading = self.storage.get_all_readings()[0]
+            expected_path = os.path.join(images_dir, f"{image_hash}.jpg")
+            self.assertEqual(row_id, reading.id)
+            self.assertEqual(image_hash, reading.image_sha256)
+            self.assertEqual(os.path.abspath(expected_path), reading.image_path)
+            self.assertTrue(os.path.isfile(expected_path))
+
+    def test_skips_duplicate_image_hash(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "meter.jpg")
+            with open(image_path, "wb") as image_file:
+                image_file.write(b"same-meter-image")
+
+            first_row_id = ingest_result(
+                self.storage, image_path, None, {"stage": "ok", "value": 3.0},
+                os.path.join(temp_dir, "images"),
+            )
+            duplicate_row_id = ingest_result(
+                self.storage, image_path, None, {"stage": "ok", "value": 3.0},
+                os.path.join(temp_dir, "images"),
+            )
+
+            self.assertIsNotNone(first_row_id)
+            self.assertIsNone(duplicate_row_id)
+            self.assertEqual(1, len(self.storage.get_all_readings()))
+
 
 class TestWatcherToDatabase(unittest.TestCase):
     """監視フォルダに画像が置かれてからDBに残るまでの通し。"""
@@ -97,15 +136,20 @@ class TestWatcherToDatabase(unittest.TestCase):
                 folder_watcher = watcher_module.FolderWatcher(
                     watch_dir=watch_dir,
                     on_pipeline_result=lambda path, sidecar, result: ingest_result(
-                        storage, path, sidecar, result),
+                        storage, path, sidecar, result,
+                        os.path.join(watch_dir, "images")),
                 )
                 found = folder_watcher.scan_existing()
 
-        self.assertEqual(1, len(found))
-        readings = storage.get_all_readings()
-        self.assertEqual(1, len(readings))
-        self.assertEqual(4.5, readings[0].value)
-        self.assertTrue(readings[0].image_path.endswith("meter.jpg"))
+            readings = storage.get_all_readings()
+            image_hash = calculate_file_hash(image_path)
+            expected_path = os.path.join(watch_dir, "images", f"{image_hash}.jpg")
+            self.assertEqual(1, len(found))
+            self.assertEqual(1, len(readings))
+            self.assertEqual(4.5, readings[0].value)
+            self.assertEqual(image_hash, readings[0].image_sha256)
+            self.assertEqual(os.path.abspath(expected_path), readings[0].image_path)
+            self.assertTrue(os.path.isfile(expected_path))
 
 
 if __name__ == "__main__":
