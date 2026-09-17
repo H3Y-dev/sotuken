@@ -170,6 +170,62 @@ venv\Scripts\python.exe -m streamlit run app.py
 
 画面の配色は `.streamlit/config.toml`、細かい見た目は `ui_style.css` にあります。
 
+### 通しの流れを試す（フォルダ監視での自動取り込み）
+
+`manager/watch_inbox.py` は、監視フォルダ（デフォルトは `incoming/`）に置かれた画像を自動で
+検出し、パイプラインによる読み取りとDB保存まで一気に行うスクリプトです。
+撮影→送出→取り込み→読み取り→保存→一覧の通しの流れにおける、PC側の取り込み口にあたります。
+
+```powershell
+venv\Scripts\python.exe manager\watch_inbox.py
+```
+
+| オプション | 意味 | デフォルト値 |
+|---|---|---|
+| `--watch-dir` | 監視対象フォルダ | リポジトリ直下の `incoming/` |
+| `--db` | 取り込み結果を保存するSQLite DBのパス | リポジトリ直下の `manager.db` |
+| `--images-dir` | 原画像の恒久保存先 | リポジトリ直下の `images/` |
+| `--use-vlm` | VLM（Ollama）を使う場合に指定（デフォルトは無効） | 無効 |
+| `--no-save` | DBへ保存せず表示のみ行う（従来の動作） | — |
+
+- 監視フォルダに画像（`.jpg`/`.jpeg`/`.png`）を置くと自動検出され、パイプラインで読み取りが
+  実行されてDBへ保存されます。VLMも使う場合は起動時に`--use-vlm`を付けてください。
+- 画像と**同じ名前のサイドカーJSON**（`example.jpg` なら `example.json`）を一緒に置くと、
+  `local_id`/`captured_at`/`device_name`/`operator_value`/`operator_note` の各フィールドが
+  メタデータとして保存されます。どの項目も省略可能で、サイドカーJSONが無くても
+  画像だけで取り込めます（その場合の機器名は`unknown`になります）。
+- 保存された原画像は `images/` フォルダに**SHA-256内容ハッシュ名**（`<内容ハッシュ>.jpg`等）で
+  恒久保存されます。**同一内容（同一ハッシュ）の画像は重複排除され、2回目以降は取り込まれません**
+  （コンソールに「重複画像のためスキップしました」と表示されます）。
+- 起動時に監視フォルダ内に既にある画像も、まとめて取り込みます。
+- 取り込んだ結果は `app.py`（Web UI）の「記録」タブから一覧を確認できます
+  （両方ともデフォルトで同じ `manager.db` を読みます）。
+- 停止は `Ctrl+C` です。
+
+### 保存済み画像を別のパイプライン版で再処理する
+
+`manager/reprocess.py` は、`images/` に保存済みの原画像を指定したパイプライン版で一括再処理し、
+結果を新しいレコードとして追加するコマンドです。パイプラインを改良した前後で結果を比較したい
+ときに使います。
+
+```powershell
+# リポジトリ直下で実行。--pipeline-version は必須
+venv\Scripts\python.exe manager\reprocess.py --pipeline-version v1
+```
+
+| オプション | 意味 | デフォルト値 |
+|---|---|---|
+| `--images-dir` | 再処理する原画像フォルダ | リポジトリ直下の `images` |
+| `--db` | 保存先SQLite DBのパス | リポジトリ直下の `manager.db` |
+| `--pipeline-version` | 保存するパイプライン版（**必須**） | なし（指定必須） |
+| `--use-vlm` | VLM（Ollama）を使用する（デフォルトは無効） | 無効 |
+
+- `--images-dir` 内の `.jpg`/`.jpeg`/`.png` を1枚ずつ再処理します。
+- **既存レコードは上書きしません。** 再処理の結果は新しいレコードとして追記され、
+  `pipeline_version` 列に指定した版が記録されます。同じ画像に対する複数版の結果が
+  履歴として並ぶことになります。
+- 終了時に成功した件数と、再処理に失敗した画像のパスが表示されます。
+
 ---
 
 > 旧スクリプト（`ocr_meter.py`, `paddletest.py`）専用の依存関係（`pytesseract`等）は
