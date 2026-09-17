@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from manager.ingest import ingest_result
 from manager.reprocess import reprocess_all, reprocess_image
 from manager.storage import Storage
 
@@ -80,6 +81,42 @@ class TestReprocess(unittest.TestCase):
             self.assertEqual(1, succeeded)
             self.assertEqual([failed_path], failed)
             self.assertEqual(1, len(self.storage.get_all_readings()))
+
+    def test_reprocess_adds_new_version_but_normal_reingest_still_dedupes(self):
+        """YM-07: 再処理は新版レコードを追加でき、通常取り込みの重複排除は壊れないことを保証する。"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "meter.jpg")
+            with open(image_path, "wb") as image_file:
+                image_file.write(b"ym-07-image")
+
+            with mock.patch(
+                "manager.ingest.calculate_file_hash", return_value="dummyhash"
+            ), mock.patch(
+                "manager.ingest.store_image", return_value=image_path
+            ):
+                first_id = ingest_result(
+                    self.storage, image_path, None, {"stage": "ok", "value": 10.0}
+                )
+                # 通常取り込みで同一画像を再投入 → 重複排除でスキップされる(None)
+                skipped = ingest_result(
+                    self.storage, image_path, None, {"stage": "ok", "value": 10.0}
+                )
+
+            with mock.patch("manager.reprocess.cv2.imdecode", return_value=object()), mock.patch(
+                "meter_pipeline.read_meter", return_value={"stage": "ok", "value": 11.0}
+            ), mock.patch(
+                "manager.reprocess.calculate_file_hash", return_value="dummyhash"
+            ):
+                reprocessed_id = reprocess_image(self.storage, image_path, "v9")
+
+            self.assertIsNotNone(first_id)
+            self.assertIsNone(skipped)
+            self.assertIsNotNone(reprocessed_id)
+
+            readings = self.storage.get_all_readings()
+            self.assertEqual(2, len(readings))
+            self.assertEqual({None, "v9"}, {reading.pipeline_version for reading in readings})
+            self.assertEqual(1, len({reading.image_sha256 for reading in readings}))
 
 
 if __name__ == "__main__":
