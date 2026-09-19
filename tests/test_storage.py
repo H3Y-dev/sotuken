@@ -110,6 +110,38 @@ class TestStorage(unittest.TestCase):
         self.assertEqual(self.storage.get_all_readings()[0].image_sha256, image_sha256)
         self.assertEqual(self.storage.get_processed_hashes(), {image_sha256})
 
+    def test_save_and_get_image_truth(self):
+        self.storage.save_image_truth(
+            image_sha256="a" * 64,
+            operator_value=12.5,
+            operator_note="目視確認済み",
+            scale_min=0.0,
+            scale_max=20.0,
+            entered_at="2026-09-20T12:00:00",
+        )
+
+        truths = self.storage.get_all_image_truths()
+
+        self.assertEqual(1, len(truths))
+        self.assertEqual("a" * 64, truths[0].image_sha256)
+        self.assertEqual(12.5, truths[0].operator_value)
+        self.assertEqual("目視確認済み", truths[0].operator_note)
+        self.assertEqual(0.0, truths[0].scale_min)
+        self.assertEqual(20.0, truths[0].scale_max)
+        self.assertEqual("2026-09-20T12:00:00", truths[0].entered_at)
+
+    def test_save_image_truth_replaces_same_image_hash(self):
+        image_sha256 = "b" * 64
+        self.storage.save_image_truth(image_sha256, operator_value=1.0)
+        self.storage.save_image_truth(image_sha256, scale_min=0.0, scale_max=5.0)
+
+        truths = self.storage.get_all_image_truths()
+
+        self.assertEqual(1, len(truths))
+        self.assertIsNone(truths[0].operator_value)
+        self.assertEqual(0.0, truths[0].scale_min)
+        self.assertEqual(5.0, truths[0].scale_max)
+
     def test_saves_and_returns_extended_reading_fields(self):
         self.storage.save_reading(
             device_name="TestDevice",

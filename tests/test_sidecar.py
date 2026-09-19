@@ -35,6 +35,8 @@ class TestSidecar(unittest.TestCase):
             "device_name": "圧力計A",
             "operator_value": 2.5,
             "operator_note": "正常稼働中",
+            "scale_min": "0.0",
+            "scale_max": 10,
         }
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
@@ -46,6 +48,8 @@ class TestSidecar(unittest.TestCase):
         self.assertEqual(metadata.device_name, "圧力計A")
         self.assertEqual(metadata.operator_value, 2.5)
         self.assertEqual(metadata.operator_note, "正常稼働中")
+        self.assertEqual(metadata.scale_min, 0.0)
+        self.assertEqual(metadata.scale_max, 10.0)
 
     def test_load_sidecar_with_null_and_missing_values(self):
         img_path = os.path.join(self.temp_dir.name, "meter_null.jpg")
@@ -70,6 +74,8 @@ class TestSidecar(unittest.TestCase):
         self.assertIsNone(metadata.device_name)
         self.assertIsNone(metadata.operator_value)
         self.assertIsNone(metadata.operator_note)
+        self.assertIsNone(metadata.scale_min)
+        self.assertIsNone(metadata.scale_max)
 
     def test_load_sidecar_missing_json_file(self):
         img_path = os.path.join(self.temp_dir.name, "no_json.jpg")

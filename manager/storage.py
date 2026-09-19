@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
+from manager.record import ImageTruth
+
 
 def _json_safe(obj):
     """json.dumps が扱えない値を、保存できる形へ落とす。
@@ -87,6 +89,18 @@ class Storage:
             )
             """
         )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS image_truths (
+                image_sha256 TEXT PRIMARY KEY,
+                operator_value REAL,
+                operator_note TEXT,
+                scale_min REAL,
+                scale_max REAL,
+                entered_at TEXT NOT NULL
+            )
+            """
+        )
         columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
         for column, definition in (
             ("image_sha256", "TEXT"),
@@ -150,6 +164,32 @@ class Storage:
             conn.close()
         return last_id
 
+    def save_image_truth(
+        self,
+        image_sha256: str,
+        operator_value: Optional[float] = None,
+        operator_note: Optional[str] = None,
+        scale_min: Optional[float] = None,
+        scale_max: Optional[float] = None,
+        entered_at: Optional[str] = None,
+    ) -> None:
+        """画像ハッシュに対応する教師データを保存する。"""
+        if entered_at is None:
+            entered_at = datetime.now().isoformat()
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO image_truths
+            (image_sha256, operator_value, operator_note, scale_min, scale_max, entered_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (image_sha256, operator_value, operator_note, scale_min, scale_max, entered_at),
+        )
+        conn.commit()
+        if not self._conn:
+            conn.close()
+
     def get_all_readings(self) -> List[MeterReading]:
         """保存されているすべての記録を取得する"""
         conn = self._get_connection()
@@ -193,6 +233,32 @@ class Storage:
                 )
             )
         return results
+
+    def get_all_image_truths(self) -> List[ImageTruth]:
+        """保存されているすべての画像教師データを取得する。"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT image_sha256, operator_value, operator_note, scale_min, scale_max, entered_at
+            FROM image_truths
+            """
+        )
+        rows = cursor.fetchall()
+        if not self._conn:
+            conn.close()
+
+        return [
+            ImageTruth(
+                image_sha256=row[0],
+                operator_value=row[1],
+                operator_note=row[2],
+                scale_min=row[3],
+                scale_max=row[4],
+                entered_at=row[5],
+            )
+            for row in rows
+        ]
 
     def get_processed_hashes(self) -> Set[str]:
         """保存済み画像のSHA-256ハッシュ一覧を取得する"""

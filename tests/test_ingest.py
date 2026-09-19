@@ -100,6 +100,42 @@ class TestIngestResult(unittest.TestCase):
             self.assertEqual(os.path.abspath(expected_path), reading.image_path)
             self.assertTrue(os.path.isfile(expected_path))
 
+    def test_saves_image_truth_when_sidecar_has_truth_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "meter.jpg")
+            with open(image_path, "wb") as image_file:
+                image_file.write(b"truth-image")
+
+            ingest_result(
+                self.storage,
+                image_path,
+                SidecarMetadata(scale_min=0.0, scale_max=10.0),
+                {"stage": "ok", "value": 3.0},
+                os.path.join(temp_dir, "images"),
+            )
+
+            truths = self.storage.get_all_image_truths()
+            self.assertEqual(1, len(truths))
+            self.assertEqual(calculate_file_hash(image_path), truths[0].image_sha256)
+            self.assertEqual(0.0, truths[0].scale_min)
+            self.assertEqual(10.0, truths[0].scale_max)
+
+    def test_does_not_save_image_truth_when_sidecar_has_no_truth_values(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "meter.jpg")
+            with open(image_path, "wb") as image_file:
+                image_file.write(b"empty-truth-image")
+
+            ingest_result(
+                self.storage,
+                image_path,
+                SidecarMetadata(),
+                {"stage": "ok", "value": 3.0},
+                os.path.join(temp_dir, "images"),
+            )
+
+            self.assertEqual([], self.storage.get_all_image_truths())
+
     def test_skips_duplicate_image_hash(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             image_path = os.path.join(temp_dir, "meter.jpg")

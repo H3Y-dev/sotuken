@@ -15,6 +15,8 @@ class SidecarMetadata:
     device_name: Optional[str] = None
     operator_value: Optional[float] = None
     operator_note: Optional[str] = None
+    scale_min: Optional[float] = None
+    scale_max: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -72,10 +74,28 @@ def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
     if operator_note is not None:
         operator_note = str(operator_note)
 
+    raw_scale_min = data.get("scale_min")
+    scale_min: Optional[float] = None
+    if raw_scale_min is not None:
+        try:
+            scale_min = float(raw_scale_min)
+        except (ValueError, TypeError):
+            scale_min = None
+
+    raw_scale_max = data.get("scale_max")
+    scale_max: Optional[float] = None
+    if raw_scale_max is not None:
+        try:
+            scale_max = float(raw_scale_max)
+        except (ValueError, TypeError):
+            scale_max = None
+
     return SidecarMetadata(
         local_id=local_id,
         captured_at=captured_at,
         device_name=device_name,
         operator_value=operator_value,
         operator_note=operator_note,
+        scale_min=scale_min,
+        scale_max=scale_max,
     )

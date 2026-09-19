@@ -76,6 +76,19 @@ def ingest_result(
     save_data["overlay_path"] = None
     if operator_value is not None:
         save_data["operator_value"] = operator_value
+    operator_note = getattr(sidecar, "operator_note", None) if sidecar is not None else None
+    scale_min = getattr(sidecar, "scale_min", None) if sidecar is not None else None
+    scale_max = getattr(sidecar, "scale_max", None) if sidecar is not None else None
+    if image_sha256 is not None and any(
+        value is not None for value in (operator_value, operator_note, scale_min, scale_max)
+    ):
+        storage.save_image_truth(
+            image_sha256=image_sha256,
+            operator_value=operator_value,
+            operator_note=operator_note,
+            scale_min=scale_min,
+            scale_max=scale_max,
+        )
     return storage.save_reading(
         device_name=device_name_from_sidecar(sidecar),
         image_path=stored_image_path,
