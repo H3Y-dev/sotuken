@@ -191,9 +191,15 @@ venv\Scripts\python.exe manager\watch_inbox.py
 - 監視フォルダに画像（`.jpg`/`.jpeg`/`.png`）を置くと自動検出され、パイプラインで読み取りが
   実行されてDBへ保存されます。VLMも使う場合は起動時に`--use-vlm`を付けてください。
 - 画像と**同じ名前のサイドカーJSON**（`example.jpg` なら `example.json`）を一緒に置くと、
-  `local_id`/`captured_at`/`device_name`/`operator_value`/`operator_note` の各フィールドが
-  メタデータとして保存されます。どの項目も省略可能で、サイドカーJSONが無くても
+  `local_id`/`captured_at`/`device_name`/`operator_value`/`operator_note`/`scale_min`/`scale_max`
+  の各フィールドがメタデータとして保存されます。どの項目も省略可能で、サイドカーJSONが無くても
   画像だけで取り込めます（その場合の機器名は`unknown`になります）。
+- `operator_value`/`scale_min`/`scale_max`のいずれかを入れると、その画像の**現場真値**として
+  `image_truths`テーブルにも保存されます（同じ画像を再取り込みすると上書き）。これは
+  「自動読み取りがどれだけ合っていたか」を後から検証するためのデータで、`meter_readings`
+  （自動読み取り結果）とは別のテーブルです。
+- 中間検出結果（目盛り・針・中心点等）を描き込んだオーバーレイ画像も`overlays/`フォルダに
+  自動保存され、`app.py`の記録一覧で行を選ぶと表示されます（`--overlays-dir`で保存先変更可）。
 - 保存された原画像は `images/` フォルダに**SHA-256内容ハッシュ名**（`<内容ハッシュ>.jpg`等）で
   恒久保存されます。**同一内容（同一ハッシュ）の画像は重複排除され、2回目以降は取り込まれません**
   （コンソールに「重複画像のためスキップしました」と表示されます）。
@@ -225,6 +231,33 @@ venv\Scripts\python.exe manager\reprocess.py --pipeline-version v1
   `pipeline_version` 列に指定した版が記録されます。同じ画像に対する複数版の結果が
   履歴として並ぶことになります。
 - 終了時に成功した件数と、再処理に失敗した画像のパスが表示されます。
+
+### 現場真値をgroundtruth.jsonへ書き出す / 精度を評価する
+
+`manager/groundtruth.py`は、取り込み時に保存された現場真値（`image_truths`テーブル）を
+まとめてJSONへ書き出すコマンドです。
+
+```powershell
+venv\Scripts\python.exe manager\groundtruth.py --output groundtruth.json
+```
+
+`manager/groundtruth_eval.py`は、その現場真値と自動読み取り結果（`meter_readings`）を
+画像ハッシュで突き合わせ、`evaluate.py`と同じ指標（引用誤差[%FS]・許容誤差内件数など）で
+精度を集計するコマンドです。開発時用の`evaluate.py`が手作りのgroundtruth.jsonを使うのに対し、
+こちらは**実際の運用で取り込まれたデータ**をそのまま評価できます。
+
+```powershell
+venv\Scripts\python.exe manager\groundtruth_eval.py
+```
+
+| オプション | 意味 | デフォルト値 |
+|---|---|---|
+| `--db` | 読み込むSQLite DBのパス | リポジトリ直下の `manager.db` |
+| `--tolerance` | 許容する引用誤差（%FS） | `2.5`（JIS 2.5級相当） |
+| `-o` / `--output` | 評価結果JSONの出力先 | 省略時は標準出力の集計のみ |
+
+- 現場真値（`operator_value`/`scale_min`/`scale_max`）がすべて揃っている画像だけが評価対象になります。
+- 評価対象が0件の場合はエラーにせず「評価対象のImageTruthがありません」と表示します。
 
 ---
 
