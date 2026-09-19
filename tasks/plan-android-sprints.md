@@ -417,10 +417,14 @@ venv\Scripts\python.exe evaluate.py eval/groundtruth.json --no-vlm --scope round
 **内容:** 読み取りごとの詳細ログと中間オーバーレイを規約どおり保存し、レコードのパスへ記録する。
 
 **受け入れ条件:**
-- [ ] `logs/<reading_id>.log` が作られ、レコードの `log_path` と一致する
-- [ ] オーバーレイがある結果では `overlays/<reading_id>.png` と `overlay_path` が一致する
+- [x] `logs/<reading_id>.log` が作られ、レコードの `log_path` と一致する
+- [x] オーバーレイがある結果では `overlays/<reading_id>.jpg` と `overlay_path` が一致する
+      （2026-09-20完了。拡張子は計画時点の想定`.png`ではなく`.jpg`で実装した。
+      理由や実装箇所は`卒研/進捗ログ.md`2026-09-20深夜の節を参照）
 
-**検証:** 1件処理後にログ、オーバーレイ、レコードの3つを目視照合する。  
+**検証:** 1件処理後にログ、オーバーレイ、レコードの3つを目視照合する。
+2026-09-20、実データ1件で`watch_inbox.py`実起動しoverlay_pathがDBに正しく
+入ることを確認済み（`卒研/進捗ログ.md`参照）。
 **依存:** SR-05, YM-02  
 **担当:** YMさん  
 **想定スプリント数:** 1
