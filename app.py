@@ -166,11 +166,21 @@ with tab2:
         filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
 
         st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
-        st.dataframe(
+        selection_event = st.dataframe(
             _to_display_table(filtered_history_data),
             use_container_width=True,
             hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
         )
+        selected_rows = selection_event.selection.rows if selection_event.selection else []
+        if selected_rows:
+            selected_row = filtered_history_data[selected_rows[0]]
+            overlay_path = selected_row.get("overlay_path")
+            if overlay_path and os.path.exists(overlay_path):
+                st.image(overlay_path, caption="検出結果オーバーレイ", use_container_width=True)
+            else:
+                st.caption("この記録にはオーバーレイ画像がありません。")
 
         if st.button("CSVを書き出す"):
             csv_path = "readings_export.csv"

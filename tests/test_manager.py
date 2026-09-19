@@ -119,6 +119,20 @@ class TestMeterManager(unittest.TestCase):
         ui_row = self.manager.format_history_for_ui()[0]
         self.assertEqual("v2.1.0", ui_row["pipeline_version"])
 
+    def test_ui_history_includes_overlay_path(self):
+        self.manager.storage.save_reading(
+            device_name="GaugeA",
+            image_path="/tmp/with-overlay.jpg",
+            read_result={
+                "stage": "ok",
+                "value": 42.5,
+                "overlay_path": "overlays/with-overlay.jpg",
+            },
+        )
+
+        ui_row = self.manager.format_history_for_ui()[0]
+        self.assertEqual("overlays/with-overlay.jpg", ui_row["overlay_path"])
+
 
 if __name__ == "__main__":
     unittest.main()

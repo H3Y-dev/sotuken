@@ -103,6 +103,7 @@ class MeterManager:
                 "value": r.value,
                 "pipeline_version": r.pipeline_version,
                 "image_path": r.image_path,
+                "overlay_path": r.overlay_path,
                 "status": (
                     {"ok": "SUCCESS", "low_confidence": "LOW_CONFIDENCE", "failed": "FAILED"}.get(
                         r.status, r.status
