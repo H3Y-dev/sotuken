@@ -4,6 +4,9 @@ import tempfile
 import unittest
 from unittest import mock
 
+import cv2
+import numpy as np
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager import watcher as watcher_module
@@ -54,6 +57,33 @@ class TestIngestResult(unittest.TestCase):
         self.assertIsNone(readings[0].value)
         self.assertEqual("needle_not_found", readings[0].stage)
         self.assertEqual("unknown", readings[0].device_name)
+        self.assertIsNone(readings[0].overlay_path)
+
+    def test_saves_overlay_for_successful_result(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            image_path = os.path.join(temp_dir, "meter.jpg")
+            image = np.zeros((30, 30, 3), dtype=np.uint8)
+            encoded_ok, encoded = cv2.imencode(".jpg", image)
+            self.assertTrue(encoded_ok)
+            encoded.tofile(image_path)
+
+            ingest_result(
+                self.storage,
+                image_path,
+                None,
+                {
+                    "stage": "ok",
+                    "value": 3.0,
+                    "center": (15, 15),
+                    "ticks": [{"centroid": (20, 15), "is_major": False}],
+                },
+                os.path.join(temp_dir, "images"),
+                os.path.join(temp_dir, "overlays"),
+            )
+
+            reading = self.storage.get_all_readings()[0]
+            self.assertIsNotNone(reading.overlay_path)
+            self.assertTrue(os.path.isfile(os.path.abspath(reading.overlay_path)))
 
     def test_drops_ticks_from_saved_payload(self):
         ingest_result(

@@ -16,6 +16,7 @@ from manager.storage import Storage, _json_safe
 from manager.record import judge_failure, judge_input_method, judge_status
 from manager.batch import calculate_file_hash
 from manager.image_store import store_image
+from manager.overlay import imread_ja, save_overlay
 
 UNKNOWN_DEVICE = "unknown"
 
@@ -36,6 +37,7 @@ def ingest_result(
     sidecar: Optional[SidecarMetadata],
     result: Dict[str, Any],
     images_dir: str = "images",
+    overlays_dir: str = "overlays",
 ) -> Optional[int]:
     """パイプライン結果を保存し、重複画像なら None を返す。
 
@@ -72,8 +74,13 @@ def ingest_result(
     except Exception:
         log_path = None
     save_data["log_path"] = log_path
-    # オーバーレイ生成は未実装。YM-06の残作業。
     save_data["overlay_path"] = None
+    if save_data["status"] != "failed":
+        try:
+            image = imread_ja(stored_image_path)
+            save_data["overlay_path"] = save_overlay(image, result, overlays_dir, reading_id)
+        except Exception:
+            pass
     if operator_value is not None:
         save_data["operator_value"] = operator_value
     operator_note = getattr(sidecar, "operator_note", None) if sidecar is not None else None

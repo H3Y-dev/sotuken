@@ -37,6 +37,11 @@ def main():
         help="原画像の恒久保存先（デフォルト: リポジトリ直下の images/）",
     )
     parser.add_argument(
+        "--overlays-dir",
+        default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "overlays"),
+        help="中間オーバーレイ画像の保存先（デフォルト: リポジトリ直下の overlays/）",
+    )
+    parser.add_argument(
         "--no-save",
         action="store_true",
         help="DBへ保存せず表示だけ行う（従来の動作）",
@@ -71,7 +76,7 @@ def main():
             print("  [メタデータ] なし（サイドカーJSON未配置）")
 
         if storage is not None:
-            row_id = ingest_result(storage, img_path, sidecar, result, args.images_dir)
+            row_id = ingest_result(storage, img_path, sidecar, result, args.images_dir, args.overlays_dir)
             if row_id is None:
                 print("  [DB保存] 重複画像のためスキップしました")
             else:

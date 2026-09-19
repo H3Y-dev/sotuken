@@ -48,18 +48,11 @@ import os
 import sys
 
 import cv2
-import numpy as np
 
 import meter_pipeline
-import meter_reader
-import tick_detect
+from manager.overlay import draw_detection_overlay, imread_ja
 
 DEFAULT_OUT_DIR = 'eval/overlays'
-
-
-def imread_ja(path):
-    """全角パス対応の画像読み込み"""
-    return cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)
 
 
 def imwrite_ja(path, img):
@@ -95,45 +88,7 @@ def render(entry, base_dir, use_vlm):
     # center/zero_pt/full_pt等の座標は、read_meter内部でクロップ・向き補正
     # した「後」の画像を基準にしている。呼び出し元のimg（クロップ・回転前）
     # にそのまま描画すると座標がズレるため、processed_imgを使う。
-    img = result.get('processed_img')
-    if img is None:
-        img = imread_ja(path)
-    out = img.copy()
-
-    center = result.get('center')
-    if center is not None:
-        # pipeline が実際に使った目盛り（主目盛りの付け直し済み）を描く。
-        # 取り直すと主目盛りの判定が実際の読み取りとずれて、目視検証が
-        # 本番と違うものを見ることになる。
-        ticks = result.get('ticks')
-        if not ticks:
-            try:
-                ticks = tick_detect.detect_scale_ticks(
-                    tick_detect.apply_clahe(img, clip_limit=2.0), center)
-            except Exception:
-                ticks = []
-        for t in ticks:
-            pt = (int(t['centroid'][0]), int(t['centroid'][1]))
-            color = (255, 0, 255) if t.get('is_major') else (0, 255, 0)
-            # 検出値と格子からの推定値を目視で区別し、誤った外挿を見逃さない。
-            thickness = 2 if t.get('synthetic') else -1
-            cv2.circle(out, pt, 7, color, thickness)
-
-        cv2.drawMarker(out, tuple(center), (0, 255, 255),
-                       cv2.MARKER_CROSS, 46, 4)
-
-        try:
-            needle = meter_reader.detect_needle(img, center)
-        except Exception:
-            needle = None
-        if needle is not None:
-            x1, y1, x2, y2 = needle['line']
-            cv2.line(out, (x1, y1), (x2, y2), (0, 0, 255), 4)
-
-    if result.get('zero_pt') is not None:
-        cv2.circle(out, tuple(result['zero_pt']), 20, (0, 200, 255), 4)
-    if result.get('full_pt') is not None:
-        cv2.circle(out, tuple(result['full_pt']), 20, (255, 0, 255), 4)
+    out = draw_detection_overlay(img, result)
 
     span = abs(entry['max_value'] - entry['min_value'])
     value = result.get('value')
