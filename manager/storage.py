@@ -123,6 +123,8 @@ class Storage:
         """テーブルが存在しない場合は作成する"""
         with self._get_connection() as conn:
             self._init_db_with_conn(conn)
+        if not self._conn:
+            conn.close()
 
     def save_reading(
         self,
