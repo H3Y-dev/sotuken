@@ -10,23 +10,13 @@ if current_dir not in sys.path:
 # 2. manager パッケージから MeterManager をインポート
 from manager.manager import MeterManager
 
-# 3. read_meter のインポート（未実装時のモック対応）
-try:
-    from reader import read_meter
-except ImportError:
-    try:
-        from read_meter import read_meter
-    except ImportError:
+# 3. manager.pipeline_caller から本物の読み取りパイプラインを呼ぶ
+from manager.pipeline_caller import execute_pipeline
 
-        def read_meter(image_path: str):
-            print(f"[INFO] Mock read_meter Executing for: {image_path}")
-            return {
-                "stage": "ok",
-                "value": 42.5,
-                "ratio": 0.425,
-                "angle_deg": 120.0,
-                "error": None,
-            }
+
+def read_meter(image_path: str, use_vlm: bool = False):
+    """画像からのメーター読み取り要求をパイプライン(meter_pipeline)へ渡す。"""
+    return execute_pipeline(image_path, use_vlm=use_vlm)
 
 
 def main():
@@ -64,7 +54,7 @@ def main():
     manager = MeterManager(db_path=args.db)
 
     if args.image:
-        if not os.path.exists(args.image) and "Mock" not in str(read_meter):
+        if not os.path.exists(args.image):
             print(f"[ERROR] 指定された画像ファイルが存在しません: {args.image}")
             sys.exit(1)
 
