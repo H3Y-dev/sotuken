@@ -83,6 +83,7 @@ class TestGroundtruthEval(unittest.TestCase):
                 check=True,
                 capture_output=True,
                 encoding="utf-8",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             )
 
             self.assertIn("評価対象: 2 件", result.stdout)
@@ -104,6 +105,7 @@ class TestGroundtruthEval(unittest.TestCase):
                 check=True,
                 capture_output=True,
                 encoding="utf-8",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             )
 
             self.assertIn("評価対象のImageTruthがありません", result.stdout)
