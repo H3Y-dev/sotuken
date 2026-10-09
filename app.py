@@ -118,6 +118,7 @@ with tab1:
                 reader_func=read_meter,
                 threshold_max=th_max,
                 threshold_min=th_min,
+                overlays_dir="overlays",
             )
 
             st.success("読み取りました。")
@@ -134,6 +135,12 @@ with tab1:
                 st.error(f"設定した範囲を外れています: {res['alert_message']}")
             else:
                 st.info("測定値は設定した範囲内です。")
+
+            # どこを中心・目盛り・針として検出したかを、その場で確かめられるようにする
+            if res["overlay_path"] and os.path.exists(res["overlay_path"]):
+                st.image(res["overlay_path"], caption="検出結果オーバーレイ", use_container_width=True)
+            else:
+                st.caption("検出結果のオーバーレイ画像は作れませんでした（中心を検出できなかったため）。")
 
             if os.path.exists(temp_path):
                 os.remove(temp_path)
