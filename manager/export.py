@@ -65,15 +65,12 @@ def export_to_jsonl(readings, output_path):
         "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
         "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
     ]
+    # DB層(MeterReading)は名前が違う項目がある。CSVと同じく旧名からも値を取る
+    # （これが無いと app.py から書き出した JSONL は撮影日時が全件 null になっていた）
+    aliases = {"reading_id": ("id",), "captured_at": ("timestamp",), "status": ("stage",)}
     with open(output_path, "w", encoding="utf-8") as f:
         for r in readings:
-            row_dict = {}
-            for field in fields:
-                if isinstance(r, dict):
-                    val = r.get(field, None)
-                else:
-                    val = getattr(r, field, None)
-                row_dict[field] = val
+            row_dict = {field: _field(r, field, *aliases.get(field, ())) for field in fields}
             f.write(json.dumps(row_dict, ensure_ascii=False) + "\n")
 
 def group_by_device(readings):

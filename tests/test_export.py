@@ -155,6 +155,21 @@ class TestExportToJsonl(unittest.TestCase):
         if os.path.exists(self.test_file):
             os.remove(self.test_file)
 
+    def test_export_to_jsonl_reads_db_layer_names(self):
+        """DB層の名前(id / timestamp / stage)しか持たない記録でも、日時・判定が null にならないこと"""
+        from types import SimpleNamespace
+        r = SimpleNamespace(id=7, timestamp="2026-10-09 10:41:31", stage="ok",
+                            device_name="Gauge_01", value=30.66)
+
+        export_to_jsonl([r], self.test_file)
+
+        with open(self.test_file, "r", encoding="utf-8") as f:
+            record = json.loads(f.readline())
+        self.assertEqual(record["reading_id"], 7)
+        self.assertEqual(record["captured_at"], "2026-10-09 10:41:31")
+        self.assertEqual(record["status"], "ok")
+        self.assertIsNone(record["unit"])
+
     def test_export_to_jsonl(self):
         schema_fields = [
             "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
