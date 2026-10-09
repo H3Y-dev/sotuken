@@ -29,14 +29,32 @@ class MeterManager:
         threshold_min: Optional[float] = None,
         use_vlm: bool = False,
         image_sha256: Optional[str] = None,
+        overlays_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """認識処理を実行し、閾値判定を付与した結果を返却"""
+        """認識処理を実行し、閾値判定を付与した結果を返却
+
+        overlays_dir を渡すと、検出結果のオーバーレイ画像をそこへ保存し、
+        記録の overlay_path に残す（フォルダ取り込みの ingest と同じ保存先・形式）。
+        """
         try:
             read_result: Dict[str, Any] = reader_func(image_path, use_vlm=use_vlm)
         except TypeError:
             read_result: Dict[str, Any] = reader_func(image_path)
 
+        overlay_path = None
+        if overlays_dir is not None:
+            # 描画にパイプライン側のモジュールを使うので、必要なときだけ読み込む
+            import uuid
+            from overlay import imread_ja, save_overlay
+            try:
+                overlay_path = save_overlay(
+                    imread_ja(image_path), read_result, overlays_dir, str(uuid.uuid4()))
+            except Exception:
+                overlay_path = None
+
         save_data = {k: v for k, v in read_result.items() if k != "ticks"}
+        if overlay_path is not None:
+            save_data["overlay_path"] = overlay_path
 
         row_id = self.storage.save_reading(
             device_name=device_name,
@@ -71,6 +89,7 @@ class MeterManager:
             "stage": read_result.get("stage", "unknown"),
             "is_alert": is_alert,
             "alert_message": alert_message,
+            "overlay_path": overlay_path,
         }
 
     def get_history(self) -> List[MeterReading]:

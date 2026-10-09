@@ -36,6 +36,34 @@ class TestMeterManager(unittest.TestCase):
         self.assertEqual(reading.value, 50.0)
         self.assertEqual(reading.stage, "ok")
 
+    def test_process_image_saves_overlay_when_dir_given(self):
+        """overlays_dir を渡すと、オーバーレイ画像を保存し記録に overlay_path を残すこと"""
+        import os
+        import tempfile
+
+        import cv2
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = os.path.join(tmp, "gauge.jpg")
+            cv2.imwrite(image_path, np.full((120, 120, 3), 255, dtype=np.uint8))
+            overlays_dir = os.path.join(tmp, "overlays")
+
+            def reader(img_path):
+                return {"stage": "ok", "value": 30.0, "center": (60, 60), "error": None}
+
+            result = self.manager.process_image(
+                image_path, "GaugeO", reader, overlays_dir=overlays_dir)
+
+            self.assertIsNotNone(result["overlay_path"])
+            self.assertTrue(os.path.exists(result["overlay_path"]))
+            self.assertEqual(result["reading"].overlay_path, result["overlay_path"])
+
+            # 渡さなければ従来どおり作らない
+            plain = self.manager.process_image(image_path, "GaugeO", reader)
+            self.assertIsNone(plain["overlay_path"])
+            self.assertIsNone(plain["reading"].overlay_path)
+
     def test_threshold_alert(self):
         """閾値を超えた場合にアラートが立ち、範囲内なら立たないこと"""
         def mock_reader(value):
