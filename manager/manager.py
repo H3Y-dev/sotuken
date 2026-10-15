@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 # 「'manager' is not a package」になり、テストが壊れる。
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from record import judge_failure, judge_input_method, judge_status
 from storage import MeterReading, Storage
 
 
@@ -30,12 +31,22 @@ class MeterManager:
         use_vlm: bool = False,
         image_sha256: Optional[str] = None,
         overlays_dir: Optional[str] = None,
+        images_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """認識処理を実行し、閾値判定を付与した結果を返却
 
         overlays_dir を渡すと、検出結果のオーバーレイ画像をそこへ保存し、
         記録の overlay_path に残す（フォルダ取り込みの ingest と同じ保存先・形式）。
+        images_dir を渡すと、原画像を内容ハッシュ名でそこへ複製し、記録はその複製を指す
+        （app.py は temp 画像を読み取り後に消すため、渡さないと記録が消えたファイルを指す）。
+        複製に失敗したら例外を投げ、記録は作らない。
         """
+        if images_dir is not None:
+            from manager.batch import calculate_file_hash
+            from manager.image_store import store_image
+            image_path = store_image(image_path, images_dir)
+            image_sha256 = calculate_file_hash(image_path)
+
         try:
             read_result: Dict[str, Any] = reader_func(image_path, use_vlm=use_vlm)
         except TypeError:
@@ -55,6 +66,14 @@ class MeterManager:
         save_data = {k: v for k, v in read_result.items() if k != "ticks"}
         if overlay_path is not None:
             save_data["overlay_path"] = overlay_path
+        # ingest / reprocess と同じ判定を残す。読み取り側が既に持つ値は上書きしない
+        if "status" not in save_data:
+            save_data["status"] = judge_status(read_result)
+        if "input_method" not in save_data:
+            save_data["input_method"] = judge_input_method(read_result.get("value"), None)
+        if "failure_stage" not in save_data:
+            (save_data["failure_stage"], save_data["failure_code"],
+             save_data["failure_detail"]) = judge_failure(read_result)
 
         row_id = self.storage.save_reading(
             device_name=device_name,
