@@ -194,8 +194,10 @@ venv\Scripts\python.exe manager\watch_inbox.py
   `local_id`/`captured_at`/`device_name`/`operator_value`/`operator_note`/`scale_min`/`scale_max`
   の各フィールドがメタデータとして保存されます。どの項目も省略可能で、サイドカーJSONが無くても
   画像だけで取り込めます（その場合の機器名は`unknown`になります）。
+- サイドカーJSONが画像より**後に**届いても（または書き終わりが遅れても）、取り込み済みの記録へ
+  機器名（`unknown`のものだけ）と現場真値を反映します。読み取り値・判定は変えず、記録も増やしません。
 - `operator_value`/`scale_min`/`scale_max`のいずれかを入れると、その画像の**現場真値**として
-  `image_truths`テーブルにも保存されます（同じ画像を再取り込みすると上書き）。これは
+  `image_truths`テーブルにも保存されます（同じ画像を再取り込みすると、JSONに書いた項目だけ上書き）。これは
   「自動読み取りがどれだけ合っていたか」を後から検証するためのデータで、`meter_readings`
   （自動読み取り結果）とは別のテーブルです。
 - 中間検出結果（目盛り・針・中心点等）を描き込んだオーバーレイ画像も`overlays/`フォルダに

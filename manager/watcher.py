@@ -13,21 +13,37 @@ VALID_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 class ImageEventHandler(FileSystemEventHandler):
     """監視フォルダ内への画像作成・移動イベントを処理するハンドラ"""
 
-    def __init__(self, callback: Callable[[str], None], valid_exts: tuple = VALID_IMAGE_EXTENSIONS):
+    def __init__(
+        self,
+        callback: Callable[[str], None],
+        valid_exts: tuple = VALID_IMAGE_EXTENSIONS,
+        sidecar_callback: Optional[Callable[[str], None]] = None,
+    ):
         super().__init__()
         self.callback = callback
         self.valid_exts = tuple(ext.lower() for ext in valid_exts)
+        self.sidecar_callback = sidecar_callback
 
     def _is_valid_image(self, path: str) -> bool:
         return any(path.lower().endswith(ext) for ext in self.valid_exts)
 
+    def _handle_sidecar(self, event, path: str):
+        # JSONは書き込み途中で created、書き終わりで modified が来るので両方拾う
+        if self.sidecar_callback and not event.is_directory and path.lower().endswith(".json"):
+            self.sidecar_callback(os.path.abspath(path))
+
     def on_created(self, event):
         if not event.is_directory and self._is_valid_image(event.src_path):
             self.callback(os.path.abspath(event.src_path))
+        self._handle_sidecar(event, event.src_path)
+
+    def on_modified(self, event):
+        self._handle_sidecar(event, event.src_path)
 
     def on_moved(self, event):
         if not event.is_directory and self._is_valid_image(event.dest_path):
             self.callback(os.path.abspath(event.dest_path))
+        self._handle_sidecar(event, event.dest_path)
 
 
 class FolderWatcher:
@@ -42,6 +58,7 @@ class FolderWatcher:
         on_image_detected: Optional[Callable[[str], None]] = None,
         on_item_detected: Optional[Callable[[str, Optional[SidecarMetadata]], None]] = None,
         on_pipeline_result: Optional[Callable[[str, Optional[SidecarMetadata], Dict[str, Any]], None]] = None,
+        on_sidecar_updated: Optional[Callable[[str, SidecarMetadata], None]] = None,
         auto_run_pipeline: bool = False,
         use_vlm: bool = False,
         valid_exts: tuple = VALID_IMAGE_EXTENSIONS,
@@ -50,6 +67,7 @@ class FolderWatcher:
         self.on_image_detected = on_image_detected
         self.on_item_detected = on_item_detected
         self.on_pipeline_result = on_pipeline_result
+        self.on_sidecar_updated = on_sidecar_updated
         self.auto_run_pipeline = auto_run_pipeline
         self.use_vlm = use_vlm
         self.valid_exts = tuple(ext.lower() for ext in valid_exts)
@@ -60,7 +78,32 @@ class FolderWatcher:
         self._handler = ImageEventHandler(
             callback=self._handle_detected_image,
             valid_exts=self.valid_exts,
+            sidecar_callback=self._handle_sidecar_json,
         )
+
+    def _handle_sidecar_json(self, json_path: str):
+        """検出済み画像の同名JSONが後から届いた（または書き終わった）ときに通知する。
+
+        画像より先に届いたJSONは、画像検出時に load_sidecar で読まれるのでここでは何もしない。
+        空・半書き・不正なJSONは load_sidecar が None を返すので無視し、完成時の再イベントを待つ。
+        """
+        if not self.on_sidecar_updated:
+            return
+        base = os.path.normcase(os.path.splitext(json_path)[0])
+        image_path = next(
+            (p for p in self.detected_images if os.path.normcase(os.path.splitext(p)[0]) == base),
+            None,
+        )
+        if image_path is None:
+            return
+        sidecar = load_sidecar(json_path)
+        if sidecar is None:
+            return
+        try:
+            self.on_sidecar_updated(image_path, sidecar)
+        except Exception as exc:
+            # 例外で Observer スレッドを止めると以降の画像を取りこぼすため、記録して続ける
+            print(f"[サイドカー反映] 失敗: {json_path}: {exc}")
 
     def _handle_detected_image(self, image_path: str):
         abs_path = os.path.abspath(image_path)

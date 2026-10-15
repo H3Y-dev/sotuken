@@ -31,6 +31,36 @@ def device_name_from_sidecar(sidecar: Optional[SidecarMetadata]) -> str:
     return str(name)
 
 
+_TRUTH_FIELDS = ("operator_value", "operator_note", "scale_min", "scale_max")
+
+
+def apply_sidecar(storage: Storage, image_sha256: str, sidecar: Optional[SidecarMetadata]) -> None:
+    """取り込み済み画像に、後から届いたサイドカーの機器名・真値を反映する。
+
+    画像が先に届くと sidecar=None のまま記録され、後着JSONは捨てられていた。
+    読み取り結果（値・status・版・reading_id）は変えず、新しい記録も作らない。
+    JSONで省略された項目は既存の真値を消さない。機器名は unknown の記録だけ埋める。
+    """
+    if sidecar is None:
+        return
+    old = next((t for t in storage.get_all_image_truths() if t.image_sha256 == image_sha256), None)
+    truth = {f: getattr(sidecar, f) if getattr(sidecar, f) is not None else getattr(old, f, None)
+             for f in _TRUTH_FIELDS}
+    if any(v is not None for v in truth.values()) and (
+            old is None or any(truth[f] != getattr(old, f) for f in _TRUTH_FIELDS)):
+        storage.save_image_truth(image_sha256=image_sha256, **truth)
+
+    for reading in storage.get_all_readings():
+        if reading.image_sha256 != image_sha256:
+            continue
+        device_name = reading.device_name
+        if device_name == UNKNOWN_DEVICE and sidecar.device_name:
+            device_name = sidecar.device_name
+        input_method = judge_input_method(reading.value, truth["operator_value"])
+        if (device_name, input_method) != (reading.device_name, reading.input_method):
+            storage.update_reading_metadata(reading.id, device_name, input_method)
+
+
 def ingest_result(
     storage: Storage,
     image_path: str,
@@ -49,6 +79,8 @@ def ingest_result(
     try:
         image_sha256 = calculate_file_hash(image_path)
         if image_sha256 in storage.get_processed_hashes():
+            # 記録は増やさないが、今回のサイドカーの機器名・真値は既存記録へ反映する
+            apply_sidecar(storage, image_sha256, sidecar)
             return None
         stored_image_path = store_image(image_path, images_dir)
     except Exception as exc:

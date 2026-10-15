@@ -166,6 +166,17 @@ class Storage:
             conn.close()
         return last_id
 
+    def update_reading_metadata(self, row_id: int, device_name: str, input_method: str) -> None:
+        """後着サイドカーで分かった機器名と値の出所だけを書き換える。読み取り結果には触れない。"""
+        conn = self._get_connection()
+        conn.execute(
+            "UPDATE meter_readings SET device_name = ?, input_method = ? WHERE id = ?",
+            (device_name, input_method, row_id),
+        )
+        conn.commit()
+        if not self._conn:
+            conn.close()
+
     def save_image_truth(
         self,
         image_sha256: str,

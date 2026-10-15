@@ -15,7 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager.watcher import FolderWatcher
 from manager.sidecar import SidecarMetadata
-from manager.ingest import ingest_result
+from manager.batch import calculate_file_hash
+from manager.ingest import apply_sidecar, ingest_result
 from manager.storage import Storage
 
 
@@ -91,9 +92,16 @@ def main():
         else:
             print(f"  [パイプライン失敗] stage: {stage}, エラー情報: {err}")
 
+    def on_sidecar_updated(img_path: str, sidecar: SidecarMetadata):
+        print(f"[SR-05 サイドカー後着] {img_path} 機器名: {sidecar.device_name}, 真値: {sidecar.operator_value}")
+        if storage is not None:
+            apply_sidecar(storage, calculate_file_hash(img_path), sidecar)
+            print("  [DB保存] 既存記録へ機器名・真値を反映しました（記録は増やしません）")
+
     watcher = FolderWatcher(
         watch_dir=watch_dir,
         on_pipeline_result=on_pipeline_result,
+        on_sidecar_updated=on_sidecar_updated,
         auto_run_pipeline=True,
         use_vlm=args.use_vlm,
     )
