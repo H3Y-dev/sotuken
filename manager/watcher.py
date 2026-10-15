@@ -1,4 +1,5 @@
 ﻿import os
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Set
 from watchdog.events import FileSystemEventHandler
@@ -75,6 +76,9 @@ class FolderWatcher:
         self._detected_set: Set[str] = set()
         # 画像ごとに最後に渡したサイドカー。同じ内容を何度も反映しないために持つ
         self._last_sidecar: Dict[str, Optional[SidecarMetadata]] = {}
+        # start() のメインスレッドと Observer スレッドが同時に読み直すと、古いJSONの反映が
+        # 新しい反映を上書きしうる。読み込みから反映・記憶までをまとめて直列化する
+        self._sidecar_lock = threading.Lock()
 
         self._observer: Optional[Observer] = None
         self._handler = ImageEventHandler(
@@ -106,15 +110,16 @@ class FolderWatcher:
         """
         if not self.on_sidecar_updated:
             return
-        sidecar = load_sidecar(image_path)
-        if sidecar is None or sidecar == self._last_sidecar.get(image_path):
-            return
-        try:
-            self.on_sidecar_updated(image_path, sidecar)
-            self._last_sidecar[image_path] = sidecar
-        except Exception as exc:
-            # 例外で Observer スレッドを止めると以降の画像を取りこぼすため、記録して続ける
-            print(f"[サイドカー反映] 失敗: {image_path}: {exc}")
+        with self._sidecar_lock:
+            sidecar = load_sidecar(image_path)
+            if sidecar is None or sidecar == self._last_sidecar.get(image_path):
+                return
+            try:
+                self.on_sidecar_updated(image_path, sidecar)
+                self._last_sidecar[image_path] = sidecar
+            except Exception as exc:
+                # 例外で Observer スレッドを止めると以降の画像を取りこぼすため、記録して続ける
+                print(f"[サイドカー反映] 失敗: {image_path}: {exc}")
 
     def _handle_detected_image(self, image_path: str):
         abs_path = os.path.abspath(image_path)
@@ -170,7 +175,6 @@ class FolderWatcher:
         self._observer.schedule(self._handler, path=self.watch_dir, recursive=False)
         self._observer.start()
         # 初回走査中や監視開始前に届いたJSONにはイベントが来ないので、開始後に読み直す。
-        # ponytail: 同じ画像のイベントと同時に走ると反映が2回になりうるが、apply は冪等なので許容
         for image_path in list(self.detected_images):
             self._refresh_sidecar(image_path)
 

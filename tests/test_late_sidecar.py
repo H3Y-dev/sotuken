@@ -7,6 +7,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -215,6 +216,47 @@ class TestLateSidecar(unittest.TestCase):
             w.stop()
         self.assertEqual(2, self.pipeline.call_count)
         self.assertEqual(2, len(self.storage.get_all_readings()))
+
+    def test_concurrent_refresh_keeps_latest_json(self):
+        # start() の読み直し（スレッドA）が v1 を読んだ直後に v2 が届き、Observer 側（スレッドB）
+        # も読み直す。古い v1 の反映が v2 を上書きしないこと
+        storage = Storage(os.path.join(self.watch_dir, "race.db"))  # スレッド間で使うのでファイルDB
+        a_holds_v1, b_done = threading.Event(), threading.Event()
+
+        def on_updated(path, sidecar):
+            if sidecar.operator_value == 1.0:
+                a_holds_v1.set()
+                b_done.wait(1.0)  # ロックが無ければBがここで割り込んで先に終わる
+            apply_sidecar(storage, calculate_file_hash(path), sidecar)
+
+        self.pipeline = mock.patch.object(
+            watcher_module, "execute_pipeline", return_value={"stage": "ok", "value": 1.5}).start()
+        self.addCleanup(mock.patch.stopall)
+        w = watcher_module.FolderWatcher(
+            self.watch_dir,
+            on_pipeline_result=lambda p, s, r: ingest_result(storage, p, s, r, self.images_dir),
+            on_sidecar_updated=on_updated)
+        w.scan_existing()
+        self._write_json({"device_name": "DG-13", "operator_value": 1.0})
+
+        thread_a = threading.Thread(target=w._refresh_sidecar, args=(os.path.abspath(self.image_path),))
+        thread_a.start()
+        self.assertTrue(a_holds_v1.wait(2.0))
+        self._write_json({"device_name": "DG-13", "operator_value": 2.0})
+
+        def run_b():
+            w._refresh_sidecar(os.path.abspath(self.image_path))
+            b_done.set()
+
+        thread_b = threading.Thread(target=run_b)
+        thread_b.start()
+        thread_a.join(5.0)
+        thread_b.join(5.0)
+
+        self.assertEqual(2.0, storage.get_all_image_truths()[0].operator_value)
+        self.assertEqual(2.0, w._last_sidecar[os.path.abspath(self.image_path)].operator_value)
+        self.assertEqual(1, self.pipeline.call_count)
+        self.assertEqual(1, len(storage.get_all_readings()))
 
     def test_duplicate_image_reingest_saves_truth_without_new_record(self):
         ingest_result(self.storage, self.image_path, None, {"stage": "ok", "value": 3.0},
