@@ -171,11 +171,14 @@ class FolderWatcher:
             return
 
         os.makedirs(self.watch_dir, exist_ok=True)
+        # 読み直すのは開始前に検出済みの画像だけ。開始後に検出された画像はまだ記録が無いことがあり、
+        # ここで反映済みと記憶すると、記録ができた後のパイプライン後の読み直しが飛ばされる
+        already_detected = list(self.detected_images)
         self._observer = Observer()
         self._observer.schedule(self._handler, path=self.watch_dir, recursive=False)
         self._observer.start()
         # 初回走査中や監視開始前に届いたJSONにはイベントが来ないので、開始後に読み直す。
-        for image_path in list(self.detected_images):
+        for image_path in already_detected:
             self._refresh_sidecar(image_path)
 
     def stop(self, timeout: float = 2.0):

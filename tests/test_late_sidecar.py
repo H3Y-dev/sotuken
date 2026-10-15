@@ -258,6 +258,47 @@ class TestLateSidecar(unittest.TestCase):
         self.assertEqual(1, self.pipeline.call_count)
         self.assertEqual(1, len(storage.get_all_readings()))
 
+    def test_image_detected_during_start_gets_late_json_after_its_row_exists(self):
+        # Observer 起動直後に新しい画像を検出してパイプライン中に止まり、その間に JSON が届く。
+        # start() の読み直しが記録の無いうちに「反映済み」と記憶してはいけない
+        os.remove(self.image_path)
+        storage = Storage(os.path.join(self.watch_dir, "start.db"))
+        entered, release = threading.Event(), threading.Event()
+        worker = []
+
+        def pipeline(path, use_vlm=False):
+            entered.set()
+            self.assertTrue(release.wait(5))
+            return {"stage": "scale", "value": None}
+
+        w = watcher_module.FolderWatcher(
+            self.watch_dir,
+            on_pipeline_result=lambda p, s, r: ingest_result(storage, p, s, r, self.images_dir),
+            on_sidecar_updated=lambda p, s: apply_sidecar(storage, calculate_file_hash(p), s))
+
+        def observer_start():
+            _write(self.image_path)
+            worker.append(threading.Thread(target=w._handle_detected_image, args=(self.image_path,)))
+            worker[0].start()
+            self.assertTrue(entered.wait(2))
+            self._write_json({"device_name": "DG-START", "operator_value": 12.5})
+
+        observer = mock.Mock()
+        observer.start.side_effect = observer_start
+        with mock.patch.object(watcher_module, "Observer", return_value=observer),                 mock.patch.object(watcher_module, "execute_pipeline", side_effect=pipeline) as ocr:
+            try:
+                w.start()
+            finally:
+                release.set()
+                worker[0].join(5)
+        self.assertFalse(worker[0].is_alive())
+
+        readings = storage.get_all_readings()
+        self.assertEqual(1, ocr.call_count)
+        self.assertEqual(1, len(readings))
+        self.assertEqual(("DG-START", "manual"), (readings[0].device_name, readings[0].input_method))
+        self.assertEqual(12.5, storage.get_all_image_truths()[0].operator_value)
+
     def test_duplicate_image_reingest_saves_truth_without_new_record(self):
         ingest_result(self.storage, self.image_path, None, {"stage": "ok", "value": 3.0},
                       self.images_dir)
