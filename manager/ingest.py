@@ -76,16 +76,24 @@ def ingest_result(
     """
     image_sha256 = None
     stored_image_path = image_path
+    duplicate = False
     try:
         image_sha256 = calculate_file_hash(image_path)
-        if image_sha256 in storage.get_processed_hashes():
-            # 記録は増やさないが、今回のサイドカーの機器名・真値は既存記録へ反映する
-            apply_sidecar(storage, image_sha256, sidecar)
-            return None
-        stored_image_path = store_image(image_path, images_dir)
+        duplicate = image_sha256 in storage.get_processed_hashes()
+        if not duplicate:
+            stored_image_path = store_image(image_path, images_dir)
     except Exception as exc:
         print(f"[画像保存] ハッシュ計算または恒久保存に失敗: {exc}")
         image_sha256 = None
+
+    if duplicate:
+        # 記録は増やさないが、今回のサイドカーの機器名・真値は既存記録へ反映する。
+        # 反映の失敗を上の SHA=None フォールバックに入れると、重複記録が作られてしまう
+        try:
+            apply_sidecar(storage, image_sha256, sidecar)
+        except Exception as exc:
+            print(f"[サイドカー反映] 失敗（記録は追加しません）: {exc}")
+        return None
 
     save_data = {k: v for k, v in result.items() if k != "ticks"}
     operator_value = getattr(sidecar, "operator_value", None) if sidecar is not None else None

@@ -58,10 +58,10 @@ class FolderWatcher:
         on_image_detected: Optional[Callable[[str], None]] = None,
         on_item_detected: Optional[Callable[[str, Optional[SidecarMetadata]], None]] = None,
         on_pipeline_result: Optional[Callable[[str, Optional[SidecarMetadata], Dict[str, Any]], None]] = None,
-        on_sidecar_updated: Optional[Callable[[str, SidecarMetadata], None]] = None,
         auto_run_pipeline: bool = False,
         use_vlm: bool = False,
         valid_exts: tuple = VALID_IMAGE_EXTENSIONS,
+        on_sidecar_updated: Optional[Callable[[str, SidecarMetadata], None]] = None,
     ):
         self.watch_dir = os.path.abspath(watch_dir)
         self.on_image_detected = on_image_detected
@@ -73,6 +73,8 @@ class FolderWatcher:
         self.valid_exts = tuple(ext.lower() for ext in valid_exts)
         self.detected_images: List[str] = []
         self._detected_set: Set[str] = set()
+        # 画像ごとに最後に渡したサイドカー。同じ内容を何度も反映しないために持つ
+        self._last_sidecar: Dict[str, Optional[SidecarMetadata]] = {}
 
         self._observer: Optional[Observer] = None
         self._handler = ImageEventHandler(
@@ -94,16 +96,25 @@ class FolderWatcher:
             (p for p in self.detected_images if os.path.normcase(os.path.splitext(p)[0]) == base),
             None,
         )
-        if image_path is None:
+        if image_path is not None:
+            self._refresh_sidecar(image_path)
+
+    def _refresh_sidecar(self, image_path: str):
+        """同名JSONを読み直し、前回渡した内容から変わっていれば on_sidecar_updated で知らせる。
+
+        パイプライン後・監視開始直後にも呼ぶ。そこで届いたJSONにはイベントが来ないため。
+        """
+        if not self.on_sidecar_updated:
             return
-        sidecar = load_sidecar(json_path)
-        if sidecar is None:
+        sidecar = load_sidecar(image_path)
+        if sidecar is None or sidecar == self._last_sidecar.get(image_path):
             return
         try:
             self.on_sidecar_updated(image_path, sidecar)
+            self._last_sidecar[image_path] = sidecar
         except Exception as exc:
             # 例外で Observer スレッドを止めると以降の画像を取りこぼすため、記録して続ける
-            print(f"[サイドカー反映] 失敗: {json_path}: {exc}")
+            print(f"[サイドカー反映] 失敗: {image_path}: {exc}")
 
     def _handle_detected_image(self, image_path: str):
         abs_path = os.path.abspath(image_path)
@@ -111,6 +122,7 @@ class FolderWatcher:
             self._detected_set.add(abs_path)
             self.detected_images.append(abs_path)
             sidecar = load_sidecar(abs_path)
+            self._last_sidecar[abs_path] = sidecar
             if self.on_image_detected:
                 self.on_image_detected(abs_path)
             if self.on_item_detected:
@@ -119,6 +131,8 @@ class FolderWatcher:
                 result = execute_pipeline(abs_path, use_vlm=self.use_vlm)
                 if self.on_pipeline_result:
                     self.on_pipeline_result(abs_path, sidecar, result)
+            # 処理中に届いた・書き終わったJSONを、再OCRせず既存記録へ反映する
+            self._refresh_sidecar(abs_path)
 
     def scan_existing(self) -> List[str]:
         """現在監視フォルダ内に存在する未検出の新規画像を走査して検出する"""
@@ -134,6 +148,7 @@ class FolderWatcher:
                     self.detected_images.append(full_path)
                     new_found.append(full_path)
                     sidecar = load_sidecar(full_path)
+                    self._last_sidecar[full_path] = sidecar
                     if self.on_image_detected:
                         self.on_image_detected(full_path)
                     if self.on_item_detected:
@@ -142,6 +157,7 @@ class FolderWatcher:
                         result = execute_pipeline(full_path, use_vlm=self.use_vlm)
                         if self.on_pipeline_result:
                             self.on_pipeline_result(full_path, sidecar, result)
+                    self._refresh_sidecar(full_path)
         return new_found
 
     def start(self):
@@ -153,6 +169,10 @@ class FolderWatcher:
         self._observer = Observer()
         self._observer.schedule(self._handler, path=self.watch_dir, recursive=False)
         self._observer.start()
+        # 初回走査中や監視開始前に届いたJSONにはイベントが来ないので、開始後に読み直す。
+        # ponytail: 同じ画像のイベントと同時に走ると反映が2回になりうるが、apply は冪等なので許容
+        for image_path in list(self.detected_images):
+            self._refresh_sidecar(image_path)
 
     def stop(self, timeout: float = 2.0):
         """フォルダ監視を停止"""

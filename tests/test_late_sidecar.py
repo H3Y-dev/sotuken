@@ -4,6 +4,7 @@ B: 画像より後に届いた同名JSONの機器名・真値が、どこにも�
 """
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -45,7 +46,7 @@ class TestLateSidecar(unittest.TestCase):
         result = result or {"stage": "ok", "value": 4.5}
         patcher = mock.patch.object(watcher_module, "execute_pipeline",
                                     return_value=result, side_effect=side_effect)
-        patcher.start()
+        self.pipeline = patcher.start()
         self.addCleanup(patcher.stop)
         return watcher_module.FolderWatcher(
             watch_dir=self.watch_dir,
@@ -158,6 +159,62 @@ class TestLateSidecar(unittest.TestCase):
         self.assertEqual(2, len(readings))
         self.assertEqual({"DG-08"}, {r.device_name for r in readings})
         self.assertEqual({1.0, 1.1}, {r.value for r in readings})
+
+    def test_positional_arguments_keep_their_old_meaning(self):
+        # on_sidecar_updated は末尾に追加したので、既存の位置引数呼び出しは意味が変わらない
+        w = watcher_module.FolderWatcher(self.watch_dir, None, None, None, True, True, (".png",))
+        self.assertEqual((True, True, (".png",), None),
+                         (w.auto_run_pipeline, w.use_vlm, w.valid_exts, w.on_sidecar_updated))
+
+    def test_metadata_update_failure_never_inserts_duplicate(self):
+        ingest_result(self.storage, self.image_path, None, {"stage": "ok", "value": 3.0},
+                      self.images_dir)
+        with mock.patch.object(self.storage, "update_reading_metadata",
+                               side_effect=sqlite3.OperationalError("database is locked")):
+            row = ingest_result(self.storage, self.image_path, SidecarMetadata(device_name="DG-10"),
+                                {"stage": "ok", "value": 3.0}, self.images_dir)
+        self.assertIsNone(row)
+        readings = self.storage.get_all_readings()
+        self.assertEqual(1, len(readings))
+        self.assertEqual(self.sha, readings[0].image_sha256)
+
+    def test_json_during_event_pipeline_is_applied_without_json_event(self):
+        os.remove(self.image_path)
+        w = self._watcher(side_effect=lambda p, use_vlm=False: (
+            self._write_json({"device_name": "DG-11", "operator_value": 4.0}),
+            {"stage": "ok", "value": 4.5})[1])
+        _write(self.image_path)
+        w._handler.on_created(FileCreatedEvent(self.image_path))  # JSONのイベントは送らない
+
+        readings = self.storage.get_all_readings()
+        self.assertEqual(1, self.pipeline.call_count)  # 再OCRしない
+        self.assertEqual(1, len(readings))
+        self.assertEqual(("DG-11", "corrected"), (readings[0].device_name, readings[0].input_method))
+
+    def test_json_written_during_initial_scan_is_applied_when_watching_starts(self):
+        other = os.path.join(self.watch_dir, "next.png")
+        _write(other, b"other-image")
+
+        def pipeline(path, use_vlm=False):
+            if path.endswith("next.png"):  # meter.JPG の処理後、次の画像の処理中に届く
+                self._write_json({"device_name": "DG-12", "operator_value": 2.0})
+            return {"stage": "ok", "value": 1.0}
+
+        w = self._watcher(side_effect=pipeline)
+        w.scan_existing()
+
+        def device_of_meter():
+            return [r.device_name for r in self.storage.get_all_readings()
+                    if r.image_sha256 == self.sha]
+
+        self.assertEqual(["unknown"], device_of_meter())  # イベントも事後確認も無い隙間
+        w.start()
+        try:
+            self.assertEqual(["DG-12"], device_of_meter())
+        finally:
+            w.stop()
+        self.assertEqual(2, self.pipeline.call_count)
+        self.assertEqual(2, len(self.storage.get_all_readings()))
 
     def test_duplicate_image_reingest_saves_truth_without_new_record(self):
         ingest_result(self.storage, self.image_path, None, {"stage": "ok", "value": 3.0},
