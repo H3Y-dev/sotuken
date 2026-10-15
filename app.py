@@ -111,16 +111,24 @@ with tab1:
             uploaded_file, caption="読み取る画像", use_container_width=True
         )
 
+        res = None
         if st.button("読み取る", type="primary"):
-            res = manager.process_image(
-                image_path=temp_path,
-                device_name=device_name,
-                reader_func=read_meter,
-                threshold_max=th_max,
-                threshold_min=th_min,
-                overlays_dir="overlays",
-            )
+            try:
+                # 原画像は images/ へ複製してから読む。temp は後で消すため、記録は複製を指す
+                res = manager.process_image(
+                    image_path=temp_path,
+                    device_name=device_name,
+                    reader_func=read_meter,
+                    threshold_max=th_max,
+                    threshold_min=th_min,
+                    overlays_dir="overlays",
+                    images_dir="images",
+                )
+            except Exception as exc:
+                # 記録は作られていない。原画像を失わないよう temp は残す
+                st.error(f"記録できませんでした（{exc}）。元の画像は {temp_path} に残しています。")
 
+        if res is not None:
             st.success("読み取りました。")
 
             # メトリクス表示
