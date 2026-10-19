@@ -27,6 +27,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import jp.sotuken.metercapture.capture.CapturedImage
 import jp.sotuken.metercapture.capture.captureFileName
 import jp.sotuken.metercapture.capture.capturesDir
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun ColumnScope.CameraCapturePanel(
@@ -79,13 +85,30 @@ internal fun ColumnScope.CameraCapturePanel(
             cameraProvider?.unbindAll()
         }
     }
-
-    AndroidView(
-        factory = { previewView },
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .weight(1f),
-    )
+    ) {
+        AndroidView(
+            factory = { previewView },
+            modifier = Modifier.fillMaxSize(),
+        )
+        // 1枚1メーター用の固定ガイド枠。表示だけで、タップは受け取らず、保存画像にも写らない。
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val radius = size.minDimension * 0.4f
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.5f),
+                radius = radius,
+                style = Stroke(width = 5.dp.toPx()),
+            )
+            drawCircle(
+                color = Color.White,
+                radius = radius,
+                style = Stroke(width = 3.dp.toPx()),
+            )
+        }
+    }
 
     Button(
         enabled = imageCapture != null && !isCapturing,
