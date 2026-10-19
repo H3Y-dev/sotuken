@@ -1,4 +1,4 @@
-﻿import os
+import os
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -9,6 +9,19 @@ from manager.sidecar import load_sidecar, SidecarMetadata
 from manager.pipeline_caller import execute_pipeline
 
 VALID_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
+
+
+def wait_for_file_readable(path: str, max_retries: int = 10, retry_interval: float = 0.5) -> bool:
+    """ファイルが他のプロセスからオープン可能になるまで再試行待機する。"""
+    for attempt in range(max_retries):
+        try:
+            with open(path, "rb"):
+                return True
+        except (PermissionError, OSError):
+            if attempt < max_retries - 1:
+                time.sleep(retry_interval)
+    print(f"[警告] ファイルのアクセスロック解除待機がタイムアウトしました: {path}")
+    return False
 
 
 class ImageEventHandler(FileSystemEventHandler):
@@ -124,6 +137,7 @@ class FolderWatcher:
     def _handle_detected_image(self, image_path: str):
         abs_path = os.path.abspath(image_path)
         if abs_path not in self._detected_set:
+            wait_for_file_readable(abs_path)
             self._detected_set.add(abs_path)
             self.detected_images.append(abs_path)
             sidecar = load_sidecar(abs_path)
@@ -149,6 +163,7 @@ class FolderWatcher:
             if any(fname.lower().endswith(ext) for ext in self.valid_exts):
                 full_path = os.path.abspath(os.path.join(self.watch_dir, fname))
                 if full_path not in self._detected_set:
+                    wait_for_file_readable(full_path)
                     self._detected_set.add(full_path)
                     self.detected_images.append(full_path)
                     new_found.append(full_path)

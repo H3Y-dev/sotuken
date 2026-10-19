@@ -128,5 +128,35 @@ class TestFolderWatcher(unittest.TestCase):
             watcher.stop()
 
 
+
+    def test_retry_on_permission_error(self):
+        import unittest.mock
+        img_path = os.path.join(self.watch_dir, "locked_image.jpg")
+        with open(img_path, "wb") as f:
+            f.write(b"dummy image")
+
+        call_count = 0
+        original_open = open
+
+        def mock_open(file, mode="r", *args, **kwargs):
+            nonlocal call_count
+            if os.path.abspath(str(file)) == os.path.abspath(img_path) and "b" in str(mode) and "w" not in str(mode):
+                call_count += 1
+                if call_count <= 2:
+                    raise PermissionError("[WinError 32] アクセス拒否")
+            return original_open(file, mode, *args, **kwargs)
+
+        detected = []
+        watcher = FolderWatcher(self.watch_dir, on_image_detected=lambda p: detected.append(p))
+
+        with unittest.mock.patch("builtins.open", side_effect=mock_open):
+            with unittest.mock.patch("time.sleep", return_value=None):
+                found = watcher.scan_existing()
+
+        self.assertEqual(len(found), 1)
+        self.assertEqual(call_count, 3)
+        self.assertEqual(detected, [os.path.abspath(img_path)])
+
+
 if __name__ == "__main__":
     unittest.main()
