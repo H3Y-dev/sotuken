@@ -101,7 +101,7 @@
 | 段階 | 内容 | 受け入れ条件 |
 |---|---|---|
 | 1 | PCの受信口（3.1）と `app.py` での表示 | 単体テスト（一時フォルダ・空きポートで本物のサーバーを立てる）: 正常アップロードでJSON→画像の順に正式名で置かれる、合言葉違いで401、SHA-256違いで400、ファイル名不正で400、同名再送で200 duplicate、プライベートIP以外で403（判定関数を差し替えて確かめる）。既存テストがすべて通る |
-| 2 | スマホのHttpSender・Worker・設定・マイグレーション（4.1〜4.4） | JVMテスト: JDK付属の `com.sun.net.httpserver` で受信口の偽物を立て、HttpSenderの成功・401・切断を確かめる。偽のSenderでWorkerの経路選択（届く→HTTP、届かない→送信箱、HTTP失敗→送信箱、追い送り）を確かめる。`:app:testDebugUnitTest` と `:app:assembleDebug` が通る |
+| 2 | スマホのHttpSender・Worker・設定・マイグレーション（4.1〜4.4） | JVMテスト: java.net.ServerSocket で作った最小のHTTPサーバー（Androidの単体テストではJDKの com.sun.net.httpserver が使えないため）で受信口の偽物を立て、HttpSenderの成功・401・切断を確かめる。偽のSenderでWorkerの経路選択（届く→HTTP、届かない→送信箱、HTTP失敗→送信箱、追い送り）を確かめる。`:app:testDebugUnitTest` と `:app:assembleDebug` が通る |
 | 3 | USB自動吸い出し（3.2） | 最初に実機で前提（3.2の注意）を確かめる。偽のadbで、そろった組だけ取り出す・`.part`を無視・取り出し後に削除・adbが無いときの表示、をテスト |
 | 4 | 通しの確認（実機、大久保） | (a) 同じWi-FiでPCが `app.py` を起動中: 撮影→1分以内に一覧に出る。(b) Wi-Fiを切って3枚撮影→USBで接続→自動で吸い出され一覧に出る。(c) (b)のあとWi-Fiに戻すと、まだ吸い出していない分が無線で届く。(d) 同じ写真が二重に登録されない |
 
