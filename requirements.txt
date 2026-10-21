@@ -1,5 +1,5 @@
 ﻿# main_sotuken.py と tick_detect/scale_value_detect/vlm_scale_value が
-# 動作に必要とするパッケージ一覧。venv（Python 3.8）向けに固定したバージョン。
+# 動作に必要とするパッケージ一覧。venv（Python 3.11。2026-10-21に3.8から移行）向けに固定したバージョン。
 #
 # セットアップ:
 #   venv\Scripts\python.exe -m pip install -r requirements.txt
@@ -25,7 +25,7 @@ onnxruntime==1.19.2
 ollama
 
 # T6 一元管理システムのWeb UI（manager/ と app.py で使用）
-# Python 3.8対応の最終版で固定している。これより新しい版は3.9以上が必須。
+# もとはPython 3.8対応の最終版として固定した。3.11でもこのまま動くことを確認済み（2026-10-21）。
 # 既存のピン（numpy 1.24.4 / pillow 10.4.0）と衝突しないことを確認済み。
 streamlit==1.40.1
 pandas==2.0.3
