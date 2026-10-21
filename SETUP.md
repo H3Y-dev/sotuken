@@ -370,3 +370,32 @@ CUDA error: device kernel image is invalid
 - **VLM関連の処理がエラーになる/固まる**：タスクトレイでOllamaが起動しているか確認してください。`ollama list`がエラーなく実行できればサーバーは動いています
 - **`pip install`でエラーが出る**：venvが有効化されているか（プロンプトの先頭に`(venv)`と出るか）を確認してください。有効化されていない場合、正しいPythonにインストールされず`main_sotuken.py`実行時に`ModuleNotFoundError`になります
 - **RapidOCRの初回実行が遅い**：初回のみ内部でモデルファイルをダウンロード/検証するため時間がかかります。2回目以降は速くなります
+
+
+---
+
+## USB自動吸い出しの実行（オフライン撮影画像の取り込み）
+
+スマホ（Android）が工場内などのWi-Fi圏外で撮影した場合、画像は端末内の送信箱（`outbox`）に保存されます。PCとUSB接続した際に自動でPCへ吸い出すには、`manager/usb_pull.py` を実行します。
+
+### 前提条件
+- スマホ側で **「USBデバッグ」** が有効になっていること（Androidの「設定」→「開発者向けオプション」→「USBデバッグ」をオンにし、PC接続時にデバッグ接続を許可してください）。
+- PCで `adb` コマンドが利用可能であること（環境変数 `ADB`、`PATH`、または `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe` に配置）。
+
+### 各プロセスの並行起動
+`app.py`、`watch_inbox.py`、`usb_pull.py` をそれぞれ別のターミナルで起動して運用します。
+
+1. **Web UI（兼 スマホWi-Fi受信口）の起動**:
+   ```powershell
+   .\venv\Scripts\python.exe -m streamlit run app.py
+   ```
+2. **フォルダ監視・自動解析パイプラインの起動**:
+   ```powershell
+   .\venv\Scripts\python.exe -m manager.watch_inbox
+   ```
+3. **USB自動吸い出しの起動**:
+   ```powershell
+   .\venv\Scripts\python.exe -m manager.usb_pull
+   ```
+
+スマホをPCにUSB接続すると、端末内の送信箱から撮影画像とサイドカーJSONが自動的に `incoming/` フォルダへ吸い出され、`watch_inbox.py` によって即座に解析・DB登録されます。
