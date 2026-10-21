@@ -30,6 +30,11 @@ class FakeQueueDao : QueueDao {
     override fun observeAll(): Flow<List<QueueItem>> =
         items.map { currentItems -> currentItems.sortedByDescending { it.capturedAt } }
 
+    override suspend fun findByState(state: SendState): List<QueueItem> =
+        items.value
+            .filter { it.sendState == state }
+            .sortedBy { it.capturedAt }
+
     override suspend fun resetState(from: SendState, to: SendState) {
         items.value = items.value.map { existing ->
             if (existing.sendState == from) existing.copy(sendState = to) else existing

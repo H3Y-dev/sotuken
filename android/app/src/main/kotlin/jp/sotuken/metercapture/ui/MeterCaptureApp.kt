@@ -6,18 +6,25 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -27,7 +34,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import jp.sotuken.metercapture.capture.CapturedImage
 import jp.sotuken.metercapture.queue.CaptureMeta
+import jp.sotuken.metercapture.queue.QueueSendScheduler
 import jp.sotuken.metercapture.queue.QueueStore
+import jp.sotuken.metercapture.settings.PrivateIpv4Validator
+import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,6 +52,8 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     }
     var capturedImage by remember { mutableStateOf<CapturedImage?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
     val coroutineScope = rememberCoroutineScope()
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -64,7 +76,17 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(text = "メーター撮影", style = MaterialTheme.typography.headlineMedium)
-                Text(text = "キュー: ${queueItems.size}件")
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(text = "キュー: ${queueItems.size}件")
+                    OutlinedButton(onClick = { showSettingsDialog = true }) {
+                        Text("送信先の設定")
+                    }
+                }
 
                 if (hasCameraPermission) {
                     CameraCapturePanel(
@@ -79,6 +101,10 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                             operatorNote = null,
                                         ),
                                     )
+                                    try {
+                                        QueueSendScheduler.enqueueSend(context)
+                                    } catch (_: Exception) {
+                                    }
                                     capturedImage = image
                                     errorMessage = null
                                 } catch (error: Exception) {
@@ -107,6 +133,74 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 // TODO(SKくん): ガイド枠・キュー一覧・入力フォームを実装する。Sprint 3
             }
         }
+
+        if (showSettingsDialog) {
+            val receiverSettings = remember { ReceiverSettings(context) }
+            var urlInput by remember { mutableStateOf(receiverSettings.getUrl() ?: "") }
+            var tokenInput by remember { mutableStateOf(receiverSettings.getToken() ?: "") }
+            var validationError by remember { mutableStateOf<String?>(null) }
+
+            AlertDialog(
+                onDismissRequest = { showSettingsDialog = false },
+                title = { Text("送信先の設定") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = urlInput,
+                            onValueChange = {
+                                urlInput = it
+                                validationError = null
+                            },
+                            label = { Text("送信先URL (例: http://192.168.1.20:8765)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = tokenInput,
+                            onValueChange = {
+                                tokenInput = it
+                                validationError = null
+                            },
+                            label = { Text("合言葉 (Token)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        validationError?.let {
+                            Text(
+                                text = it,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            when (val result = PrivateIpv4Validator.validateUrl(urlInput)) {
+                                is PrivateIpv4Validator.ValidationResult.Invalid -> {
+                                    validationError = result.message
+                                }
+                                PrivateIpv4Validator.ValidationResult.Valid -> {
+                                    if (tokenInput.isBlank()) {
+                                        validationError = "合言葉を入力してください"
+                                    } else {
+                                        receiverSettings.save(urlInput, tokenInput)
+                                        showSettingsDialog = false
+                                    }
+                                }
+                            }
+                        },
+                    ) {
+                        Text("保存")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSettingsDialog = false }) {
+                        Text("キャンセル")
+                    }
+                },
+            )
+        }
     }
 }
-

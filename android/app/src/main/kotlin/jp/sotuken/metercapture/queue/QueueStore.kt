@@ -12,9 +12,10 @@ interface QueueStore {
     suspend fun enqueue(imageFile: File, meta: CaptureMeta): String
     fun observeQueue(): Flow<List<QueueItem>>
     suspend fun markSending(localId: String)
-    suspend fun markSent(localId: String)
+    suspend fun markSent(localId: String, via: String)
     suspend fun markFailed(localId: String, error: String)
     suspend fun retry(localId: String)
+    suspend fun updateSentVia(localId: String, via: String)
 
     // アプリが送信中にクラッシュ・強制終了すると SENDING のまま残る項目がある。
     // 実際には送信されていない前提で、次回起動時に PENDING へ戻して再送させる。
@@ -38,6 +39,7 @@ class RoomQueueStore(
                 retryCount = 0,
                 lastError = null,
                 sentAt = null,
+                sentVia = null,
             ),
         )
         return localId
@@ -53,13 +55,18 @@ class RoomQueueStore(
         queueDao.update(item.copy(sendState = SendState.SENDING))
     }
 
-    override suspend fun markSent(localId: String) {
+    override suspend fun markSent(localId: String, via: String) {
         val item = requireItem(localId)
         check(item.sendState == SendState.SENDING) {
             "cannot mark sent from state ${item.sendState}"
         }
         queueDao.update(
-            item.copy(sendState = SendState.SENT, sentAt = Instant.now().toString(), lastError = null),
+            item.copy(
+                sendState = SendState.SENT,
+                sentAt = Instant.now().toString(),
+                sentVia = via,
+                lastError = null,
+            ),
         )
     }
 
@@ -81,6 +88,11 @@ class RoomQueueStore(
         queueDao.update(item.copy(sendState = SendState.PENDING, lastError = null))
     }
 
+    override suspend fun updateSentVia(localId: String, via: String) {
+        val item = requireItem(localId)
+        queueDao.update(item.copy(sentVia = via))
+    }
+
     override suspend fun recoverInterruptedSends() {
         queueDao.resetState(from = SendState.SENDING, to = SendState.PENDING)
     }
@@ -88,4 +100,3 @@ class RoomQueueStore(
     private suspend fun requireItem(localId: String): QueueItem =
         requireNotNull(queueDao.findById(localId)) { "QueueItem with localId $localId not found" }
 }
-
