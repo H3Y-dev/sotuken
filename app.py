@@ -10,6 +10,7 @@ from manager.export import export_to_csv, export_to_jsonl, filter_readings, grou
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
+from manager.receiver import init_receiver_for_app
 
 
 def read_meter(image_path, use_vlm=False):
@@ -67,6 +68,26 @@ def _load_style():
 
 
 _load_style()
+
+
+@st.cache_resource
+def _start_receiver():
+    """スマホからの無線受信口（manager/receiver.py）をバックグラウンドスレッドで1回だけ起動する。"""
+    return init_receiver_for_app()
+
+
+_receiver_info = _start_receiver()
+
+with st.sidebar:
+    st.header("スマホの送信先")
+    if _receiver_info.get("running"):
+        st.caption("同じWi-Fiに接続したスマホアプリの送信先設定に入力してください。")
+        st.markdown(f"**送信先URL**:\n`{_receiver_info['url']}`")
+        st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
+    else:
+        st.error(f"受信口が起動していません: {_receiver_info.get('error')}")
+        st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
+        st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
 
 manager = MeterManager(db_path="manager.db")
 _record_count = len(manager.get_history())

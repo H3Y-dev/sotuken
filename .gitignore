@@ -30,3 +30,6 @@ readings_export.jsonl
 # agentic loop の実行ログ・実行結果。ソースは loop/ 配下に残る
 loop/runs/
 loop_run_output.log
+
+# 受信口設定（合言葉・ポート）
+manager/pc_config.json
