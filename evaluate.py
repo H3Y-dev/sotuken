@@ -193,7 +193,7 @@ def _resolve_path(path, base_dir):
     return os.path.normpath(os.path.join(base_dir, path))
 
 
-def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, needle_angle='segment'):
+def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, local_checks=(), needle_angle='segment'):
     """正解データ1件を読み取り、誤差を計算して1行分の結果を返す"""
     image_path = _resolve_path(entry['image'], base_dir)
     row = {
@@ -220,6 +220,9 @@ def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, needle_an
         'cross_check_diff_fs': None,
         'bracket': None,
         'local_checks': {check: 'off' for check in 'EBCD'},
+        'scale_confident': None,
+        'needle_confidence': None,
+        'needle_angle_source': needle_angle,
     }
 
     # 真値が未記入の項目は評価できない。黙って0点扱いにすると
@@ -238,10 +241,12 @@ def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, needle_an
         return row
 
     started = time.time()
-    options = dict(local_read=local_read, needle_angle=needle_angle) if local_read or needle_angle != 'segment' else {}
+    options = (dict(local_read=local_read, local_checks=local_checks, needle_angle=needle_angle)
+               if local_read or local_checks or needle_angle != 'segment' else {})
     result = meter_pipeline.read_meter(img, use_vlm=use_vlm, **options)
     row['elapsed_sec'] = round(time.time() - started, 2)
-    for key in ('read_method', 'value_local', 'value_global', 'cross_check_diff_fs', 'bracket', 'local_checks'):
+    for key in ('read_method', 'value_local', 'value_global', 'cross_check_diff_fs', 'bracket',
+                'local_checks', 'scale_confident', 'needle_confidence', 'needle_angle_source'):
         if key in result:
             row[key] = result[key]
     if not options:
@@ -389,6 +394,7 @@ def main(argv=None):
         description='アナログメーター読み取りの精度を評価する')
     parser.add_argument('groundtruth', help='正解データのJSONファイル')
     parser.add_argument('--local-read', action='store_true', help='針を挟む数字2点で読む（誤読チェックなし）')
+    parser.add_argument('--local-checks', default='', help='誤読チェック（Stage1では空のみ対応）')
     parser.add_argument('--needle-angle', choices=('segment', 'tip'), default='segment')
     parser.add_argument('--no-vlm', action='store_true',
                         help='VLM処理をすべて無効化し、OCR/画像処理だけで評価する')
@@ -402,6 +408,9 @@ def main(argv=None):
                               '正解データの scope と一致するものだけを評価する。'
                               'all を指定すると全件を評価する'))
     args = parser.parse_args(argv)
+    local_checks = tuple(check.strip() for check in args.local_checks.split(',') if check.strip())
+    if local_checks:
+        parser.error('--local-checks is not implemented in Stage1; leave it empty')
 
     with open(args.groundtruth, encoding='utf-8') as f:
         entries = json.load(f)
@@ -434,7 +443,8 @@ def main(argv=None):
             print('[{}/{}] {} ...'.format(i, len(entries), entry['image']))
         entry.setdefault('tolerance_percent', args.tolerance)
         rows.append(evaluate_entry(entry, base_dir, use_vlm=not args.no_vlm,
-                                   local_read=args.local_read, needle_angle=args.needle_angle))
+                                   local_read=args.local_read, local_checks=local_checks,
+                                   needle_angle=args.needle_angle))
 
     summary = summarize(rows)
     print_report(rows, summary, args.tolerance)

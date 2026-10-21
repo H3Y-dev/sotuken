@@ -54,8 +54,10 @@ class LocalPipelineTest(unittest.TestCase):
         for global_value, flagged in ((47.5, False), (47.4999, True)):
             self.mocks['meter_reader.compute_reading'].return_value['value'] = global_value
             result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True)
-            self.assertAlmostEqual(result['value'], 50)
-            self.assertEqual(result['read_method'], 'local')
+            # 食い違いが2.5%FSを超えたら全体方式の値を採り、要確認にする（2026-10-21の設計変更）
+            self.assertAlmostEqual(result['value'], global_value if flagged else 50)
+            self.assertEqual(result['read_method'], 'global_flagged' if flagged else 'local')
+            self.assertAlmostEqual(result['value_local'], 50)
             self.assertEqual(result['scale_confident'], not flagged)
             self.assertEqual(result['local_checks'], {key: 'off' for key in 'EBCD'})
 
@@ -67,6 +69,41 @@ class LocalPipelineTest(unittest.TestCase):
         self.assertIsNone(result['value_global'])
         self.assertIsNone(result['min_value'])
         self.assertFalse(result['scale_confident'])
+        self.assertIsNone(result['ratio'])
+        self.assertIsNone(result['zero_pt'])
+        self.assertIsNone(result['full_pt'])
+        self.mocks['meter_reader.compute_reading'].assert_not_called()
+
+    def test_local_adoption_preserves_global_geometry_and_ratio(self):
+        self.mocks['meter_reader.compute_reading'].return_value['value'] = 48
+        result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True)
+        self.assertAlmostEqual(result['value'], 50)
+        self.assertEqual(result['value_global'], 48)
+        self.assertEqual(result['ratio'], .5)
+        self.assertEqual(result['angle_deg'], 45)
+        self.assertEqual(result['min_value'], 0)
+        self.assertEqual(result['max_value'], 100)
+        self.assertEqual(result['zero_pt'], (15, 10))
+
+    def test_both_readings_fail_without_scale_or_bracket(self):
+        self.scale = None
+        self.points = []
+        result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True)
+        self.assertEqual(result['stage'], 'scale')
+        self.assertIsNone(result['value'])
+
+    def test_local_can_recover_global_needle_calculation_failure(self):
+        self.mocks['meter_reader.compute_reading'].return_value = None
+        result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True)
+        self.assertEqual(result['stage'], 'ok')
+        self.assertEqual(result['read_method'], 'local')
+        self.assertFalse(result['scale_confident'])
+
+    def test_tip_only_preserves_global_method(self):
+        result = meter_pipeline.read_meter(self.img, use_vlm=False, needle_angle='tip')
+        self.assertEqual(result['read_method'], 'global')
+        self.assertEqual(result['value_global'], 50)
+        self.assertIsNone(result['value_local'])
 
     def test_local_outside_range_falls_back_to_global(self):
         self.mocks['meter_reader.detect_needle'].return_value['direction'] = (-1, 0)

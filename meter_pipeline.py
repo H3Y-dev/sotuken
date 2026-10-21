@@ -244,13 +244,14 @@ def _read_optional(img, center, ticks, scale, numbered_points, result, *, local_
                           ratio=reading['ratio'], angle_deg=reading['angle_deg'])
     local = None
     if local_read:
-        angles = sorted(set(a % math.tau for a in tick_angles))
+        local_angles = [t['angle'] for t in numbered_points.get('ticks', ticks) if 'angle' in t]
+        angles = sorted(set(a % math.tau for a in local_angles))
         gaps = np.diff(angles)
         spacing = float(np.median(gaps)) if len(gaps) else None
         local = local_reading.read_local(
             numbered_points.get('bound', []), angle,
-            calibration=((scale or {}).get('calibration') or numbered_points.get('calibration')),
-            tick_spacing=spacing)
+            calibration=(numbered_points.get('calibration') or (scale or {}).get('calibration')),
+            tick_spacing=spacing, tick_angles=local_angles)
     if local is not None:
         result.update(value=local['value'], value_local=local['value'],
                       read_method='local', bracket=local['bracket'])
@@ -263,6 +264,11 @@ def _read_optional(img, center, ticks, scale, numbered_points, result, *, local_
                 result['max_value'] if result['max_value'] is not None else local['max_value'])
             result['cross_check_diff_fs'] = diff
             if diff is not None and diff > 2.5:
+                # 大きく食い違ったときはどちらが正しいか決められないため、実績のある
+                # 全体方式の値を採って要確認にする（meter2で誤読38が単調性のふるいを
+                # 抜け、局所方式だけが外れた実例。2026-10-21）
+                result['value'] = result['value_global']
+                result['read_method'] = 'global_flagged'
                 result['scale_confident'] = False
     result['stage'] = (STAGE_OK if result['value'] is not None
                        else STAGE_SCALE if scale is None else STAGE_NEEDLE)

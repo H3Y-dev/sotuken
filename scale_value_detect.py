@@ -982,6 +982,7 @@ def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_poi
         pairs = _bind_number_tick_indices(numbers, ticks, center, max_angle_deg, 4.0)
         numbered_points_out.append({
             'result': result,
+            'ticks': ticks,
             'bound': [dict(value=n['value'], angle=ticks[idx]['angle'],
                            score=n.get('score', 0.0),
                            synthetic=ticks[idx].get('synthetic', False))
@@ -1140,8 +1141,9 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
         selected = next((attempt for attempt in point_attempts
                          if ocr_candidate is not None and attempt['result'] is ocr_candidate),
                         max(point_attempts, key=lambda attempt: len(attempt['bound']),
-                            default={'bound': []}))
+                            default={'bound': [], 'ticks': []}))
         numbered_points_out.update(bound=selected['bound'],
+                                   ticks=selected['ticks'],
                                    calibration=(ocr_candidate or {}).get('calibration'))
     diagnostics = _build_scale_diagnostics(
         results, numbers, ocr_candidate, agreed, vlm_result, use_vlm)
