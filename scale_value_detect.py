@@ -966,7 +966,7 @@ def locate_value_on_ticks(numbers, ticks, center, target_value, max_angle_deg=15
     return (int(round(fallback_number['x'])), int(round(fallback_number['y'])))
 
 
-def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points):
+def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_points_out=None):
     """1つの（前処理済み）画像に対してOCR＋目盛り対応付けを1回実行する。"""
     numbers = read_scale_numbers(img)
     # 長さではなく、数字の位置から主目盛りを決め直してから対応付ける
@@ -978,6 +978,15 @@ def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points):
     n_ocr_unique = len({n['value'] for n in numbers})
     result = determine_min_max(bound, min_points=min_points,
                                n_ocr_unique=n_ocr_unique, ticks=ticks)
+    if numbered_points_out is not None:
+        pairs = _bind_number_tick_indices(numbers, ticks, center, max_angle_deg, 4.0)
+        numbered_points_out.append({
+            'result': result,
+            'bound': [dict(value=n['value'], angle=ticks[idx]['angle'],
+                           score=n.get('score', 0.0),
+                           synthetic=ticks[idx].get('synthetic', False))
+                      for n, idx in pairs],
+        })
     if result is not None:
         # 描画・検証側が同じ主目盛り判定を見られるように添えて返す
         result['ticks'] = ticks
@@ -1067,7 +1076,7 @@ def _publish_scale_diagnostics(diagnostics, diagnostics_out, result=None):
 
 
 def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
-                        use_vlm=True, diagnostics_out=None):
+                        use_vlm=True, diagnostics_out=None, *, numbered_points_out=None):
     """
     元画像と、CLAHE（コントラスト強調）を適用した複数のバリアントそれぞれで
     OCR＋目盛り対応付けを行い、min/maxの判定が一致するかをクロスチェックする。
@@ -1095,8 +1104,10 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     variant_images = [img, tick_detect.apply_clahe(img, 1.5), tick_detect.apply_clahe(img, 2.5)]
 
     results = []
+    point_attempts = []
+    point_kwargs = {'numbered_points_out': point_attempts} if numbered_points_out is not None else {}
     try:
-        result = _run_ocr_tick(img, ticks, center, max_angle_deg, min_points)
+        result = _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, **point_kwargs)
         if result is not None:
             result['label'] = 'input_ticks'
             results.append(result)
@@ -1106,7 +1117,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     for label, variant_img in zip(('original', 'clahe1.5', 'clahe2.5'), variant_images):
         try:
             variant_ticks = tick_detect.detect_scale_ticks(variant_img, center)
-            result = _run_ocr_tick(variant_img, variant_ticks, center, max_angle_deg, min_points)
+            result = _run_ocr_tick(variant_img, variant_ticks, center, max_angle_deg, min_points, **point_kwargs)
         except Exception:
             result = None
         if result is not None:
@@ -1125,6 +1136,13 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     # OCR代表候補を保存する。条件間一致が無い場合は対応点が最も多い候補を使う。
     ocr_candidate = agreed if agreed is not None else (
         max(results, key=lambda result: result['n_used']) if results else None)
+    if numbered_points_out is not None:
+        selected = next((attempt for attempt in point_attempts
+                         if ocr_candidate is not None and attempt['result'] is ocr_candidate),
+                        max(point_attempts, key=lambda attempt: len(attempt['bound']),
+                            default={'bound': []}))
+        numbered_points_out.update(bound=selected['bound'],
+                                   calibration=(ocr_candidate or {}).get('calibration'))
     diagnostics = _build_scale_diagnostics(
         results, numbers, ocr_candidate, agreed, vlm_result, use_vlm)
 

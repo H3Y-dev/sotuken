@@ -179,6 +179,10 @@ def summarize(rows):
         'catastrophic_count': len(catastrophic),
         'max_reference_error': max(errors) if errors else None,
         'failure_stages': failure_stages,
+        'local_success_count': sum(r.get('value_local') is not None for r in rows),
+        'local_success_rate': (sum(r.get('value_local') is not None for r in rows) / total
+                               if total else 0.0),
+        'cross_check_flagged_count': sum((r.get('cross_check_diff_fs') or 0) > 2.5 for r in rows),
     }
 
 
@@ -189,7 +193,7 @@ def _resolve_path(path, base_dir):
     return os.path.normpath(os.path.join(base_dir, path))
 
 
-def evaluate_entry(entry, base_dir, use_vlm=True):
+def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, needle_angle='segment'):
     """正解データ1件を読み取り、誤差を計算して1行分の結果を返す"""
     image_path = _resolve_path(entry['image'], base_dir)
     row = {
@@ -210,6 +214,12 @@ def evaluate_entry(entry, base_dir, use_vlm=True):
         'ocr_scale_correct': None,
         'vlm_scale_correct': None,
         'elapsed_sec': None,
+        'read_method': 'global',
+        'value_local': None,
+        'value_global': None,
+        'cross_check_diff_fs': None,
+        'bracket': None,
+        'local_checks': {check: 'off' for check in 'EBCD'},
     }
 
     # 真値が未記入の項目は評価できない。黙って0点扱いにすると
@@ -228,8 +238,14 @@ def evaluate_entry(entry, base_dir, use_vlm=True):
         return row
 
     started = time.time()
-    result = meter_pipeline.read_meter(img, use_vlm=use_vlm)
+    options = dict(local_read=local_read, needle_angle=needle_angle) if local_read or needle_angle != 'segment' else {}
+    result = meter_pipeline.read_meter(img, use_vlm=use_vlm, **options)
     row['elapsed_sec'] = round(time.time() - started, 2)
+    for key in ('read_method', 'value_local', 'value_global', 'cross_check_diff_fs', 'bracket', 'local_checks'):
+        if key in result:
+            row[key] = result[key]
+    if not options:
+        row['value_global'] = result.get('value')
 
     row['stage'] = result['stage']
     row['n_ticks'] = result['n_ticks']
@@ -372,6 +388,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description='アナログメーター読み取りの精度を評価する')
     parser.add_argument('groundtruth', help='正解データのJSONファイル')
+    parser.add_argument('--local-read', action='store_true', help='針を挟む数字2点で読む（誤読チェックなし）')
+    parser.add_argument('--needle-angle', choices=('segment', 'tip'), default='segment')
     parser.add_argument('--no-vlm', action='store_true',
                         help='VLM処理をすべて無効化し、OCR/画像処理だけで評価する')
     parser.add_argument('-o', '--output',
@@ -415,10 +433,14 @@ def main(argv=None):
         else:
             print('[{}/{}] {} ...'.format(i, len(entries), entry['image']))
         entry.setdefault('tolerance_percent', args.tolerance)
-        rows.append(evaluate_entry(entry, base_dir, use_vlm=not args.no_vlm))
+        rows.append(evaluate_entry(entry, base_dir, use_vlm=not args.no_vlm,
+                                   local_read=args.local_read, needle_angle=args.needle_angle))
 
     summary = summarize(rows)
     print_report(rows, summary, args.tolerance)
+    print('局所成立: {}/{} ({:.1%}), 突き合わせ要確認: {}'.format(
+        summary['local_success_count'], summary['total'], summary['local_success_rate'],
+        summary['cross_check_flagged_count']))
 
     unlabeled = [r for r in rows if r.get('stage') == 'unlabeled']
     if unlabeled:

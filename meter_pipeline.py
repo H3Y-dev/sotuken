@@ -18,6 +18,7 @@ import math
 import numpy as np
 
 import meter_reader
+import local_reading
 import orientation
 import scale_value_detect
 import tick_detect
@@ -58,7 +59,7 @@ def _detect_center(img):
     return None, None
 
 
-def read_meter(img, use_vlm=True):
+def read_meter(img, use_vlm=True, *, local_read=False, local_checks=(), needle_angle='segment'):
     """
     画像1枚を自動で読み取る。
 
@@ -81,6 +82,10 @@ def read_meter(img, use_vlm=True):
                         ないので、オーバーレイ描画等に座標を使うときは
                         必ずこちらを使うこと）
     """
+    if needle_angle not in ('segment', 'tip'):
+        raise ValueError("needle_angle must be 'segment' or 'tip'")
+    if local_checks:
+        raise ValueError('local_checks are not implemented in stages 0 and 1')
     result = {
         'stage': None,
         'value': None,
@@ -101,6 +106,11 @@ def read_meter(img, use_vlm=True):
         'processed_img': None,
         'error': None,
     }
+    if local_read or needle_angle != 'segment':
+        result.update(value_local=None, value_global=None, read_method='global',
+                      cross_check_diff_fs=None, bracket=None,
+                      local_checks={check: 'off' for check in 'EBCD'},
+                      needle_confidence=None, needle_angle_source=needle_angle)
 
     # ── 盤面のクロップ（失敗しても元画像で続行する） ──
     if use_vlm:
@@ -153,14 +163,20 @@ def read_meter(img, use_vlm=True):
 
     # ── 目盛りの数値（OCR、必要時のみVLMで補助する） ──
     scale_diagnostics = {}
+    numbered_points = {}
     try:
         scale = scale_value_detect.detect_scale_values(
             img, ticks, center, use_vlm=use_vlm,
-            diagnostics_out=scale_diagnostics)
+            diagnostics_out=scale_diagnostics,
+            **({'numbered_points_out': numbered_points} if local_read else {}))
     except Exception as e:
         scale = None
         result['error'] = str(e)
     result['scale_diagnostics'] = scale_diagnostics or None
+
+    if local_read or needle_angle != 'segment':
+        return _read_optional(img, center, ticks, scale, numbered_points, result,
+                              local_read=local_read, needle_angle=needle_angle)
 
     if scale is None:
         result['stage'] = STAGE_SCALE
@@ -198,4 +214,56 @@ def read_meter(img, use_vlm=True):
     result['ratio'] = reading['ratio']
     result['angle_deg'] = reading['angle_deg']
     result['stage'] = STAGE_OK
+    return result
+
+
+def _read_optional(img, center, ticks, scale, numbered_points, result, *, local_read, needle_angle):
+    """局所方式・針先角度の評価経路。既定経路の結果項目には触れない。"""
+    if scale is not None:
+        ticks = scale.get('ticks') or ticks
+        for key in ('zero_pt', 'full_pt', 'min_value', 'max_value'):
+            result[key] = scale[key]
+        result['scale_source'] = scale.get('source')
+        result['scale_confident'] = scale.get('is_confident')
+    result['ticks'] = ticks
+    needle = meter_reader.detect_needle(img, center)
+    if needle is None:
+        result['stage'] = STAGE_SCALE if scale is None else STAGE_NEEDLE
+        return result
+    result['needle_confidence'] = needle['needle_confidence']
+    angle = (needle['angle_tip'] if needle_angle == 'tip'
+             else math.atan2(needle['direction'][1], needle['direction'][0]))
+    tick_angles = [tick['angle'] for tick in ticks if 'angle' in tick]
+    if scale is not None:
+        reading = meter_reader.compute_reading(
+            img, center, scale['zero_pt'], scale['full_pt'],
+            scale['min_value'], scale['max_value'], tick_angles=tick_angles or None,
+            calibration_angles=scale.get('calibration'), needle_angle=needle_angle, needle=needle)
+        if reading is not None:
+            result.update(value=reading['value'], value_global=reading['value'],
+                          ratio=reading['ratio'], angle_deg=reading['angle_deg'])
+    local = None
+    if local_read:
+        angles = sorted(set(a % math.tau for a in tick_angles))
+        gaps = np.diff(angles)
+        spacing = float(np.median(gaps)) if len(gaps) else None
+        local = local_reading.read_local(
+            numbered_points.get('bound', []), angle,
+            calibration=((scale or {}).get('calibration') or numbered_points.get('calibration')),
+            tick_spacing=spacing)
+    if local is not None:
+        result.update(value=local['value'], value_local=local['value'],
+                      read_method='local', bracket=local['bracket'])
+        if result['value_global'] is None:
+            result['scale_confident'] = False
+        else:
+            diff = local_reading.cross_check_diff_fs(
+                local['value'], result['value_global'],
+                result['min_value'] if result['min_value'] is not None else local['min_value'],
+                result['max_value'] if result['max_value'] is not None else local['max_value'])
+            result['cross_check_diff_fs'] = diff
+            if diff is not None and diff > 2.5:
+                result['scale_confident'] = False
+    result['stage'] = (STAGE_OK if result['value'] is not None
+                       else STAGE_SCALE if scale is None else STAGE_NEEDLE)
     return result
