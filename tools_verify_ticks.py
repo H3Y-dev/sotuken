@@ -23,7 +23,7 @@ def load(p):
     return cv2.imdecode(np.fromfile(p, dtype=np.uint8), cv2.IMREAD_COLOR)
 
 
-paths = sorted(glob.glob(r'C:\卒研\images\recieved_meter\*.jpg')) + [
+paths = sorted(glob.glob(r'C:\卒研\サンプルメーター（本番用）\企業提供_日本製鋼所\*.jpg')) + [
     'eval/images/meter1.png', 'eval/images/meter2.jpg', 'eval/images/meter3.png']
 
 print('%-14s %5s %9s %8s %10s' % ('image', 'n', 'r_med/sh', 'CV', 'within10%'))
