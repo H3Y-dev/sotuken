@@ -1,6 +1,7 @@
 package jp.sotuken.metercapture.queue
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,6 +21,48 @@ class RoomQueueStoreInstrumentedTest {
         get() = ApplicationProvider.getApplicationContext()
 
     @Test
+    fun migrationFromVersionOnePreservesQueuedImagesAndAddsNullableSentVia() = runTest {
+        val name = "queue-migration-${System.nanoTime()}.db"
+        val path = context.getDatabasePath(name)
+        path.parentFile?.mkdirs()
+        try {
+            SQLiteDatabase.openOrCreateDatabase(path, null).use { oldDb ->
+                oldDb.execSQL("""
+                    CREATE TABLE queue_items (
+                        localId TEXT NOT NULL PRIMARY KEY, imagePath TEXT NOT NULL,
+                        capturedAt TEXT NOT NULL, deviceName TEXT, operatorValue REAL,
+                        operatorNote TEXT, sendState TEXT NOT NULL, retryCount INTEGER NOT NULL,
+                        lastError TEXT, sentAt TEXT
+                    )
+                """.trimIndent())
+                oldDb.execSQL("""
+                    INSERT INTO queue_items (localId, imagePath, capturedAt, sendState, retryCount)
+                    VALUES ('existing', '/private/capture.jpg', '2026-10-21T10:00:00Z', 'PENDING', 0)
+                """.trimIndent())
+                oldDb.version = 1
+            }
+            val database = Room.databaseBuilder(context, CaptureDatabase::class.java, name)
+                .addMigrations(CaptureDatabase.MIGRATION_1_2)
+                .build()
+            try {
+                val item = database.queueItemDao().findById("existing")
+                assertNotNull(item)
+                assertEquals("/private/capture.jpg", item?.imagePath)
+                assertEquals(SendState.PENDING, item?.sendState)
+                assertNull(item?.sentVia)
+                val store = RoomQueueStore(database.queueItemDao())
+                store.markSending("existing")
+                store.markSent("existing", QueueItem.VIA_HTTP)
+                assertEquals(QueueItem.VIA_HTTP, database.queueItemDao().findById("existing")?.sentVia)
+            } finally {
+                database.close()
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test
     fun enqueueWithRoomCanBeReadBack() = runTest {
         val database = Room.inMemoryDatabaseBuilder(context, CaptureDatabase::class.java).build()
         val imageFile = File.createTempFile("room-queue-", ".jpg", context.cacheDir)
@@ -34,6 +77,7 @@ class RoomQueueStoreInstrumentedTest {
             assertEquals(0, item?.retryCount)
             assertNull(item?.lastError)
             assertNull(item?.sentAt)
+            assertNull(item?.sentVia)
         } finally {
             database.close()
             imageFile.delete()
@@ -159,9 +203,10 @@ class RoomQueueStoreInstrumentedTest {
             store.markSending(localId)
             assertEquals(SendState.SENDING, dao.findById(localId)?.sendState)
 
-            store.markSent(localId)
+            store.markSent(localId, QueueItem.VIA_HTTP)
             val sentItem = dao.findById(localId)
             assertEquals(SendState.SENT, sentItem?.sendState)
+            assertEquals(QueueItem.VIA_HTTP, sentItem?.sentVia)
             assertNotNull(sentItem?.sentAt)
         } finally {
             database.close()
@@ -210,7 +255,7 @@ class RoomQueueStoreInstrumentedTest {
 
             var threw = false
             try {
-                store.markSent(localId)
+                store.markSent(localId, QueueItem.VIA_HTTP)
             } catch (e: IllegalStateException) {
                 threw = true
             }
@@ -236,7 +281,7 @@ class RoomQueueStoreInstrumentedTest {
 
             val sentId = store.enqueue(imageFile, emptyMeta())
             store.markSending(sentId)
-            store.markSent(sentId)
+            store.markSent(sentId, QueueItem.VIA_HTTP)
 
             store.recoverInterruptedSends()
 

@@ -15,7 +15,13 @@ data class QueueItem(
     val retryCount: Int,
     val lastError: String?,
     val sentAt: String?,
-)
+    val sentVia: String? = null,
+) {
+    companion object {
+        const val VIA_HTTP = "http"
+        const val VIA_FOLDER = "folder"
+    }
+}
 
 // 状態遷移: PENDING -> SENDING -> SENT、失敗時 SENDING -> FAILED、再送時 FAILED -> PENDING。
 // 実装は QueueStore.markSending/markSent/markFailed/retry。不正な遷移は IllegalStateException。
@@ -31,4 +37,3 @@ data class CaptureMeta(
     val operatorValue: Double?,
     val operatorNote: String?,
 )
-

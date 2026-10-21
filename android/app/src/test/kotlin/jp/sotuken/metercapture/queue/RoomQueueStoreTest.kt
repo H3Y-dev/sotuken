@@ -38,6 +38,7 @@ class RoomQueueStoreTest {
             assertEquals(0, item?.retryCount)
             assertEquals(null, item?.lastError)
             assertEquals(null, item?.sentAt)
+            assertEquals(null, item?.sentVia)
         }
     }
 
@@ -153,7 +154,7 @@ class RoomQueueStoreTest {
     // --- markSent ---
 
     @Test
-    fun markSentTransitionsSendingToSentAndSetsSentAt() = runTest {
+    fun markSentTransitionsSendingToSentAndSetsSentAtAndSentVia() = runTest {
         val dao = FakeQueueDao()
         val store = RoomQueueStore(dao)
 
@@ -161,10 +162,11 @@ class RoomQueueStoreTest {
             val localId = store.enqueue(imageFile, emptyMeta())
             store.markSending(localId)
 
-            store.markSent(localId)
+            store.markSent(localId, QueueItem.VIA_HTTP)
 
             val item = dao.findById(localId)
             assertEquals(SendState.SENT, item?.sendState)
+            assertEquals(QueueItem.VIA_HTTP, item?.sentVia)
             assertNotNull(item?.sentAt)
         }
     }
@@ -178,11 +180,30 @@ class RoomQueueStoreTest {
             val localId = store.enqueue(imageFile, emptyMeta())
 
             try {
-                store.markSent(localId)
+                store.markSent(localId, QueueItem.VIA_HTTP)
                 fail("expected IllegalStateException")
             } catch (e: IllegalStateException) {
                 // 期待どおり: PENDING状態から直接markSentは許可されない
             }
+        }
+    }
+
+    @Test
+    fun updateSentViaUpdatesViaField() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+            store.markSent(localId, QueueItem.VIA_FOLDER)
+
+            assertEquals(QueueItem.VIA_FOLDER, dao.findById(localId)?.sentVia)
+
+            store.updateSentVia(localId, QueueItem.VIA_HTTP)
+
+            assertEquals(QueueItem.VIA_HTTP, dao.findById(localId)?.sentVia)
+            assertEquals(SendState.SENT, dao.findById(localId)?.sendState)
         }
     }
 
@@ -302,7 +323,7 @@ class RoomQueueStoreTest {
         withTemporaryImage { imageFile ->
             val sentId = store.enqueue(imageFile, emptyMeta())
             store.markSending(sentId)
-            store.markSent(sentId)
+            store.markSent(sentId, QueueItem.VIA_HTTP)
 
             val failedId = store.enqueue(imageFile, emptyMeta())
             store.markSending(failedId)
@@ -313,6 +334,42 @@ class RoomQueueStoreTest {
             assertEquals(SendState.SENT, dao.findById(sentId)?.sendState)
             assertEquals(SendState.FAILED, dao.findById(failedId)?.sendState)
         }
+    }
+
+    @Test
+    fun findByStateReturnsItemsOrderedByCapturedAtAscending() = runTest {
+        val dao = FakeQueueDao()
+        val item1 = QueueItem(
+            localId = "id-1",
+            imagePath = "/path/1.jpg",
+            capturedAt = "2026-10-21T10:00:00Z",
+            deviceName = null,
+            operatorValue = null,
+            operatorNote = null,
+            sendState = SendState.PENDING,
+            retryCount = 0,
+            lastError = null,
+            sentAt = null,
+        )
+        val item2 = QueueItem(
+            localId = "id-2",
+            imagePath = "/path/2.jpg",
+            capturedAt = "2026-10-21T09:00:00Z",
+            deviceName = null,
+            operatorValue = null,
+            operatorNote = null,
+            sendState = SendState.PENDING,
+            retryCount = 0,
+            lastError = null,
+            sentAt = null,
+        )
+        dao.insert(item1)
+        dao.insert(item2)
+
+        val pending = dao.findByState(SendState.PENDING)
+        assertEquals(2, pending.size)
+        assertEquals("id-2", pending[0].localId)
+        assertEquals("id-1", pending[1].localId)
     }
 
     private suspend fun withTemporaryImage(block: suspend (File) -> Unit) {
