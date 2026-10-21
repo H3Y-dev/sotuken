@@ -357,15 +357,35 @@ def detect_needle(img, center):
             if consecutive_empty > gap_thresh:
                 break
 
+    lengths = sorted((math.hypot(x2 - x1, y2 - y1),
+                      math.atan2(y2 - y1, x2 - x1))
+                     for x1, y1, x2, y2 in candidates)
+    longest, longest_angle = lengths[-1]
+    # 同じ針の両縁は競合候補に数えない（方向差10度以上の直線と比較）。
+    other = [length for length, angle in lengths
+             if abs(math.sin(angle - longest_angle)) > math.sin(math.radians(10))]
+    tip_distance = math.hypot(tip_x - cx, tip_y - cy)
+    samples = np.arange(3, int(tip_distance) + 1)
+    xs = np.clip(np.rint(cx + ndx * samples).astype(int), 0, w - 1)
+    ys = np.clip(np.rint(cy + ndy * samples).astype(int), 0, h - 1)
+    continuity = float(np.mean(edges[ys, xs] > 0)) if len(samples) else 0.0
+
     return {
         'line': (int(x1), int(y1), int(x2), int(y2)),
         'direction': (ndx, ndy),
         'tip': (int(tip_x), int(tip_y)),
+        'angle_tip': math.atan2(tip_y - cy, tip_x - cx),
+        'needle_confidence': {
+            'candidate_count': len(candidates),
+            'length_ratio': longest / max(other) if other else None,
+            'edge_continuity': continuity,
+        },
     }
 
 
 def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max,
-                    tick_angles=None, calibration_angles=None):
+                    tick_angles=None, calibration_angles=None, *,
+                    needle_angle='segment', needle=None):
     """
     画像・中心点・ゼロ点・フルスケール点・目盛りの最小/最大値から測定値を求める。
 
@@ -385,11 +405,16 @@ def compute_reading(img, center, zero_pt, fullscale_pt, val_min, val_max,
     zx, zy = zero_pt
     fsx, fsy = fullscale_pt
 
-    needle = detect_needle(img, center)
+    if needle_angle not in ('segment', 'tip'):
+        raise ValueError("needle_angle must be 'segment' or 'tip'")
+    if needle is None:
+        needle = detect_needle(img, center)
     if needle is None:
         return None
 
     ndx, ndy = needle['direction']
+    if needle_angle == 'tip':
+        ndx, ndy = math.cos(needle['angle_tip']), math.sin(needle['angle_tip'])
 
     # ゼロ点方向と針の間の角度（表示用）
     zero_vec = np.array([zx - cx, zy - cy], dtype=float)
