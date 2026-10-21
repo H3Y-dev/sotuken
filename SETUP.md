@@ -6,7 +6,7 @@ Windows環境を前提としています。
 
 ## 前提条件
 
-- Python 3.8系（このプロジェクトの`venv`は3.8.8で作成済み）
+- Python 3.11系（2026-10-21にチームで3.8から3.11へ統一。Anacondaは使わない）
 - VSCode + Python拡張機能がインストール済み
 - インターネット接続（モデルダウンロードに数GB必要）
 
@@ -27,51 +27,40 @@ cd sotuken
 
 ## 1. Python仮想環境（venv）のセットアップ
 
-**先にPython 3.8系が入っているか確認してください。** PCに複数のPythonバージョンが
-入っていることがあり、`python`コマンドが3.8以外（3.11や3.14等）を指してしまう場合が
-あります。バージョンがズレると、`requirements.txt`のバージョン固定パッケージが
-インストールできず失敗します。
+**先にPython 3.11系が入っているか確認してください。** PCに複数のPythonバージョンが
+入っていることがあり、`python`コマンドが3.11以外（3.8や3.14等）を指してしまう場合が
+あります。`requirements.txt`は`numpy==1.24.4`を固定しているため、**3.12以上では
+インストールできません。** 必ず3.11を使ってください。
 
 ```powershell
 # インストール済みのPythonバージョン一覧を確認
-py -0
+py -0p
 ```
 
-一覧に`3.8`が無い場合は、事前に[python.org](https://www.python.org/downloads/release/python-388/)
-等からPython 3.8系をインストールしてください。
+一覧に`3.11`が無い場合は、[python.org](https://www.python.org/downloads/windows/)から
+Python 3.11系の「Windows installer (64-bit)」を入れてください。**Anacondaの3.11は使わないでください**
+（Anacondaのpythonは`sqlite3`の読み込みに失敗することがあります。2026-10-21までの
+3.8環境で実際に起きました）。
 
 ```powershell
 # プロジェクトフォルダ（sotuken）の直下で実行
-# "python" ではなく "py -3.8" を使い、バージョンを明示的に指定する
-py -3.8 -m venv venv
+# "python" ではなく "py -3.11" を使い、バージョンを明示的に指定する
+py -3.11 -m venv venv
 ```
 
-> [!warning]
-> **Anacondaが唯一の3.8として登録されている環境では、`sqlite3`が使えません**
-> （T6の保存層で使用）。`py -0p`で一覧を見たとき、3.8の行が
-> `C:\Users\<ユーザー名>\anaconda3\python.exe`を指している場合が該当します。
-> Anacondaは`import sqlite3`に必要な`sqlite3.dll`を`Library\bin`にしか
-> 置いておらず、`conda activate`で環境を有効化しない限りそこがPATHに
-> 乗らないため、`py -3.8`や通常のvenvから直接呼ぶと次のエラーで失敗します。
-> ```
-> ImportError: DLL load failed while importing _sqlite3: 指定されたモジュールが見つかりません。
-> ```
-> **直し方（1回だけでOK、Anaconda本体に対して行う）:**
-> ```powershell
-> Copy-Item "C:\Users\<ユーザー名>\anaconda3\Library\bin\sqlite3.dll" `
->           "C:\Users\<ユーザー名>\anaconda3\DLLs\sqlite3.dll"
-> ```
-> このあと`py -3.8 -c "import sqlite3; print(sqlite3.sqlite_version)"`が
-> 通ればOKです。**既にvenvを作ってしまっている場合は、上記コピーの後に
-> venvを作り直す必要はありません**（venvはシステムのDLL検索を使うため、
-> このコピーだけで既存venvも直ります）。
+> [!note] 3.8で作った古い`venv`がある場合
+> 古い`venv`フォルダを削除してから上のコマンドで作り直し、次の章の
+> `pip install -r requirements.txt`をやり直してください。`venv`はgitの管理外なので、
+> 消してもリポジトリには影響しません。
 
 `venv`フォルダがこのプロジェクト専用に新しく作られます。他のプロジェクトの
 venvと混ざることはありません。作成後、念のためバージョンを確認してください。
 
 ```powershell
 .\venv\Scripts\python.exe --version
-# Python 3.8.x と表示されればOK
+# Python 3.11.x と表示されればOK
+.\venv\Scripts\python.exe -c "import sqlite3; print(sqlite3.sqlite_version)"
+# バージョン番号が表示されればOK
 ```
 
 ### VSCodeでこのvenvを使うように設定する
@@ -137,8 +126,9 @@ python -m pip install -r requirements.txt
 | streamlit, pandas | T6一元管理システムのWeb UI（`app.py`） |
 
 > [!note] streamlit / pandas のバージョンについて
-> `streamlit==1.40.1` / `pandas==2.0.3` は **Python 3.8に対応する最終版**です。
-> これより新しい版はPython 3.9以上が必須になるため、上げないでください。
+> `streamlit==1.40.1` / `pandas==2.0.3` は、もともと **Python 3.8に対応する最終版**として固定したものです。
+> 2026-10-21に、Python 3.11でもこのまま入り、テスト215件と`app.py`の起動が通ることを確認しました。
+> 上げる場合は`numpy==1.24.4`との組み合わせを確かめてからにしてください。
 > 既存の`numpy==1.24.4` / `pillow==10.4.0`と衝突しないことは確認済みです。
 >
 > `app.py`（T6のWeb UI）を使わない場合、この2つは無くても
