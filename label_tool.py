@@ -317,3 +317,78 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+import datetime
+
+
+import datetime
+
+import datetime
+
+def build_label_record(image_path, image_size, points, numbered_ticks, form, computed=None):
+    labeler = (form.get('labeler') or '').strip() if form else ''
+    if not labeler:
+        return None
+
+    unlabelable = bool(form.get('unlabelable', False)) if form else False
+    img_path_str = str(image_path).replace(chr(92), '/') if image_path else ''
+
+    if unlabelable:
+        true_val = None
+        pts_dict = None
+    else:
+        true_val = computed.get('true_value') if computed else None
+        def get_pt(k1, k2):
+            if not points:
+                return None
+            pt = points.get(k1) or points.get(k2)
+            return list(pt) if pt else None
+
+        pts_dict = {
+            'center': get_pt('center', 'center'),
+            'zero_pt': get_pt('zero_pt', 'zero'),
+            'full_pt': get_pt('full_pt', 'full'),
+            'needle_tip': get_pt('needle_tip', 'needle'),
+            'numbered_ticks': numbered_ticks if numbered_ticks is not None else []
+        }
+
+    labeled_at = form.get('labeled_at') if form else None
+    if not labeled_at:
+        labeled_at = datetime.datetime.now().isoformat()
+
+    def to_float(val):
+        if val is None or val == '':
+            return None
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return None
+
+    def to_int_or_float(val):
+        if val is None or val == '':
+            return None
+        try:
+            f = float(val)
+            return int(f) if f.is_integer() else f
+        except (ValueError, TypeError):
+            return None
+
+    return {
+        'image': img_path_str,
+        'image_size': list(image_size) if image_size else [0, 0],
+        'coord_system': 'raw_imdecode',
+        'labeler': labeler,
+        'labeled_at': labeled_at,
+        'meter_id': form.get('meter_id', '') if form else '',
+        'condition': form.get('condition', '正面') if form else '正面',
+        'scope': form.get('scope', 'round') if form else 'round',
+        'unit': form.get('unit', '') if form else '',
+        'major_step': to_int_or_float(form.get('major_step')) if form else None,
+        'min_value': to_float(form.get('min_value')) if form else None,
+        'max_value': to_float(form.get('max_value')) if form else None,
+        'true_value': true_val,
+        'eye_value': to_float(form.get('eye_value')) if form else None,
+        'unlabelable': unlabelable,
+        'points': pts_dict
+    }
