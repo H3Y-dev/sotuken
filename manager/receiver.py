@@ -138,7 +138,27 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             return
         sys.stderr.write(f"[受信口] {self.address_string()} - {format % args}\n")
 
+    def _drain_rfile(self) -> None:
+        """WinError 10054 (TCP RST) 防止のため、ソケットバッファに残っている未読データを安全に読み捨てる。"""
+        try:
+            sock = getattr(self, "connection", None) or getattr(self, "request", None)
+            if sock and hasattr(sock, "setblocking"):
+                sock.setblocking(False)
+                try:
+                    while True:
+                        data = sock.recv(65536)
+                        if not data:
+                            break
+                except Exception:
+                    pass
+                finally:
+                    sock.setblocking(True)
+        except Exception:
+            pass
+
     def _send_json(self, status_code: int, data: Dict[str, Any]) -> None:
+        if status_code >= 400:
+            self._drain_rfile()
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
