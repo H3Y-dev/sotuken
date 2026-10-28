@@ -504,6 +504,26 @@ def _major_tick_flags(lengths, observed):
 
 
 def detect_scale_ticks(img, center):
+    """暗線の検出に失敗した黒盤面だけ、白目盛りとして再試行する。"""
+    ticks = _detect_scale_ticks(img, center)
+    if len(ticks) >= 3:
+        return ticks
+    try:
+        cx, cy = int(center[0]), int(center[1])
+        half = max(1, min(img.shape[:2]) // 5)
+        face = img[max(0, cy - half):cy + half,
+                   max(0, cx - half):cx + half]
+        # 針軸や文字の明るさではなく、その周囲の盤面の明暗で極性を決める。
+        if face.size and np.median(cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)) < 128:
+            bright_ticks = _detect_scale_ticks(255 - img, center)
+            if len(bright_ticks) >= 3:
+                return bright_ticks
+    except Exception:
+        pass
+    return ticks
+
+
+def _detect_scale_ticks(img, center):
     """
     中心を基準に極座標変換し、同一半径上で周期的に現れる暗線を目盛りとして返す。
     輪郭の連結状態を使わないため、目盛りと円弧が融合していても検出できる。

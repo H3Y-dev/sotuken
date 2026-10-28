@@ -40,5 +40,26 @@ class TestCenterRecovery(unittest.TestCase):
                 np.zeros((300, 400, 3), dtype=np.uint8), (130, 150)))
 
 
+class TestTickPolarityRecovery(unittest.TestCase):
+    def test_retries_bright_ticks_only_after_dark_detection_fails(self):
+        image = np.full((100, 100, 3), 20, dtype=np.uint8)
+        ticks = [{'angle': angle} for angle in (0, 1, 2)]
+        with patch('tick_detect._detect_scale_ticks',
+                   side_effect=[[], ticks]) as detect:
+            self.assertEqual(ticks, tick_detect.detect_scale_ticks(image, (50, 50)))
+            np.testing.assert_array_equal(255 - image, detect.call_args.args[0])
+
+        for background in (20, 220):
+            image.fill(background)
+            with patch('tick_detect._detect_scale_ticks', return_value=ticks) as detect:
+                self.assertIs(ticks, tick_detect.detect_scale_ticks(image, (50, 50)))
+                detect.assert_called_once()
+
+        image.fill(220)
+        with patch('tick_detect._detect_scale_ticks', return_value=[]) as detect:
+            self.assertEqual([], tick_detect.detect_scale_ticks(image, (50, 50)))
+            detect.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()
