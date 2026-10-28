@@ -637,6 +637,19 @@ def refine_center_iterative(img, seed_center, iterations=2, max_shift_ratio=0.35
     shift_ratio = max_shift_ratio
     for i in range(max(1, iterations)):
         ticks = detect_scale_ticks(img, center)
+        if len(ticks) < 3 and i == 0:
+            # 小円Houghが数字を拾うと極座標の起点が崩れる。盤面円も目盛りで確認する。
+            try:
+                from detect_meter_center_v2 import detect_meter_center
+
+                dial = detect_meter_center(img)
+                if dial is not None:
+                    candidate = dial['center']
+                    candidate_ticks = detect_scale_ticks(img, candidate)
+                    if len(candidate_ticks) >= 3:
+                        center, ticks = candidate, candidate_ticks
+            except Exception:
+                pass
         if len(ticks) < 3:
             return (None, [])
         refined = refine_center_from_ticks(ticks, center, img.shape, max_shift_ratio=shift_ratio)
