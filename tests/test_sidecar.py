@@ -97,5 +97,37 @@ class TestSidecar(unittest.TestCase):
         self.assertIsNone(metadata)
 
 
+
+    def test_load_sidecar_bom_utf8(self):
+        img_path = os.path.join(self.temp_dir.name, "meter_bom.jpg")
+        json_path = os.path.join(self.temp_dir.name, "meter_bom.json")
+        with open(img_path, "wb") as f:
+            f.write(b"fake image")
+
+        data = {"device_name": "BOM計器", "operator_value": 100.0}
+        with open(json_path, "w", encoding="utf-8-sig") as f:
+            json.dump(data, f, ensure_ascii=False)
+
+        metadata = load_sidecar(img_path)
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.device_name, "BOM計器")
+        self.assertEqual(metadata.operator_value, 100.0)
+
+    def test_load_sidecar_nobom_utf8(self):
+        img_path = os.path.join(self.temp_dir.name, "meter_nobom.jpg")
+        json_path = os.path.join(self.temp_dir.name, "meter_nobom.json")
+        with open(img_path, "wb") as f:
+            f.write(b"fake image")
+
+        data = {"device_name": "NoBOM計器", "operator_value": 200.0}
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+
+        metadata = load_sidecar(img_path)
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.device_name, "NoBOM計器")
+        self.assertEqual(metadata.operator_value, 200.0)
+
+
 if __name__ == "__main__":
     unittest.main()
