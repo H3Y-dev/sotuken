@@ -1,0 +1,87 @@
+[
+  {
+    "image": "C:/卒研/sotuken_gitclone/sotuken/gazou/450-2016012210493723564.jpg",
+    "image_size": [
+      1200,
+      939
+    ],
+    "coord_system": "raw_imdecode",
+    "labeler": "佐々木綾杜",
+    "labeled_at": "2026-10-28T11:09:07",
+    "meter_id": "",
+    "condition": "正面",
+    "scope": "round",
+    "unit": "",
+    "major_step": null,
+    "min_value": 0.0,
+    "max_value": 100.0,
+    "true_value": 55.959085612165204,
+    "eye_value": null,
+    "unlabelable": false,
+    "points": {
+      "center": [
+        634,
+        535
+      ],
+      "zero_pt": [
+        251,
+        559
+      ],
+      "full_pt": [
+        901,
+        831
+      ],
+      "needle_tip": [
+        838,
+        254
+      ],
+      "numbered_ticks": [
+        {
+          "value": 10,
+          "x": 274,
+          "y": 409
+        },
+        {
+          "value": 20,
+          "x": 354,
+          "y": 280
+        },
+        {
+          "value": 30,
+          "x": 478,
+          "y": 194
+        },
+        {
+          "value": 40,
+          "x": 627,
+          "y": 162
+        },
+        {
+          "value": 50,
+          "x": 776,
+          "y": 192
+        },
+        {
+          "value": 60,
+          "x": 901,
+          "y": 279
+        },
+        {
+          "value": 70,
+          "x": 978,
+          "y": 404
+        },
+        {
+          "value": 80,
+          "x": 1003,
+          "y": 558
+        },
+        {
+          "value": 90,
+          "x": 981,
+          "y": 706
+        }
+      ]
+    }
+  }
+]
