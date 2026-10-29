@@ -50,7 +50,7 @@ def apply_sidecar(storage: Storage, image_sha256: str, sidecar: Optional[Sidecar
             old is None or any(truth[f] != getattr(old, f) for f in _TRUTH_FIELDS)):
         storage.save_image_truth(image_sha256=image_sha256, **truth)
 
-    for reading in storage.get_all_readings():
+    for reading in storage.get_all_readings(include_raw=False):
         if reading.image_sha256 != image_sha256:
             continue
         device_name = reading.device_name

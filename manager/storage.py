@@ -8,6 +8,9 @@ from typing import Any, Dict, List, Optional, Set
 from manager.record import ImageTruth
 
 
+_RAW_DATA_EXCLUDE_KEYS = {"processed_img"}
+
+
 def _json_safe(obj):
     """json.dumps が扱えない値を、保存できる形へ落とす。
 
@@ -139,7 +142,9 @@ class Storage:
         value = read_result.get("value")
         stage = read_result.get("stage", "unknown")
         reading_id = reading_id or read_result.get("reading_id") or str(uuid.uuid4())
-        raw_data_json = json.dumps(read_result, ensure_ascii=False, default=_json_safe)
+        raw_data = {key: value for key, value in read_result.items()
+                    if key not in _RAW_DATA_EXCLUDE_KEYS}
+        raw_data_json = json.dumps(raw_data, ensure_ascii=False, default=_json_safe)
 
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -203,13 +208,14 @@ class Storage:
         if not self._conn:
             conn.close()
 
-    def get_all_readings(self) -> List[MeterReading]:
+    def get_all_readings(self, include_raw: bool = True) -> List[MeterReading]:
         """保存されているすべての記録を取得する"""
         conn = self._get_connection()
         cursor = conn.cursor()
+        raw_column = "raw_data_json" if include_raw else "NULL"
         cursor.execute(
-            """
-            SELECT id, timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
+            f"""
+            SELECT id, timestamp, device_name, value, stage, image_path, {raw_column}, image_sha256,
                    reading_id, status, input_method, confidence, failure_stage, failure_code,
                    failure_detail, pipeline_version, log_path, overlay_path
             FROM meter_readings

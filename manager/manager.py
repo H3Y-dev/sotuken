@@ -82,7 +82,7 @@ class MeterManager:
             image_sha256=image_sha256,
         )
 
-        readings = self.storage.get_all_readings()
+        readings = self.storage.get_all_readings(include_raw=False)
         reading_obj = None
         for r in readings:
             if r.id == row_id:
@@ -111,11 +111,11 @@ class MeterManager:
             "overlay_path": overlay_path,
         }
 
-    def get_history(self) -> List[MeterReading]:
-        return self.storage.get_all_readings()
+    def get_history(self, include_raw: bool = True) -> List[MeterReading]:
+        return self.storage.get_all_readings(include_raw=include_raw)
 
     def format_history_for_cli(self) -> str:
-        readings = self.get_history()
+        readings = self.get_history(include_raw=False)
         if not readings:
             return "履歴データがありません。"
 
@@ -130,8 +130,11 @@ class MeterManager:
             )
         return "\n".join(lines)
 
-    def format_history_for_ui(self) -> List[Dict[str, Any]]:
-        readings = self.get_history()
+    def format_history_for_ui(
+        self, readings: Optional[List[MeterReading]] = None,
+    ) -> List[Dict[str, Any]]:
+        if readings is None:
+            readings = self.get_history(include_raw=False)
         return [
             {
                 "id": r.id,

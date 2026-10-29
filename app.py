@@ -90,7 +90,8 @@ with st.sidebar:
         st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
 
 manager = MeterManager(db_path="manager.db")
-_record_count = len(manager.get_history())
+history = manager.get_history(include_raw=False)
+_record_count = len(history)
 
 # 銘板。計器に貼られている銘板と同じ情報の並べ方にしてある。
 st.markdown(
@@ -176,7 +177,6 @@ with tab1:
 
 with tab2:
     st.header("読み取りの記録")
-    history = manager.get_history()
     device_options = ["すべて"] + sorted({reading.device_name for reading in history})
     history_dates = [datetime.fromisoformat(reading.timestamp).date() for reading in history]
     default_date_from = min(history_dates) if history_dates else date.today()
@@ -198,7 +198,7 @@ with tab2:
             date_to=selected_date_to,
         )
         filtered_ids = {reading.id for reading in filtered_history}
-        history_data = manager.format_history_for_ui()
+        history_data = manager.format_history_for_ui(history)
         filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
 
         st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
@@ -220,7 +220,7 @@ with tab2:
 
         if st.button("CSVを書き出す"):
             csv_path = "readings_export.csv"
-            export_to_csv(manager.get_history(), csv_path)
+            export_to_csv(history, csv_path)
             with open(csv_path, "rb") as f:
                 st.download_button(
                     label="CSVを保存",
@@ -231,7 +231,7 @@ with tab2:
 
         if st.button("JSONLを書き出す"):
             jsonl_path = "readings_export.jsonl"
-            export_to_jsonl(manager.get_history(), jsonl_path)
+            export_to_jsonl(history, jsonl_path)
             with open(jsonl_path, "rb") as f:
                 st.download_button(
                     label="JSONLを保存",
@@ -244,7 +244,7 @@ with tab2:
         st.info("履歴データが存在しません。")
 
     st.header("機器別の推移")
-    grouped_readings = group_by_device(manager.get_history())
+    grouped_readings = group_by_device(history)
 
     if not grouped_readings:
         st.info("表示できる記録がありません。")
