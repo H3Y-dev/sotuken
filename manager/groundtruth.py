@@ -80,7 +80,7 @@ def main() -> int:
 
     storage = Storage(args.db)
     entries, excluded_count = build_groundtruth_entries(
-        storage.get_all_readings(), storage.get_all_image_truths()
+        storage.get_all_readings(include_raw=False), storage.get_all_image_truths()
     )
     export_groundtruth(entries, args.output)
     print(

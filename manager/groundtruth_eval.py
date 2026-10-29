@@ -93,7 +93,7 @@ def main() -> int:
 
     storage = Storage(args.db)
     rows = build_rows(
-        storage.get_all_readings(), storage.get_all_image_truths(), args.tolerance,
+        storage.get_all_readings(include_raw=False), storage.get_all_image_truths(), args.tolerance,
     )
     summary = summarize(rows)
 
