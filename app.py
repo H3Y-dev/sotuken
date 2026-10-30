@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd
 import streamlit as st
+from image_cache import get_thumbnail_path
 from manager.export import export_to_csv, export_to_jsonl, filter_readings, group_by_device, readings_to_series
 from manager.manager import MeterManager
 
@@ -51,6 +52,41 @@ def _to_display_table(rows):
     return df[[c for c in _COLUMN_ORDER if c in df.columns]]
 
 
+@st.fragment
+def _render_history_table(filtered_history_data):
+    """記録の表と、選んだ行のオーバーレイ表示を局所再実行（fragment）する。"""
+    selection_event = st.dataframe(
+        _to_display_table(filtered_history_data),
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+    )
+    selected_rows = selection_event.selection.rows if selection_event.selection else []
+    if selected_rows:
+        selected_row = filtered_history_data[selected_rows[0]]
+        overlay_path = selected_row.get("overlay_path")
+        thumb_path = get_thumbnail_path(overlay_path) if overlay_path else None
+        if thumb_path and os.path.exists(thumb_path):
+            st.image(thumb_path, caption="検出結果オーバーレイ", use_container_width=True)
+            if overlay_path and os.path.exists(overlay_path):
+                try:
+                    with open(overlay_path, "rb") as f:
+                        file_bytes = f.read()
+                    mime_type = "image/png" if overlay_path.lower().endswith(".png") else "image/jpeg"
+                    st.download_button(
+                        label="原寸画像",
+                        data=file_bytes,
+                        file_name=os.path.basename(overlay_path),
+                        mime=mime_type,
+                        key=f"orig_img_{selected_row.get('id', 'selected')}",
+                    )
+                except Exception:
+                    pass
+        else:
+            st.caption("この記録にはオーバーレイ画像がありません。")
+
+
 st.set_page_config(
     page_title="メーター読み取り記録",
     layout="wide",
@@ -91,8 +127,17 @@ with st.sidebar:
         st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
         st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
 
-manager = MeterManager(db_path="manager.db")
-history = manager.get_history(include_raw=False)
+@st.cache_data
+def _get_cached_history(db_path: str, mtime: float):
+    """DBファイルの更新時刻（os.path.getmtime）をキーにして履歴取得をキャッシュする。"""
+    mgr = MeterManager(db_path=db_path)
+    return mgr.get_history(include_raw=False)
+
+
+_db_path = "manager.db"
+_db_mtime = os.path.getmtime(_db_path) if os.path.exists(_db_path) else 0.0
+manager = MeterManager(db_path=_db_path)
+history = _get_cached_history(_db_path, _db_mtime)
 _record_count = len(history)
 
 # 銘板。計器に貼られている銘板と同じ情報の並べ方にしてある。
@@ -204,21 +249,7 @@ with tab2:
         filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
 
         st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
-        selection_event = st.dataframe(
-            _to_display_table(filtered_history_data),
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
-        )
-        selected_rows = selection_event.selection.rows if selection_event.selection else []
-        if selected_rows:
-            selected_row = filtered_history_data[selected_rows[0]]
-            overlay_path = selected_row.get("overlay_path")
-            if overlay_path and os.path.exists(overlay_path):
-                st.image(overlay_path, caption="検出結果オーバーレイ", use_container_width=True)
-            else:
-                st.caption("この記録にはオーバーレイ画像がありません。")
+        _render_history_table(filtered_history_data)
 
         if st.button("CSVを書き出す"):
             csv_path = "readings_export.csv"
