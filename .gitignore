@@ -33,3 +33,7 @@ loop_run_output.log
 
 # 受信口設定（合言葉・ポート）
 manager/pc_config.json
+
+# 縮小画像キャッシュ・計測一時ディレクトリ
+.cache/
+tmp_perf/
