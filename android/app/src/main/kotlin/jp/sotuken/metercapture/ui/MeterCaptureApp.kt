@@ -39,6 +39,7 @@ import jp.sotuken.metercapture.queue.QueueStore
 import jp.sotuken.metercapture.settings.PrivateIpv4Validator
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
 fun MeterCaptureApp(queueStore: QueueStore) {
@@ -54,6 +55,11 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
 	var showHistoryScreen by remember { mutableStateOf(false) }
+	val deviceNameCandidates = remember(queueItems) { buildDeviceNameCandidates(queueItems) }
+    // 入力済みの機器名は撮影のたびに残す。まだ触っていなければ、直前に撮った機器名を初期値にする。
+    var deviceNameEdited by rememberSaveable { mutableStateOf<String?>(null) }
+    val deviceNameInput = deviceNameEdited ?: deviceNameCandidates.firstOrNull().orEmpty()
+    var operatorValueInput by rememberSaveable { mutableStateOf("") }
 
     val coroutineScope = rememberCoroutineScope()
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -95,6 +101,13 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 }
 
                 if (hasCameraPermission) {
+                	CaptureMetaForm(
+                        deviceName = deviceNameInput,
+                        onDeviceNameChange = { deviceNameEdited = it },
+                        operatorValue = operatorValueInput,
+                        onOperatorValueChange = { operatorValueInput = it },
+                        deviceNameCandidates = deviceNameCandidates,
+                    )
                     CameraCapturePanel(
                         onSaved = { image ->
                             coroutineScope.launch {
@@ -102,8 +115,8 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                     queueStore.enqueue(
                                         imageFile = image.file,
                                         meta = CaptureMeta(
-                                            deviceName = null,
-                                            operatorValue = null,
+                                            deviceName = normalizeDeviceName(deviceNameInput),
+                                            operatorValue = parseOperatorValue(operatorValueInput),
                                             operatorNote = null,
                                         ),
                                     )
@@ -112,6 +125,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                     } catch (_: Exception) {
                                     }
                                     capturedImage = image
+                                    operatorValueInput = ""
                                     errorMessage = null
                                 } catch (error: Exception) {
                                     capturedImage = null
