@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 from typing import Sequence
 import unicodedata
 
@@ -31,36 +32,26 @@ CELL_HEIGHT = (PAGE_HEIGHT - 2 * MARGIN_Y) // ROWS  # 636 px
 # QRサイズ（約25mm角 @ 300DPI）
 QR_PIXEL_SIZE = 295
 
+# 機器IDの正規表現: [A-Za-z0-9._-] の1〜32文字
+DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,32}$")
 
-def build_payload(
-    name: str,
-    unit: str | None = None,
-    min: float | int | None = None,
-    max: float | int | None = None,
-) -> str:
-    """機器ラベル用のQRペイロードJSON文字列を生成する。
 
-    Parameters
-    ----------
-    name : str
-        機器名（1〜64文字、前後の空白は除外される）。
-    unit : str | None, optional
-        単位（例: "MPa"）。
-    min : float | int | None, optional
-        目盛り最小値（数値）。
-    max : float | int | None, optional
-        目盛り最大値（数値）。
+def validate_device_id(device_id: str) -> None:
+    """機器IDの形式を検証する。不正な場合は ValueError を発生させる。"""
+    if not isinstance(device_id, str):
+        raise ValueError("機器IDは文字列である必要があります")
+    if not device_id:
+        raise ValueError("機器IDが空です")
+    if len(device_id) > 32:
+        raise ValueError(f"機器IDが長すぎます（{len(device_id)}文字。上限32文字）")
+    if not DEVICE_ID_PATTERN.fullmatch(device_id):
+        raise ValueError(
+            f"機器ID '{device_id}' の形式が不正です（使用可能文字: [A-Za-z0-9._-]）"
+        )
 
-    Returns
-    -------
-    str
-        JSON文字列（キー順: v, name, unit, min, max。区切り: (",", ":")）。
 
-    Raises
-    ------
-    ValueError
-        nameが文字列でない、空文字、65文字以上、または制御文字・改行を含む場合。
-    """
+def validate_device_name(name: str) -> str:
+    """機器名の形式を検証し、前後の空白を除去した文字列を返す。不正な場合は ValueError を発生させる。"""
     if not isinstance(name, str):
         raise ValueError("機器名は文字列である必要があります")
 
@@ -75,7 +66,49 @@ def build_payload(
     if len(stripped_name) >= 65:
         raise ValueError(f"機器名が長すぎます（{len(stripped_name)}文字。上限64文字）")
 
-    payload: dict = {"v": 1, "name": stripped_name}
+    return stripped_name
+
+
+def build_payload(
+    device_id: str,
+    name: str,
+    unit: str | None = None,
+    min: float | int | None = None,
+    max: float | int | None = None,
+) -> str:
+    """機器ラベル用のQRペイロードJSON文字列を生成する。
+
+    Parameters
+    ----------
+    device_id : str
+        機器ID（[A-Za-z0-9._-] の1〜32文字）。
+    name : str
+        機器名（1〜64文字、前後の空白は除外される）。
+    unit : str | None, optional
+        単位（例: "MPa"）。
+    min : float | int | None, optional
+        目盛り最小値（数値）。
+    max : float | int | None, optional
+        目盛り最大値（数値）。
+
+    Returns
+    -------
+    str
+        JSON文字列（キー順: v, id, name, unit, min, max。区切り: (",", ":")）。
+
+    Raises
+    ------
+    ValueError
+        device_id または name が不正な場合、あるいは各引数の型が仕様を満たさない場合。
+    """
+    validate_device_id(device_id)
+    stripped_name = validate_device_name(name)
+
+    payload: dict = {
+        "v": 1,
+        "id": device_id,
+        "name": stripped_name,
+    }
 
     if unit is not None:
         if not isinstance(unit, str):
@@ -106,7 +139,7 @@ def parse_payload(text: str) -> dict | None:
     Returns
     -------
     dict | None
-        検証に成功した場合は {"name": ..., "unit": ..., "min": ..., "max": ...}
+        検証に成功した場合は {"id": ..., "name": ..., "unit": ..., "min": ..., "max": ...}
         （存在しないキーは含まない）。機器QRでない場合は None。例外は発生させない。
     """
     if not isinstance(text, str):
@@ -125,6 +158,13 @@ def parse_payload(text: str) -> dict | None:
     if v != 1 or isinstance(v, bool):
         return None
 
+    # id の検証（必須、[A-Za-z0-9._-] の1〜32文字）
+    device_id = data.get("id")
+    if not isinstance(device_id, str):
+        return None
+    if not (1 <= len(device_id) <= 32 and DEVICE_ID_PATTERN.fullmatch(device_id)):
+        return None
+
     # name の検証（必須、文字列、前後の空白を除き1〜64文字、制御文字不可）
     name = data.get("name")
     if not isinstance(name, str):
@@ -138,7 +178,10 @@ def parse_payload(text: str) -> dict | None:
     if not stripped_name or len(stripped_name) >= 65:
         return None
 
-    result: dict = {"name": stripped_name}
+    result: dict = {
+        "id": device_id,
+        "name": stripped_name,
+    }
 
     # unit の検証（任意、文字列）
     if "unit" in data and isinstance(data["unit"], str):
@@ -177,19 +220,25 @@ def find_japanese_font(size: int = 40) -> ImageFont.FreeTypeFont:
 
 
 def create_label_image(
-    name: str,
+    device_id: str | tuple[str, str],
+    name: str | None = None,
     font: ImageFont.FreeTypeFont | None = None,
+    id_font: ImageFont.FreeTypeFont | None = None,
     width: int = CELL_WIDTH,
     height: int = CELL_HEIGHT,
 ) -> Image.Image:
-    """単一ラベルの画像を生成する（QRコード + 日本語機器名）。
+    """単一ラベルの画像を生成する（QRコード + 日本語機器名 + 小さく機器ID）。
 
     Parameters
     ----------
-    name : str
-        機器名。
+    device_id : str | tuple[str, str]
+        機器ID、または (device_id, name) のタプル。
+    name : str | None, optional
+        機器名。device_idがタプルの場合は省略可能。
     font : ImageFont.FreeTypeFont | None, optional
-        描画に使用するフォント。Noneの場合は自動取得。
+        機器名描画に使用するフォント。Noneの場合は自動取得（40px）。
+    id_font : ImageFont.FreeTypeFont | None, optional
+        機器ID描画に使用するフォント。Noneの場合は自動取得（26px）。
     width : int
         ラベル幅（px）。
     height : int
@@ -200,15 +249,24 @@ def create_label_image(
     Image.Image
         ラベル画像（RGB）。
     """
+    if isinstance(device_id, (tuple, list)):
+        dev_id = str(device_id[0])
+        dev_name = str(device_id[1]) if len(device_id) > 1 else ""
+    else:
+        dev_id = str(device_id)
+        dev_name = str(name) if name is not None else ""
+
     if font is None:
         font = find_japanese_font(size=40)
+    if id_font is None:
+        id_font = find_japanese_font(size=26)
 
     # 白背景のラベル基底
     img = Image.new("RGB", (width, height), (255, 255, 255))
     draw = ImageDraw.Draw(img)
 
     # 1. QRコードの生成
-    payload = build_payload(name)
+    payload = build_payload(dev_id, dev_name)
     qr = qrcode.QRCode(
         error_correction=qrcode.constants.ERROR_CORRECT_M,
         box_size=10,
@@ -221,7 +279,7 @@ def create_label_image(
 
     # QR貼り付け位置（上部中央）
     qr_x = (width - QR_PIXEL_SIZE) // 2
-    qr_y = 50
+    qr_y = 40
     img.paste(qr_img, (qr_x, qr_y))
 
     # 2. 機器名の描画（QRの下、中央揃え、折り返し対応）
@@ -229,7 +287,7 @@ def create_label_image(
     lines: list[str] = []
     current_line = ""
 
-    display_name = name.strip()
+    display_name = dev_name.strip()
     for ch in display_name:
         test_line = current_line + ch
         bbox = font.getbbox(test_line)
@@ -242,8 +300,9 @@ def create_label_image(
     if current_line:
         lines.append(current_line)
 
-    text_top_y = qr_y + QR_PIXEL_SIZE + 30
-    line_height = int(getattr(font, "size", 40) * 1.35)
+    text_top_y = qr_y + QR_PIXEL_SIZE + 20
+    name_font_size = int(getattr(font, "size", 40))
+    line_height = int(name_font_size * 1.3)
 
     for idx, line in enumerate(lines):
         line_bbox = font.getbbox(line)
@@ -252,16 +311,26 @@ def create_label_image(
         ty = text_top_y + idx * line_height
         draw.text((tx, ty), line, fill="black", font=font)
 
+    # 3. 機器IDの描画（機器名の下に小さく中央揃え）
+    id_bbox = id_font.getbbox(dev_id)
+    id_w = id_bbox[2] - id_bbox[0]
+    id_x = (width - id_w) // 2
+    id_top_y = text_top_y + len(lines) * line_height + 12
+    draw.text((id_x, id_top_y), dev_id, fill="black", font=id_font)
+
     return img
 
 
-def make_label_sheet(names: Sequence[str], out_path: str | Path) -> None:
+def make_label_sheet(
+    devices: Sequence[tuple[str, str]],
+    out_path: str | Path,
+) -> None:
     """A4縦・2列×5行のラベルシートPDFを生成して保存する。
 
     Parameters
     ----------
-    names : Sequence[str]
-        機器名の一覧。
+    devices : Sequence[tuple[str, str]]
+        (機器ID, 機器名) の組の一覧。
     out_path : str | Path
         出力PDFのファイルパス。
     """
@@ -269,9 +338,10 @@ def make_label_sheet(names: Sequence[str], out_path: str | Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     font = find_japanese_font(size=40)
+    id_font = find_japanese_font(size=26)
 
     # 10台ごとにページ分割
-    chunks = [list(names[i : i + LABELS_PER_PAGE]) for i in range(0, len(names), LABELS_PER_PAGE)]
+    chunks = [list(devices[i : i + LABELS_PER_PAGE]) for i in range(0, len(devices), LABELS_PER_PAGE)]
     if not chunks:
         chunks = [[]]
 
@@ -296,10 +366,12 @@ def make_label_sheet(names: Sequence[str], out_path: str | Path) -> None:
 
                 idx = row * COLS + col
                 if idx < len(chunk):
-                    device_name = chunk[idx]
+                    dev_id, dev_name = chunk[idx]
                     lbl_img = create_label_image(
-                        device_name,
+                        device_id=dev_id,
+                        name=dev_name,
                         font=font,
+                        id_font=id_font,
                         width=CELL_WIDTH,
                         height=CELL_HEIGHT,
                     )
