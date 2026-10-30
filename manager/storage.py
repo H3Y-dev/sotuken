@@ -1,8 +1,11 @@
 import json
+import logging
 import sqlite3
 import uuid
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from manager.record import ImageTruth
@@ -56,7 +59,11 @@ class Storage:
         # インメモリDB（:memory:）の場合は単一接続を維持する
         if self.db_path == ":memory:":
             self._conn = sqlite3.connect(":memory:")
-            self._init_db_with_conn(self._conn)
+            try:
+                self._init_db_with_conn(self._conn)
+            except Exception:
+                self._conn.close()
+                raise
         else:
             self._conn = None
             self._init_db()
@@ -68,6 +75,68 @@ class Storage:
 
     def _init_db_with_conn(self, conn: sqlite3.Connection) -> None:
         cursor = conn.cursor()
+        additional_columns = (
+            ("image_sha256", "TEXT"),
+            ("reading_id", "TEXT"),
+            ("status", "TEXT"),
+            ("input_method", "TEXT"),
+            ("confidence", "REAL"),
+            ("failure_stage", "TEXT"),
+            ("failure_code", "TEXT"),
+            ("failure_detail", "TEXT"),
+            ("pipeline_version", "TEXT"),
+            ("log_path", "TEXT"),
+            ("overlay_path", "TEXT"),
+            ("device_id", "TEXT"),
+            ("device_id_source", "TEXT"),
+            ("device_id_issue", "TEXT"),
+            ("captured_at", "TEXT"),
+            ("received_at", "TEXT"),
+            ("image_rel", "TEXT"),
+        )
+        tables = {row[0] for row in cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )}
+        columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
+        needs_migration = (
+            not {"meter_readings", "image_truths", "devices"}.issubset(tables)
+            or any(column not in columns for column, _ in additional_columns)
+        )
+        if self.db_path != ":memory:" and tables and needs_migration:
+            self._backup_db(conn)
+
+        # SQLiteのDDLも戻せるよう、最初のCREATEより前に明示的に開始する。
+        cursor.execute("BEGIN IMMEDIATE")
+        try:
+            repaired_count = self._create_schema(cursor, additional_columns)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        if repaired_count:
+            logging.getLogger(__name__).info("Repaired %d legacy reading_id rows", repaired_count)
+
+    def _backup_db(self, conn: sqlite3.Connection) -> None:
+        db_path = Path(self.db_path)
+        backup_dir = db_path.parent / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        schema_query = "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+        schema = conn.execute(schema_query).fetchall()
+        for existing in backup_dir.iterdir():
+            if existing.is_file() and existing.name.startswith(f"{db_path.name}.bak_"):
+                with closing(sqlite3.connect(existing.resolve().as_uri() + "?mode=ro", uri=True)) as backup_conn:
+                    if backup_conn.execute(schema_query).fetchall() == schema:
+                        return
+        backup_path = backup_dir / f"{db_path.name}.bak_{datetime.now():%Y%m%d_%H%M%S}"
+        backup_path.touch(exist_ok=False)
+        try:
+            with closing(sqlite3.connect(backup_path)) as backup_conn:
+                conn.backup(backup_conn)
+        except Exception:
+            backup_path.unlink()
+            raise
+
+    def _create_schema(self, cursor: sqlite3.Cursor, additional_columns) -> int:
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS meter_readings (
@@ -94,6 +163,22 @@ class Storage:
         )
         cursor.execute(
             """
+            CREATE TABLE IF NOT EXISTS devices (
+                device_id TEXT PRIMARY KEY,
+                device_name TEXT NOT NULL,
+                unit TEXT,
+                min_value REAL,
+                max_value REAL,
+                kind TEXT,
+                provisional INTEGER DEFAULT 0,
+                note TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS image_truths (
                 image_sha256 TEXT PRIMARY KEY,
                 operator_value REAL,
@@ -105,29 +190,34 @@ class Storage:
             """
         )
         columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
-        for column, definition in (
-            ("image_sha256", "TEXT"),
-            ("reading_id", "TEXT"),
-            ("status", "TEXT"),
-            ("input_method", "TEXT"),
-            ("confidence", "REAL"),
-            ("failure_stage", "TEXT"),
-            ("failure_code", "TEXT"),
-            ("failure_detail", "TEXT"),
-            ("pipeline_version", "TEXT"),
-            ("log_path", "TEXT"),
-            ("overlay_path", "TEXT"),
-        ):
+        for column, definition in additional_columns:
             if column not in columns:
                 cursor.execute(f"ALTER TABLE meter_readings ADD COLUMN {column} {definition}")
-        conn.commit()
+        cursor.execute(
+            """
+            UPDATE meter_readings SET reading_id = 'legacy:' || id
+            WHERE reading_id IS NULL OR reading_id = '' OR id NOT IN (
+                SELECT MIN(id) FROM meter_readings GROUP BY reading_id
+            )
+            """
+        )
+        repaired_count = cursor.rowcount
+        if cursor.execute(
+            "SELECT reading_id FROM meter_readings GROUP BY reading_id HAVING COUNT(*) > 1 LIMIT 1"
+        ).fetchone() is not None:
+            raise sqlite3.IntegrityError("reading_id migration left duplicate IDs")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_meter_readings_device_id ON meter_readings(device_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_meter_readings_image_sha256 ON meter_readings(image_sha256)")
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_meter_readings_reading_id "
+            "ON meter_readings(reading_id) WHERE reading_id IS NOT NULL"
+        )
+        return repaired_count
 
     def _init_db(self) -> None:
         """テーブルが存在しない場合は作成する"""
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             self._init_db_with_conn(conn)
-        if not self._conn:
-            conn.close()
 
     def save_reading(
         self,
