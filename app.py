@@ -7,7 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd
 import streamlit as st
 from image_cache import get_thumbnail_path
-from manager.export import export_to_csv, export_to_jsonl, filter_readings, group_by_device, readings_to_series
+from manager.export import (export_to_csv, export_to_jsonl, filter_readings,
+                            group_by_device, readings_to_series,
+                            latest_per_device, export_inspection_csv)
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
@@ -237,19 +239,58 @@ with tab2:
     with filter_date_to:
         selected_date_to = st.date_input("終了日", value=default_date_to)
 
+    filtered_history = filter_readings(
+        history,
+        device_name=selected_history_device,
+        date_from=selected_date_from,
+        date_to=selected_date_to,
+    )
+    latest_rows = latest_per_device(filtered_history)
+    st.header("各メーターの最新の読み取り")
+    if latest_rows:
+        latest_table = pd.DataFrame([
+            {"メーター名": row["display_name"],
+             "読み取り値": "-" if row["value"] is None else str(row["value"]),
+             "時刻": datetime.fromisoformat(row["timestamp"]).strftime("%Y-%m-%d %H:%M"),
+             "状態": row["status_label"]}
+            for row in latest_rows[:50]
+        ])
+        status_colors = {"正常": "color: #24643B", "要確認": "color: #805500",
+                         "失敗": "color: #B42318"}
+        st.dataframe(latest_table.style.applymap(status_colors.get, subset=["状態"]),
+                     use_container_width=True, hide_index=True)
+        if len(latest_rows) > 50:
+            st.caption(f"ほか{len(latest_rows) - 50}件は全履歴で確認できます")
+    else:
+        st.info("表示できる記録がありません。")
+
+    review_count = sum(row["status_label"] == "要確認" for row in latest_rows)
+    failed_count = sum(row["status_label"] == "失敗" for row in latest_rows)
+    unnamed_count = sum(row["display_name"] == "名前なし" for row in latest_rows)
+    st.caption(f"要確認 {review_count}件・失敗 {failed_count}件・名前なし {unnamed_count}件")
+    if st.button("点検の結果を書き出す"):
+        try:
+            st.session_state["inspection_csv_path"] = export_inspection_csv(latest_rows)
+        except Exception as exc:
+            st.session_state.pop("inspection_csv_path", None)
+            st.error(f"点検の結果を書き出せませんでした: {exc}")
+    inspection_path = st.session_state.get("inspection_csv_path")
+    if inspection_path:
+        st.success(f"保存しました: {inspection_path}")
+        if os.name == "nt" and st.button("フォルダを開く"):
+            try:
+                os.startfile(os.path.dirname(inspection_path))
+            except OSError:
+                pass
+
     if history:
-        filtered_history = filter_readings(
-            history,
-            device_name=selected_history_device,
-            date_from=selected_date_from,
-            date_to=selected_date_to,
-        )
         filtered_ids = {reading.id for reading in filtered_history}
         history_data = manager.format_history_for_ui(history)
         filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
 
-        st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
-        _render_history_table(filtered_history_data)
+        with st.expander("全履歴", expanded=False):
+            st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
+            _render_history_table(filtered_history_data)
 
         if st.button("CSVを書き出す"):
             csv_path = "readings_export.csv"
@@ -273,8 +314,9 @@ with tab2:
                     mime="application/x-ndjson",
                 )
     else:
-        st.caption("0件 / 全0件")
-        st.info("履歴データが存在しません。")
+        with st.expander("全履歴", expanded=False):
+            st.caption("0件 / 全0件")
+            st.info("履歴データが存在しません。")
 
     st.header("機器別の推移")
     grouped_readings = group_by_device(history)
