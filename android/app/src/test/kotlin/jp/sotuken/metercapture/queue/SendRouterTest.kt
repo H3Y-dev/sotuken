@@ -7,6 +7,7 @@ import jp.sotuken.metercapture.queue.sender.SenderPayloads
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,7 +43,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { httpSender },
-                healthChecker = { true },
+                healthChecker = { Result.success(Unit) },
                 folderSender = folderSender,
             )
 
@@ -71,7 +72,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { httpSender },
-                healthChecker = { false }, // 受信口に届かない
+                healthChecker = { Result.failure(RuntimeException("接続できません")) }, // 受信口に届かない
                 folderSender = folderSender,
             )
 
@@ -99,7 +100,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { null }, // 設定未完了
-                healthChecker = { false },
+                healthChecker = { Result.failure(RuntimeException("接続できません")) },
                 folderSender = folderSender,
             )
 
@@ -127,7 +128,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { httpSender },
-                healthChecker = { true },
+                healthChecker = { Result.success(Unit) },
                 folderSender = folderSender,
             )
 
@@ -156,7 +157,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { null },
-                healthChecker = { false },
+                healthChecker = { Result.failure(RuntimeException("接続できません")) },
                 folderSender = folderSender,
             )
 
@@ -194,7 +195,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { httpSender },
-                healthChecker = { true },
+                healthChecker = { Result.success(Unit) },
                 folderSender = folderSender,
             )
 
@@ -232,7 +233,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { httpSender },
-                healthChecker = { true },
+                healthChecker = { Result.success(Unit) },
                 folderSender = folderSender,
             )
 
@@ -256,7 +257,7 @@ class SendRouterTest {
             assertTrue(FolderSender(outboxDir).send(item).isSuccess)
             store.markSent(id, QueueItem.VIA_FOLDER)
             val httpSender = RecordingSender(returnSuccess = false)
-            SendRouter(dao, store, outboxDir, { httpSender }, { true }).route()
+            SendRouter(dao, store, outboxDir, { httpSender }, { Result.success(Unit) }).route()
             assertEquals(1, httpSender.sentItems.size)
             assertEquals(QueueItem.VIA_FOLDER, dao.findById(id)?.sentVia)
             assertTrue(File(outboxDir, SenderPayloads.buildImageFileName(item)).isFile)
@@ -278,7 +279,7 @@ class SendRouterTest {
             File(blockedFile, "block-delete").writeText("keep")
             val httpSender = RecordingSender()
             val result = runCatching {
-                SendRouter(dao, store, outboxDir, { httpSender }, { true }).route()
+                SendRouter(dao, store, outboxDir, { httpSender }, { Result.success(Unit) }).route()
             }
             assertTrue(result.exceptionOrNull() is IllegalStateException)
             assertEquals(QueueItem.VIA_FOLDER, dao.findById(id)?.sentVia)
@@ -309,7 +310,7 @@ class SendRouterTest {
                 queueStore = store,
                 outboxDir = outboxDir,
                 httpSenderProvider = { httpSender },
-                healthChecker = { false }, // 届かない
+                healthChecker = { Result.failure(RuntimeException("接続できません")) }, // 届かない
                 folderSender = folderSender,
             )
 
@@ -319,6 +320,86 @@ class SendRouterTest {
             assertTrue(jsonFile.exists())
             assertTrue(outboxImg.exists())
             assertEquals(QueueItem.VIA_FOLDER, dao.findById(localId)?.sentVia)
+        }
+    }
+
+    @Test
+    fun healthFailureRecordsReasonInLastError() = runTest {
+        withTestEnv { outboxDir, imageFile ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            SendRouter(
+                dao, store, outboxDir, { RecordingSender() },
+                { Result.failure(RuntimeException("timeout")) },
+                RecordingSender(),
+            ).route()
+
+            val item = dao.findById(localId)
+            assertEquals(QueueItem.VIA_FOLDER, item?.sentVia)
+            assertTrue(item?.lastError?.contains("PC未接続") == true)
+            assertTrue(item?.lastError?.contains("timeout") == true)
+        }
+    }
+
+    @Test
+    fun httpFailureRecordsReasonInLastError() = runTest {
+        withTestEnv { outboxDir, imageFile ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            SendRouter(
+                dao, store, outboxDir, { RecordingSender(returnSuccess = false) },
+                { Result.success(Unit) }, RecordingSender(),
+            ).route()
+
+            val item = dao.findById(localId)
+            assertEquals(QueueItem.VIA_FOLDER, item?.sentVia)
+            assertTrue(item?.lastError?.contains("HTTP失敗") == true)
+            assertTrue(item?.lastError?.contains("Simulated send failure") == true)
+        }
+    }
+
+    @Test
+    fun notConfiguredRecordsReasonInLastError() = runTest {
+        withTestEnv { outboxDir, imageFile ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+
+            SendRouter(
+                dao, store, outboxDir, { null },
+                { Result.failure(RuntimeException("x")) }, RecordingSender(),
+            ).route()
+
+            val item = dao.findById(localId)
+            assertEquals(QueueItem.VIA_FOLDER, item?.sentVia)
+            assertTrue(item?.lastError?.contains("送信先未設定") == true)
+        }
+    }
+
+    @Test
+    fun catchUpSuccessClearsLastErrorAndFailureUpdatesIt() = runTest {
+        withTestEnv { outboxDir, imageFile ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+            store.markSent(localId, QueueItem.VIA_FOLDER, "PC未接続: timeout")
+            val item = dao.findById(localId)!!
+            File(outboxDir, "${SenderPayloads.buildBaseName(item)}.json").writeText("{}")
+
+            val failing = RecordingSender(returnSuccess = false)
+            SendRouter(dao, store, outboxDir, { failing }, { Result.success(Unit) }, RecordingSender()).route()
+            assertTrue(dao.findById(localId)?.lastError?.contains("Simulated send failure") == true)
+            assertEquals(QueueItem.VIA_FOLDER, dao.findById(localId)?.sentVia)
+
+            val ok = RecordingSender()
+            SendRouter(dao, store, outboxDir, { ok }, { Result.success(Unit) }, RecordingSender()).route()
+            assertEquals(QueueItem.VIA_HTTP, dao.findById(localId)?.sentVia)
+            assertNull(dao.findById(localId)?.lastError)
         }
     }
 

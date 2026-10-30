@@ -14,9 +14,12 @@ class SendRouter(
     private val queueStore: QueueStore,
     private val outboxDir: File,
     private val httpSenderProvider: () -> Sender?,
-    private val healthChecker: suspend () -> Boolean,
+    private val healthChecker: suspend () -> Result<Unit>,
     private val folderSender: Sender = FolderSender(outboxDir),
 ) {
+
+    private fun reasonOf(e: Throwable?): String =
+        e?.message?.takeIf { it.isNotBlank() } ?: e?.javaClass?.simpleName ?: "不明"
 
     suspend fun route() {
         // 1. 中断された送信中アイテムをPENDINGへ復元
@@ -24,7 +27,18 @@ class SendRouter(
 
         // 疎通確認
         val httpSender = httpSenderProvider()
-        val isHttpReachable = httpSender != null && healthChecker()
+        // HTTPを使えない理由。送信箱へ回した項目の lastError に残す。
+        var fallbackReason: String? = null
+        val isHttpReachable = if (httpSender == null) {
+            fallbackReason = "送信先未設定"
+            false
+        } else {
+            val health = healthChecker()
+            if (health.isFailure) {
+                fallbackReason = "PC未接続: ${reasonOf(health.exceptionOrNull())}"
+            }
+            health.isSuccess
+        }
 
         // 今回HTTPに失敗して送信箱へ回した項目を、その場でもう一度送らない。
         val sentFolderItems = if (isHttpReachable) {
@@ -39,6 +53,7 @@ class SendRouter(
         for (item in pendingItems) {
             queueStore.markSending(item.localId)
             var sentViaHttp = false
+            var note = fallbackReason
 
             // 3. 送信先が設定済みでGET /healthが通ればHTTP送信を試みる
             if (isHttpReachable) {
@@ -46,6 +61,8 @@ class SendRouter(
                 if (httpResult.isSuccess) {
                     queueStore.markSent(item.localId, QueueItem.VIA_HTTP)
                     sentViaHttp = true
+                } else {
+                    note = "HTTP失敗: ${reasonOf(httpResult.exceptionOrNull())}"
                 }
             }
 
@@ -53,7 +70,7 @@ class SendRouter(
             if (!sentViaHttp) {
                 val folderResult = folderSender.send(item)
                 if (folderResult.isSuccess) {
-                    queueStore.markSent(item.localId, QueueItem.VIA_FOLDER)
+                    queueStore.markSent(item.localId, QueueItem.VIA_FOLDER, note)
                 } else {
                     val error = folderResult.exceptionOrNull()?.message ?: "Folder sender failed"
                     queueStore.markFailed(item.localId, error)
@@ -79,6 +96,11 @@ class SendRouter(
                             check(!file.exists() || file.delete()) { "Failed to delete outbox file: $file" }
                         }
                         queueStore.updateSentVia(item.localId, QueueItem.VIA_HTTP)
+                    } else {
+                        queueStore.updateLastError(
+                            item.localId,
+                            "追い送り失敗: ${reasonOf(httpResult.exceptionOrNull())}",
+                        )
                     }
                 }
             }
