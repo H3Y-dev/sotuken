@@ -424,3 +424,18 @@ CUDA error: device kernel image is invalid
 .\venv\Scripts\python.exe tools/slim_db.py manager.db --no-backup
 ```
 ※ `watch_inbox.py` や `app.py` などのDBを使用するプロセスを停止してから実行してください。
+
+
+---
+
+## QR機器ラベルの作成（現場メーター貼り付け用）
+
+機器名の一覧ファイル（テキストまたはCSV）から、A4（10面/ページ）のQRラベルPDFを生成します。
+
+```powershell
+# テキストファイル（1行1台）またはCSVから作成（同じフォルダに 機器ラベル.pdf を出力）
+.\venv\Scripts\python.exe tools/make_qr_labels.py 機器一覧.txt
+
+# 出力先を指定する場合
+.\venv\Scripts\python.exe tools/make_qr_labels.py 機器一覧.csv -o 出力ラベル.pdf
+```
