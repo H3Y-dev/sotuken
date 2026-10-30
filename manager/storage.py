@@ -2,7 +2,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +72,17 @@ class Storage:
         if self._conn:
             return self._conn
         return sqlite3.connect(self.db_path)
+
+    @contextmanager
+    def connection(self):
+        """Commit or roll back a transaction, keeping in-memory databases open."""
+        conn = self._get_connection()
+        try:
+            with conn:
+                yield conn
+        finally:
+            if conn is not self._conn:
+                conn.close()
 
     def _init_db_with_conn(self, conn: sqlite3.Connection) -> None:
         cursor = conn.cursor()
