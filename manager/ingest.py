@@ -5,14 +5,13 @@ SR-05までで「監視→パイプライン実行」までは繋がっていた
 """
 import os
 import sys
-import json
 import uuid
 from typing import Any, Dict, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manager.sidecar import SidecarMetadata
-from manager.storage import Storage, _json_safe
+from manager.storage import Storage
 from manager.record import judge_failure, judge_input_method, judge_status
 from manager.batch import calculate_file_hash
 from manager.image_store import store_image
@@ -105,15 +104,7 @@ def ingest_result(
     save_data["failure_detail"] = failure_detail
     reading_id = str(uuid.uuid4())
     save_data["reading_id"] = reading_id
-    log_path = None
-    try:
-        os.makedirs("logs", exist_ok=True)
-        log_path = f"logs/{reading_id}.log"
-        with open(log_path, "w", encoding="utf-8") as log_file:
-            json.dump(result, log_file, ensure_ascii=False, default=_json_safe, indent=2)
-    except Exception:
-        log_path = None
-    save_data["log_path"] = log_path
+    save_data["log_path"] = None
     save_data["overlay_path"] = None
     if save_data["status"] != "failed":
         try:
