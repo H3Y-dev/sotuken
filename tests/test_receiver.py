@@ -20,8 +20,11 @@ from manager.receiver import (
     DEFAULT_PORT,
     ReceiverServer,
     decode_base64url,
+    init_receiver_for_app,
     is_private_client_ip,
+    is_receiver_healthy,
     load_or_create_pc_config,
+    shutdown_receiver_for_app,
 )
 
 
@@ -311,6 +314,74 @@ class TestReceiverHelpers(unittest.TestCase):
             cfg2 = load_or_create_pc_config(cfg_path)
             self.assertEqual(cfg1["token"], cfg2["token"])
             self.assertEqual(cfg1["port"], cfg2["port"])
+
+
+
+
+class TestInitReceiverForApp(unittest.TestCase):
+    """init_receiver_for_app のプロセス内1回起動と重複防止のテスト"""
+
+    def setUp(self):
+        shutdown_receiver_for_app()
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        shutdown_receiver_for_app()
+        self.tmp.cleanup()
+
+    def _get_free_port(self) -> int:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+
+    def test_single_instance_on_multiple_inits(self):
+        """同じプロセスで init_receiver_for_app を2回呼んでも、サーバーが1つであること。"""
+        port = self._get_free_port()
+        info1 = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
+        self.assertTrue(info1["running"])
+        self.assertFalse(info1.get("external_process", False))
+        server1 = info1["server"]
+        self.assertIsNotNone(server1)
+
+        # 2回目の呼び出し
+        info2 = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
+        self.assertTrue(info2["running"])
+        self.assertIs(info1, info2)
+        self.assertIs(info1["server"], info2["server"])
+        self.assertIs(info1["thread"], info2["thread"])
+
+        # /health にアクセスして疎通を確認
+        url = f"http://127.0.0.1:{info1['port']}/health"
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            self.assertEqual(200, resp.status)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(True, data.get("ok"))
+            self.assertEqual("sotuken-receiver", data.get("service"))
+
+    def test_external_process_detection(self):
+        """別サーバーが起動中のとき、/health 判定により external_process=True として検出されること。"""
+        port = self._get_free_port()
+        # 外部プロセスを模擬した独立サーバー
+        ext_server = ReceiverServer(
+            ("127.0.0.1", port),
+            token="external-token",
+            incoming_dir=self.tmp.name,
+            quiet=True,
+        )
+        ext_thread = threading.Thread(target=ext_server.serve_forever, daemon=True)
+        ext_thread.start()
+
+        try:
+            info = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
+            self.assertTrue(info["running"])
+            self.assertTrue(info.get("external_process"))
+            self.assertIsNone(info["server"])
+        finally:
+            ext_server.shutdown()
+            ext_server.server_close()
+            ext_thread.join(timeout=2.0)
 
 
 if __name__ == "__main__":
