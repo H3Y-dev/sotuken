@@ -430,12 +430,22 @@ CUDA error: device kernel image is invalid
 
 ## QR機器ラベルの作成（現場メーター貼り付け用）
 
-機器名の一覧ファイル（テキストまたはCSV）から、A4（10面/ページ）のQRラベルPDFを生成します。
+機器一覧のCSVファイル（1列目=機器ID、2列目=機器名）から、A4（10面/ページ）のQRラベルPDFを生成します。
 
 ```powershell
-# テキストファイル（1行1台）またはCSVから作成（同じフォルダに 機器ラベル.pdf を出力）
-.\venv\Scripts\python.exe tools/make_qr_labels.py 機器一覧.txt
+# CSVから作成（同じフォルダに 機器ラベル.pdf を出力）
+.\venv\Scripts\python.exe tools/make_qr_labels.py 機器一覧.csv
 
 # 出力先を指定する場合
 .\venv\Scripts\python.exe tools/make_qr_labels.py 機器一覧.csv -o 出力ラベル.pdf
 ```
+
+### 入力CSVの形式（UTF-8 または UTF-8 BOM）
+ヘッダー行 `機器ID,機器名` がある場合は自動でスキップされます。
+```csv
+機器ID,機器名
+A-101,ボイラー圧力計
+P-01,受水槽圧力計
+```
+- 機器ID: `[A-Za-z0-9._-]` の1〜32文字（空・空白・日本語不可、重複はエラーで中止）。
+- 機器名: 1〜64文字（前後の空白は自動除去）。

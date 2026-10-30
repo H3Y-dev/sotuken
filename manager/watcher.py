@@ -76,12 +76,14 @@ class FolderWatcher:
         use_vlm: bool = False,
         valid_exts: tuple = VALID_IMAGE_EXTENSIONS,
         on_sidecar_updated: Optional[Callable[[str, SidecarMetadata], None]] = None,
+        skip_pipeline_if: Callable[[str], bool] | None = None,
     ):
         self.watch_dir = os.path.abspath(watch_dir)
         self.on_image_detected = on_image_detected
         self.on_item_detected = on_item_detected
         self.on_pipeline_result = on_pipeline_result
         self.on_sidecar_updated = on_sidecar_updated
+        self.skip_pipeline_if = skip_pipeline_if
         self.auto_run_pipeline = auto_run_pipeline
         self.use_vlm = use_vlm
         self.valid_exts = tuple(ext.lower() for ext in valid_exts)
@@ -147,9 +149,13 @@ class FolderWatcher:
             if self.on_item_detected:
                 self.on_item_detected(abs_path, sidecar)
             if self.auto_run_pipeline or self.on_pipeline_result:
-                result = execute_pipeline(abs_path, use_vlm=self.use_vlm)
-                if self.on_pipeline_result:
-                    self.on_pipeline_result(abs_path, sidecar, result)
+                if self.skip_pipeline_if and self.skip_pipeline_if(abs_path):
+                    # 省略時は取り込み層がJSONを反映しないため、既存JSONも読み直す。
+                    self._last_sidecar[abs_path] = None
+                else:
+                    result = execute_pipeline(abs_path, use_vlm=self.use_vlm)
+                    if self.on_pipeline_result:
+                        self.on_pipeline_result(abs_path, sidecar, result)
             # 処理中に届いた・書き終わったJSONを、再OCRせず既存記録へ反映する
             self._refresh_sidecar(abs_path)
 
@@ -174,9 +180,12 @@ class FolderWatcher:
                     if self.on_item_detected:
                         self.on_item_detected(full_path, sidecar)
                     if self.auto_run_pipeline or self.on_pipeline_result:
-                        result = execute_pipeline(full_path, use_vlm=self.use_vlm)
-                        if self.on_pipeline_result:
-                            self.on_pipeline_result(full_path, sidecar, result)
+                        if self.skip_pipeline_if and self.skip_pipeline_if(full_path):
+                            self._last_sidecar[full_path] = None
+                        else:
+                            result = execute_pipeline(full_path, use_vlm=self.use_vlm)
+                            if self.on_pipeline_result:
+                                self.on_pipeline_result(full_path, sidecar, result)
                     self._refresh_sidecar(full_path)
         return new_found
 

@@ -66,6 +66,24 @@ def main():
         print(f"[SR-05 Watcher] 保存先DB: {os.path.abspath(args.db)}")
 
     detected_count = 0
+    initial_scan = True
+    processed_hashes = storage.get_processed_hashes() if storage is not None else set()
+    skipped_count = 0
+
+    def skip_pipeline_if(img_path: str) -> bool:
+        nonlocal skipped_count
+        if storage is None:
+            return False
+        try:
+            hashes = processed_hashes if initial_scan else storage.get_processed_hashes()
+            skip = calculate_file_hash(img_path) in hashes
+        except OSError as exc:
+            print(f"[画像ハッシュ] 計算失敗（推論を続行）: {img_path}: {exc}")
+            return False
+        if skip:
+            skipped_count += 1
+            print(f"[SR-05 Watcher] 処理済みのため推論を飛ばした: {img_path}")
+        return skip
 
     def on_pipeline_result(img_path: str, sidecar: Optional[SidecarMetadata], result: Dict[str, Any]):
         nonlocal detected_count
@@ -82,6 +100,8 @@ def main():
                 print("  [DB保存] 重複画像のためスキップしました")
             else:
                 print(f"  [DB保存] id={row_id}")
+                if initial_scan:
+                    processed_hashes.add(calculate_file_hash(img_path))
 
         stage = result.get("stage")
         val = result.get("value")
@@ -104,9 +124,12 @@ def main():
         on_sidecar_updated=on_sidecar_updated,
         auto_run_pipeline=True,
         use_vlm=args.use_vlm,
+        skip_pipeline_if=skip_pipeline_if,
     )
 
     initial_images = watcher.scan_existing()
+    initial_scan = False
+    print(f"[SR-05 Watcher] {len(initial_images)}枚中{skipped_count}枚は処理済みのため推論を飛ばした。")
     if initial_images:
         print(f"[SR-05 Watcher] 既存の画像を {len(initial_images)} 件検出・処理しました。")
 
