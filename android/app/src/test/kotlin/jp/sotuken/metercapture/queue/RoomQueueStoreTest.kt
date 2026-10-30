@@ -207,6 +207,26 @@ class RoomQueueStoreTest {
         }
     }
 
+    @Test
+    fun markSentWithNoteKeepsNoteAndUpdateSentViaClearsIt() = runTest {
+        val dao = FakeQueueDao()
+        val store = RoomQueueStore(dao)
+
+        withTemporaryImage { imageFile ->
+            val localId = store.enqueue(imageFile, emptyMeta())
+            store.markSending(localId)
+            store.markSent(localId, QueueItem.VIA_FOLDER, "PC未接続: timeout")
+
+            assertEquals("PC未接続: timeout", dao.findById(localId)?.lastError)
+
+            store.updateLastError(localId, "HTTP失敗: x")
+            assertEquals("HTTP失敗: x", dao.findById(localId)?.lastError)
+
+            store.updateSentVia(localId, QueueItem.VIA_HTTP)
+            assertNull(dao.findById(localId)?.lastError)
+        }
+    }
+
     // --- markFailed ---
 
     @Test

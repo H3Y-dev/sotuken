@@ -52,11 +52,11 @@ class QueueSendWorker(
                 }
             }
 
-            val healthChecker: suspend () -> Boolean = {
+            val healthChecker: suspend () -> kotlin.Result<Unit> = {
                 if (settings.isConfigured()) {
-                    HttpSender.health(settings.getUrl()!!, settings.getToken()!!).isSuccess
+                    HttpSender.health(settings.getUrl()!!, settings.getToken()!!)
                 } else {
-                    false
+                    kotlin.Result.failure(IllegalStateException("送信先未設定"))
                 }
             }
 

@@ -12,10 +12,11 @@ interface QueueStore {
     suspend fun enqueue(imageFile: File, meta: CaptureMeta): String
     fun observeQueue(): Flow<List<QueueItem>>
     suspend fun markSending(localId: String)
-    suspend fun markSent(localId: String, via: String)
+    suspend fun markSent(localId: String, via: String, note: String? = null)
     suspend fun markFailed(localId: String, error: String)
     suspend fun retry(localId: String)
     suspend fun updateSentVia(localId: String, via: String)
+    suspend fun updateLastError(localId: String, error: String?)
 
     // アプリが送信中にクラッシュ・強制終了すると SENDING のまま残る項目がある。
     // 実際には送信されていない前提で、次回起動時に PENDING へ戻して再送させる。
@@ -55,7 +56,7 @@ class RoomQueueStore(
         queueDao.update(item.copy(sendState = SendState.SENDING))
     }
 
-    override suspend fun markSent(localId: String, via: String) {
+    override suspend fun markSent(localId: String, via: String, note: String?) {
         val item = requireItem(localId)
         check(item.sendState == SendState.SENDING) {
             "cannot mark sent from state ${item.sendState}"
@@ -65,7 +66,7 @@ class RoomQueueStore(
                 sendState = SendState.SENT,
                 sentAt = Instant.now().toString(),
                 sentVia = via,
-                lastError = null,
+                lastError = note,
             ),
         )
     }
@@ -90,7 +91,12 @@ class RoomQueueStore(
 
     override suspend fun updateSentVia(localId: String, via: String) {
         val item = requireItem(localId)
-        queueDao.update(item.copy(sentVia = via))
+        queueDao.update(item.copy(sentVia = via, lastError = null))
+    }
+
+    override suspend fun updateLastError(localId: String, error: String?) {
+        val item = requireItem(localId)
+        queueDao.update(item.copy(lastError = error))
     }
 
     override suspend fun recoverInterruptedSends() {
