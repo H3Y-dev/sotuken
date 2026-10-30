@@ -30,3 +30,6 @@ ollama
 streamlit==1.40.1
 pandas==2.0.3
 watchdog==4.0.2
+
+# numpy==1.24.4固定との衝突（pyarrow 18系以降はNumPy 2.0以上を要求）を防ぐため
+pyarrow==17.0.0

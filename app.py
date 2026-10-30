@@ -81,6 +81,8 @@ _receiver_info = _start_receiver()
 with st.sidebar:
     st.header("スマホの送信先")
     if _receiver_info.get("running"):
+        if _receiver_info.get("external_process"):
+            st.info("別プロセスで起動済みです")
         st.caption("同じWi-Fiに接続したスマホアプリの送信先設定に入力してください。")
         st.markdown(f"**送信先URL**:\n`{_receiver_info['url']}`")
         st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")

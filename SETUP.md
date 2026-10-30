@@ -136,11 +136,17 @@ python -m pip install -r requirements.txt
 
 ### Web UI（`app.py`）の起動
 
+**推奨される起動方法（スマホ画像受信口も同時に待受開始）**:
+```powershell
+.\venv\Scripts\python.exe run_pc.py
 ```
-venv\Scripts\python.exe -m streamlit run app.py
-```
+ブラウザを開かなくてもスマホからの画像受信口（ポート8765）が直ちに立ち上がります。
+続けて同じプロセスでStreamlitのWeb UIが起動し、ブラウザが開きます（開かない場合は `http://localhost:8501`）。停止は `Ctrl+C`。
 
-ブラウザが開きます（開かない場合は `http://localhost:8501`）。停止は `Ctrl+C`。
+従来の方法でも起動できます（この場合、受信口はブラウザでページを開いたときに起動します）:
+```powershell
+.\venv\Scripts\python.exe -m streamlit run app.py
+```
 
 > [!important] 初回起動でメールアドレスの入力を求められたら
 > Streamlitは初回に `Email:` と聞いてきて、**入力待ちのまま止まります。**
@@ -387,8 +393,9 @@ CUDA error: device kernel image is invalid
 
 1. **Web UI（兼 スマホWi-Fi受信口）の起動**:
    ```powershell
-   .\venv\Scripts\python.exe -m streamlit run app.py
+   .\venv\Scripts\python.exe run_pc.py
    ```
+   ※従来どおり `.\venv\Scripts\python.exe -m streamlit run app.py` でも起動できますが、`run_pc.py` を使うとブラウザを開く前から受信口が確実に立ち上がります。
 2. **フォルダ監視・自動解析パイプラインの起動**:
    ```powershell
    .\venv\Scripts\python.exe -m manager.watch_inbox

@@ -15,6 +15,8 @@ import secrets
 import socket
 import sys
 import threading
+import urllib.error
+import urllib.request
 from typing import Any, Callable, Dict, Optional, Tuple
 
 # 既定値
@@ -28,6 +30,10 @@ FILE_NAME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 ALLOWED_CHARS_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+# プロセス内キャッシュ（app.py / run_pc.py で共有）
+_receiver_lock = threading.Lock()
+_cached_receiver_info: Optional[Dict[str, Any]] = None
 
 
 def get_default_config_path() -> str:
@@ -330,7 +336,8 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
     """
     スマホ画像受信口HTTPサーバー。
     """
-    allow_reuse_address = True
+    # Windows では SO_REUSEADDR が同一ポートへの複数バインドを許容してしまうため False にする
+    allow_reuse_address = sys.platform != "win32"
 
     def __init__(
         self,
@@ -350,57 +357,141 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         self.daemon_threads = True
 
 
+def is_receiver_healthy(port: int, timeout: float = 1.0) -> bool:
+    """
+    ローカルホスト（127.0.0.1:{port}/health）に問い合わせ、
+    sotuken-receiver が正常に応答するかを判定する。
+    """
+    url = f"http://127.0.0.1:{port}/health"
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status == 200:
+                body = json.loads(resp.read().decode("utf-8"))
+                return bool(body.get("ok") is True and body.get("service") == "sotuken-receiver")
+    except Exception:
+        pass
+    return False
+
+
+def shutdown_receiver_for_app() -> None:
+    """
+    テスト用: init_receiver_for_app で起動・キャッシュされたサーバーを安全に停止し、
+    キャッシュをクリアする。
+    """
+    global _cached_receiver_info
+    with _receiver_lock:
+        if _cached_receiver_info is not None:
+            server = _cached_receiver_info.get("server")
+            if server is not None:
+                try:
+                    server.shutdown()
+                    server.server_close()
+                except Exception:
+                    pass
+            thread = _cached_receiver_info.get("thread")
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=2.0)
+            _cached_receiver_info = None
+
+
 def init_receiver_for_app(
     config_path: Optional[str] = None,
     incoming_dir: Optional[str] = None,
+    port: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     app.py 用の初期化関数。
     設定を読み込み、ポートが空いていれば別スレッドでサーバーを起動する。
-    ポートが使用中などの例外時はクラッシュさせず、エラー情報を辞書で返す。
+    同一プロセス内では1回だけ起動し、モジュール変数にキャッシュして再利用する。
+    ポートが使用中などの例外時は、/health への問い合わせで別プロセスでの稼働を確認し、
+    クラッシュさせずに適切な情報を辞書で返す。
     """
-    config = load_or_create_pc_config(config_path)
-    port = int(config.get("port", DEFAULT_PORT))
-    token = str(config.get("token", ""))
-    lan_ip = get_lan_ipv4()
-    send_url = f"http://{lan_ip}:{port}"
+    global _cached_receiver_info
 
-    if incoming_dir is None:
-        incoming_dir = get_default_incoming_dir()
+    with _receiver_lock:
+        if _cached_receiver_info is not None:
+            return _cached_receiver_info
 
-    try:
-        server = ReceiverServer(
-            ("0.0.0.0", port),
-            token=token,
-            incoming_dir=incoming_dir,
-        )
-        thread = threading.Thread(
-            target=server.serve_forever,
-            name="SotukenReceiverThread",
-            daemon=True,
-        )
-        thread.start()
-        return {
-            "running": True,
-            "port": port,
-            "token": token,
-            "lan_ip": lan_ip,
-            "url": send_url,
-            "server": server,
-            "thread": thread,
-            "error": None,
-        }
-    except Exception as exc:
-        return {
-            "running": False,
-            "port": port,
-            "token": token,
-            "lan_ip": lan_ip,
-            "url": send_url,
-            "server": None,
-            "thread": None,
-            "error": f"ポート {port} が使用中または起動できませんでした（{exc}）",
-        }
+        config = load_or_create_pc_config(config_path)
+        actual_port = port if port is not None else int(config.get("port", DEFAULT_PORT))
+        token = str(config.get("token", ""))
+        lan_ip = get_lan_ipv4()
+        send_url = f"http://{lan_ip}:{actual_port}"
+
+        if incoming_dir is None:
+            incoming_dir = get_default_incoming_dir()
+
+        # ポート指定がある場合、すでに別プロセスで受信口が動いていれば検知
+        if actual_port != 0 and is_receiver_healthy(actual_port):
+            _cached_receiver_info = {
+                "running": True,
+                "port": actual_port,
+                "token": token,
+                "lan_ip": lan_ip,
+                "url": send_url,
+                "server": None,
+                "thread": None,
+                "error": None,
+                "external_process": True,
+            }
+            return _cached_receiver_info
+
+        try:
+            server = ReceiverServer(
+                ("0.0.0.0", actual_port),
+                token=token,
+                incoming_dir=incoming_dir,
+            )
+            bound_port = server.server_address[1]
+            if bound_port != actual_port:
+                actual_port = bound_port
+                send_url = f"http://{lan_ip}:{actual_port}"
+
+            thread = threading.Thread(
+                target=server.serve_forever,
+                name="SotukenReceiverThread",
+                daemon=True,
+            )
+            thread.start()
+            _cached_receiver_info = {
+                "running": True,
+                "port": actual_port,
+                "token": token,
+                "lan_ip": lan_ip,
+                "url": send_url,
+                "server": server,
+                "thread": thread,
+                "error": None,
+                "external_process": False,
+            }
+            return _cached_receiver_info
+        except Exception as exc:
+            if is_receiver_healthy(actual_port):
+                _cached_receiver_info = {
+                    "running": True,
+                    "port": actual_port,
+                    "token": token,
+                    "lan_ip": lan_ip,
+                    "url": send_url,
+                    "server": None,
+                    "thread": None,
+                    "error": None,
+                    "external_process": True,
+                }
+                return _cached_receiver_info
+
+            return {
+                "running": False,
+                "port": actual_port,
+                "token": token,
+                "lan_ip": lan_ip,
+                "url": send_url,
+                "server": None,
+                "thread": None,
+                "error": f"ポート {actual_port} が使用中または起動できませんでした（{exc}）",
+                "external_process": False,
+            }
 
 
 def main() -> None:
