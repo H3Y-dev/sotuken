@@ -406,3 +406,21 @@ CUDA error: device kernel image is invalid
    ```
 
 スマホをPCにUSB接続すると、端末内の送信箱から撮影画像とサイドカーJSONが自動的に `incoming/` フォルダへ吸い出され、`watch_inbox.py` によって即座に解析・DB登録されます。
+
+---
+
+## 肥大化した記録DBの切り詰め（DBメンテナンス）
+
+過去の不具合により `processed_img` が記録DB（`manager.db`）に保存されてファイルサイズが巨大化（1GB超）している場合、以下のツールで不要データを安全に除去してDBサイズを縮小できます。
+
+```powershell
+# 削減見込みの確認（書き換えない）
+.\venv\Scripts\python.exe tools/slim_db.py manager.db --dry-run
+
+# 実行（同じフォルダに manager.db.bak_YYYYMMDD_HHMMSS バックアップを作成して更新・VACUUM）
+.\venv\Scripts\python.exe tools/slim_db.py manager.db
+
+# バックアップ作成をスキップしたい場合
+.\venv\Scripts\python.exe tools/slim_db.py manager.db --no-backup
+```
+※ `watch_inbox.py` や `app.py` などのDBを使用するプロセスを停止してから実行してください。
