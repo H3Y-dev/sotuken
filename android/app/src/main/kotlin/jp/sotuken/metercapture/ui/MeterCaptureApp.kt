@@ -53,6 +53,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     var capturedImage by remember { mutableStateOf<CapturedImage?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+	var showHistoryScreen by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -83,8 +84,13 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(text = "キュー: ${queueItems.size}件")
-                    OutlinedButton(onClick = { showSettingsDialog = true }) {
-                        Text("送信先の設定")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { showHistoryScreen = true }) {
+                            Text("履歴")
+                        }
+                        OutlinedButton(onClick = { showSettingsDialog = true }) {
+                            Text("送信先の設定")
+                        }
                     }
                 }
 
@@ -133,7 +139,10 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 // TODO(SKくん): ガイド枠・キュー一覧・入力フォームを実装する。Sprint 3
             }
         }
-
+        if (showHistoryScreen) {
+            QueueListScreen(items = queueItems, onClose = { showHistoryScreen = false })
+        }
+        
         if (showSettingsDialog) {
             val receiverSettings = remember { ReceiverSettings(context) }
             var urlInput by remember { mutableStateOf(receiverSettings.getUrl() ?: "") }
