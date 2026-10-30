@@ -13,7 +13,7 @@
 **追加分の結論（工場の場面からの逆算）**
 1. データ構造は先に決めず、工場の場面（1章）から出力を決め、出力に要る列だけをDBに持たせる。
 2. 履歴（1撮影1行）が基準の記録。点検結果（機器ごとの採用値）はそこから導く。同じ画像の複数の読み取りは、最大の`id`の1件だけを採る。
-3. ログは診断用に縮小する。除外するのは`processed_img`と`ticks`だけで、座標と診断は残す。主キーは内部の`id`を保ち、業務上の一意キーは`reading_id`・`device_id`・`image_sha256`とする。
+3. **読み取りログ（`logs/`のファイル）は書かない**（2026-10-30 ユーザー決定。誰も読まず、縮小するとDBの`raw_data_json`と重複するため）。診断情報（座標・`scale_diagnostics`）は、DBの`raw_data_json`に残す。除外するのは`processed_img`と`ticks`だけ。主キーは内部の`id`を保ち、業務上の一意キーは`reading_id`・`device_id`・`image_sha256`とする。
 
 **Argonレビューの反映（2026-10-30）**
 - 再処理の重複を、最大`id`の1件採用で防ぐ。`reprocess.py`が既存行の機器・時刻・画像を引き継ぐようにする（B6）。
@@ -105,14 +105,14 @@ PT-0001,SYN-003,合成0-1MPaデザイン2,MPa,0.87,要確認,範囲外の疑い,
 | 置き場所 | 中身 | 人が触るか | 方針 |
 |---|---|---|---|
 | DB（`manager.db`） | ①〜⑤の出力に要る列 | 画面とCSVで触る | 3章の列だけ |
-| ログ（`logs/`） | 読み取りの結果と診断 | 不具合の調査のときだけ | `processed_img`と`ticks`を除く。座標・`scale_diagnostics`は残す |
+| ログ（`logs/`） | （作らない） | - | **書かない**（2026-10-30 決定）。診断はDBの`raw_data_json`で見る。画面から診断を見られるようにする（別タスク） |
 | 原画像（`images/`） | 撮影画像 | 再処理の入力 | 正本。自動削除しない |
 | 検出結果画像（`overlays/`） | 人が見る確認用の画像 | 確認するとき | 原画像と同じ期間 |
 | `processed_img` | 処理途中の画素配列 | 触らない | DBにもログにも残さない。必要なら原画像から再実行して作る |
 
-- **ログの容量**: S0で既存の画像1枚のログを実測し、1件の上限を決めて記録する（推測では数百KB以下。実測で決める）。
+- **ログの容量**: ファイルのログは書かないので、増えない。`raw_data_json`は1件数KB（`processed_img`除外済み）。
 - **`raw_data_json`**: 同じ除外規則（`processed_img`と`ticks`だけ）で書く。専用列にはしない。
-- **保存期間・容量（先方確認）**: 推測として、ログは90日で消す手動コマンドを用意し、総量が1GBを超えたら警告する。画像・記録は自動では消さない。
+- **保存期間・容量（先方確認）**: ログのファイルは無い。画像・記録は自動では消さない。
 - **インストーラー化後**: 全部 `%LOCALAPPDATA%\SotukenMeter\` 配下。DB内のパスは相対パス（`image_rel`・`log_path`）で持つ。
 
 ## 3. DBに保存する列
@@ -201,7 +201,7 @@ PT-0001,SYN-003,合成0-1MPaデザイン2,MPa,0.87,要確認,範囲外の疑い,
 
 | 順 | 作業 | 対象ファイル | 受け入れ条件 | 依存 |
 |---|---|---|---|---|
-| S0 | ログを診断用に縮小（H2） | `manager/ingest.py`（ログの部分）、`tests/test_ingest_log.py` | `processed_img`と`ticks`が出ない。座標と`scale_diagnostics`が残る。1件のログ容量を実測して記録 | なし |
+| S0 | **ログを書かない**（H2、2026-10-30 変更） | `manager/ingest.py`（ログの部分）、`tests/test_ingest_log.py` | `logs/`にファイルが作られず`log_path`がNULL。DBの`raw_data_json`に座標・`scale_diagnostics`が残り、`processed_img`・`ticks`が無い | なし |
 | B1 | DBの列・索引・退避・旧行の移行（H1・H3・M8） | `manager/storage.py`、`tests/test_storage_schema.py` | 旧スキーマの一時DBが開け、既存行と値が残る。新列はNULL。旧行の空・重複の`reading_id`を`legacy:<id>`に埋め、重複0で索引を作る。退避は旧スキーマのときだけ1回。`:memory:`では退避しない。途中失敗で元に戻り起動を止める | なし |
 | B2 | 機器の表と登録規則（M6） | `manager/devices.py`（新規）、`manager/storage.py`、`tests/test_devices.py` | IDの形式違反を拒否。空欄だけ埋める。食い違いを警告。大文字小文字の警告。`unknown`を登録しない | B1 |
 | B3 | QRの読み取り（H4） | `manager/qr_decode.py`（新規）、`tests/test_qr_decode.py` | 機器QR1つ・機器QR2つ（異なるID）・非機器QRの混在・QRなしを判定。W-Aの`parse_payload`を使う | W-Aがmainに入った後 |
