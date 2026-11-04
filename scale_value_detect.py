@@ -181,6 +181,28 @@ def read_scale_numbers(img):
     return numbers
 
 
+def _read_scale_numbers_tiled(img):
+    """全体OCRで落ちた小さい数字を、重なる4区画の拡大OCRで読み直す。"""
+    h, w = img.shape[:2]
+    numbers = []
+    for y0, y1 in ((0, (h * 3 + 4) // 5), (h * 2 // 5, h)):
+        for x0, x1 in ((0, (w * 3 + 4) // 5), (w * 2 // 5, w)):
+            crop = cv2.resize(img[y0:y1, x0:x1], None, fx=2, fy=2,
+                              interpolation=cv2.INTER_CUBIC)
+            for number in read_scale_numbers(crop):
+                number = dict(number, x=x0 + number['x'] / 2,
+                              y=y0 + number['y'] / 2)
+                duplicate = next((old for old in numbers
+                                  if old['value'] == number['value'] and
+                                  math.hypot(old['x'] - number['x'],
+                                             old['y'] - number['y']) <= min(h, w) * 0.015), None)
+                if duplicate is None:
+                    numbers.append(number)
+                elif number['score'] > duplicate['score']:
+                    duplicate.update(number)
+    return numbers
+
+
 # 主目盛りは副目盛りn本ごとに1本現れる。n=1（隣り合う目盛りが両方とも
 # 主目盛り）はメータとしてあり得ないし、nが大きすぎるのも実在しない。
 _MAJOR_CADENCE_MIN = 2
@@ -763,7 +785,7 @@ _PLAUSIBLE_FULLSCALE_MANTISSAS = (1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0,
                                   6.0, 7.5, 8.0)
 
 
-def is_plausible_fullscale(value, rel_tol=0.005):
+def is_plausible_fullscale(value, rel_tol=0.005, *, extra_mantissas=()):
     """
     フルスケールとしてありえる値か（標準数かどうか）を判定する。
 
@@ -780,10 +802,31 @@ def is_plausible_fullscale(value, rel_tol=0.005):
         return False
     exponent = math.floor(math.log10(abs(value)))
     mantissa = abs(value) / (10.0 ** exponent)
-    for m in _PLAUSIBLE_FULLSCALE_MANTISSAS:
+    for m in _PLAUSIBLE_FULLSCALE_MANTISSAS + extra_mantissas:
         if abs(mantissa - m) <= rel_tol * m:
             return True
     return False
+
+
+def _is_consistent_recovery(numbers, result, center, max_angle_deg=12.0):
+    """救済候補の全採用点が、既存の数字・目盛り格子と整合するか確かめる。"""
+    # 圧力計の一般的な1-1.6-2.5-4-6系列も救済時だけ許す。
+    # https://www.takashimakeiki.co.jp/en/memori/
+    if not is_plausible_fullscale(result['max_value'], extra_mantissas=(1.6,)):
+        return False
+    ticks = result['ticks']
+    grid = build_tick_grid(numbers, ticks, center, max_angle_deg=max_angle_deg)
+    if grid is None or len({value for _angle, value in result['calibration']}) < 3:
+        return False
+    order = _arc_order(ticks)
+    slots = _tick_slots(ticks, order)
+    slot_of = dict(zip(order, slots))
+    for angle, value in result['calibration']:
+        index = min(range(len(ticks)), key=lambda i: abs(
+            (ticks[i]['angle'] - angle + math.pi) % (2 * math.pi) - math.pi))
+        if abs(slot_of[index] - (grid['slope'] * value + grid['intercept'])) > _SLOT_TOLERANCE:
+            return False
+    return True
 
 
 def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None, ticks=None):
@@ -966,9 +1009,11 @@ def locate_value_on_ticks(numbers, ticks, center, target_value, max_angle_deg=15
     return (int(round(fallback_number['x'])), int(round(fallback_number['y'])))
 
 
-def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_points_out=None):
+def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_points_out=None,
+                  numbers=None):
     """1つの（前処理済み）画像に対してOCR＋目盛り対応付けを1回実行する。"""
-    numbers = read_scale_numbers(img)
+    if numbers is None:
+        numbers = read_scale_numbers(img)
     # 長さではなく、数字の位置から主目盛りを決め直してから対応付ける
     ticks = refine_major_ticks_from_numbers(
         numbers, ticks, center, max_angle_deg=max_angle_deg)
@@ -1128,6 +1173,19 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     agreed = _find_agreeing_result(results)
 
     numbers = read_scale_numbers(img)
+    # 既存の範囲候補が1つでもあれば変えない。救済候補にも同じ対応付けとふるいを通す。
+    if not results:
+        try:
+            local_numbers = _read_scale_numbers_tiled(img)
+            result = _run_ocr_tick(img, ticks, center, max_angle_deg, min_points,
+                                   numbers=local_numbers, **point_kwargs)
+            if result is not None and _is_consistent_recovery(
+                    local_numbers, result, center, max_angle_deg):
+                result['label'] = 'tiled'
+                results.append(result)
+                numbers = local_numbers
+        except Exception:
+            pass
     ticks = refine_major_ticks_from_numbers(
         numbers, ticks, center, max_angle_deg=max_angle_deg)
     # --no-vlm ではOllamaの応答状態に結果が左右されないよう、補助判定も使わない。
