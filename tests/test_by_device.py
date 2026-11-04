@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
-from eval.by_device import aggregate, build_rows, copy_field_set, select_field_set
+from eval.by_device import aggregate, build_rows, copy_field_set, read_database, select_field_set
 
 
 def entry(**condition):
@@ -121,6 +122,27 @@ class AggregationTest(unittest.TestCase):
     def test_duplicate_readings_are_rejected(self):
         with self.assertRaises(ValueError):
             build_rows([self.truth()], [self.reading(), self.reading()])
+
+    def test_read_database_is_read_only_and_does_not_create_missing_db(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = Path(directory) / "evaluation.db"
+            with self.assertRaises(sqlite3.OperationalError):
+                read_database(db)
+            self.assertFalse(db.exists())
+            with sqlite3.connect(db) as connection:
+                connection.execute("CREATE TABLE meter_readings (value REAL)")
+                connection.execute("INSERT INTO meter_readings VALUES (2.5)")
+            connection.close()
+            before = db.read_bytes()
+            self.assertEqual(read_database(db), [{"value": 2.5}])
+            self.assertEqual(db.read_bytes(), before)
+
+    def test_all_failures_have_no_numeric_error_and_zero_success(self):
+        result = aggregate(build_rows([self.truth()], []), {})[0]
+        self.assertEqual(result["within_percent"], 0)
+        self.assertIsNone(result["mean_reference_error"])
+        self.assertIsNone(result["median_reference_error"])
+        self.assertIsNone(result["max_reference_error"])
 
 
 if __name__ == "__main__":

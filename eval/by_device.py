@@ -1,6 +1,7 @@
 """Evaluate saved synthetic readings by device; never opens the DB for writing."""
 import argparse
 from collections import Counter, defaultdict
+from contextlib import closing
 import csv
 import json
 from pathlib import Path
@@ -66,7 +67,7 @@ def copy_field_set(entries, destination):
 
 
 def read_database(path):
-    with sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)) as connection:
         connection.row_factory = sqlite3.Row
         return [dict(row) for row in connection.execute("SELECT * FROM meter_readings")]
 
