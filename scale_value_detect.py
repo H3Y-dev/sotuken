@@ -692,7 +692,7 @@ def _make_occlusion_check(img, use_vlm=True):
 
 
 def _resolve_scale_position(img, numbers, ticks, center, bound, value,
-                             is_zero=False, occlusion_check=None):
+                             is_zero=False, occlusion_check=None, exclude_point=None):
     """
     target_valueに対応する目盛り位置を特定する。
     OCRで直接読めていればそれを、読めていなければ等間隔性からの推定
@@ -711,14 +711,28 @@ def _resolve_scale_position(img, numbers, ticks, center, bound, value,
     （呼び出しは重いので必要になるまで遅延評価する）。Noneの場合は
     この判定なしで、通常通りの安全側の挙動（確認できなければ採用しない）になる。
 
+    exclude_point: 反対端の位置。同じ目盛りを両端へ使わないよう半目盛り以内を除く。
+
     戻り値: (座標 or None, 視覚的な裏取りなしに「重なり」を理由として採用したか)
     """
+    def available(pt):
+        if pt is None or exclude_point is None:
+            return pt is not None
+        angles = sorted({t['angle'] % (2 * math.pi) for t in ticks})
+        gaps = [(b - a) % (2 * math.pi)
+                for a, b in zip(angles, angles[1:] + angles[:1])]
+        half_tick = median(gaps) / 2 if len(gaps) >= 3 else 0
+        angle = math.atan2(pt[1] - center[1], pt[0] - center[0])
+        excluded = math.atan2(exclude_point[1] - center[1], exclude_point[0] - center[0])
+        difference = abs((angle - excluded + math.pi) % (2 * math.pi) - math.pi)
+        return difference > max(half_tick, 1e-6)
+
     pt = locate_value_on_ticks(numbers, ticks, center, value)
-    if pt is not None:
+    if available(pt):
         return pt, False
 
     pt = locate_value_by_extrapolation(bound, ticks, value)
-    if pt is not None:
+    if available(pt):
         if _verify_label_near_position(img, pt, value):
             return pt, False
         if is_zero and occlusion_check is not None and occlusion_check():
@@ -729,7 +743,7 @@ def _resolve_scale_position(img, numbers, ticks, center, bound, value,
         predicted_angle = _predict_angle_for_value(bound, value)
         if predicted_angle is not None:
             synth = _synthesize_tick_point(ticks, center, predicted_angle)
-            if (synth is not None and
+            if (available(synth) and
                     _verify_label_near_position_multi(img, synth, value)):
                 return synth, False
     return None, False
@@ -1306,7 +1320,8 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
             bound = bind_numbers_to_ticks(
                 numbers, ticks, center, max_angle_deg=max_angle_deg)
             zero_pt, zero_overlap = _resolve_scale_position(
-                img, numbers, ticks, center, bound, 0.0, is_zero=True)
+                img, numbers, ticks, center, bound, 0.0, is_zero=True,
+                exclude_point=agreed['full_pt'])
             if zero_pt is not None:
                 agreed['zero_pt'] = zero_pt
                 agreed['min_value'] = 0.0
@@ -1329,7 +1344,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                 bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
                 pt, overlap = _resolve_scale_position(
                     img, numbers, ticks, center, bound, vlm_min,
-                    is_zero=True, occlusion_check=occlusion_check)
+                    is_zero=True, occlusion_check=occlusion_check, exclude_point=agreed['full_pt'])
                 if pt is not None:
                     agreed['zero_pt'] = pt
                     agreed['min_value'] = vlm_min
@@ -1340,7 +1355,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                     bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
                 pt, _overlap = _resolve_scale_position(
                     img, numbers, ticks, center, bound, vlm_max,
-                    is_zero=False, occlusion_check=occlusion_check)
+                    is_zero=False, occlusion_check=occlusion_check, exclude_point=agreed['zero_pt'])
                 if pt is not None:
                     agreed['full_pt'] = pt
                     agreed['max_value'] = vlm_max
@@ -1380,12 +1395,12 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
         bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
         occlusion_check = _make_occlusion_check(img, use_vlm=use_vlm)
 
-        zero_pt, zero_overlap = _resolve_scale_position(
-            img, numbers, ticks, center, bound, min_value,
-            is_zero=True, occlusion_check=occlusion_check)
         full_pt, _overlap = _resolve_scale_position(
             img, numbers, ticks, center, bound, max_value,
             is_zero=False, occlusion_check=occlusion_check)
+        zero_pt, zero_overlap = _resolve_scale_position(
+            img, numbers, ticks, center, bound, min_value,
+            is_zero=True, occlusion_check=occlusion_check, exclude_point=full_pt)
 
         if zero_pt is not None and full_pt is not None:
             result = {
