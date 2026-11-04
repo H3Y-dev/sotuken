@@ -1290,7 +1290,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
             return None
 
     if agreed is not None:
-        agreed['is_confident'] = primary_diagnostics is None
+        agreed['is_confident'] = agreed.get('is_confident', False) and primary_diagnostics is None
         agreed['source'] = 'ocr_tick'
         agreed['attempts'] = _scale_attempts(results)
         decision = diagnostics['decision']
