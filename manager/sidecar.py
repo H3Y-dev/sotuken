@@ -1,7 +1,10 @@
 ﻿import json
 import os
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Literal, Optional
+
+from manager.devices import validate_device_id
 
 
 @dataclass
@@ -17,6 +20,9 @@ class SidecarMetadata:
     operator_note: Optional[str] = None
     scale_min: Optional[float] = None
     scale_max: Optional[float] = None
+    device_id: Optional[str] = None
+    device_id_source: Optional[Literal["qr", "manual"]] = None
+    device_id_issue: Optional[Literal["id_invalid"]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -26,6 +32,19 @@ def get_sidecar_path(image_path: str) -> str:
     """画像パスに対応する同名サイドカーJSONのパスを返す"""
     base, _ = os.path.splitext(image_path)
     return f"{base}.json"
+
+
+def normalize_captured_at(text) -> str | None:
+    """Normalize an ISO timestamp to UTC seconds, preserving timezone-free text."""
+    if not isinstance(text, str):
+        return None
+    try:
+        captured_at = datetime.fromisoformat(text)
+        if captured_at.tzinfo is None:
+            return text
+        return captured_at.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    except (ValueError, OverflowError):
+        return None
 
 
 def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
@@ -54,9 +73,21 @@ def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
     if local_id is not None:
         local_id = str(local_id)
 
-    captured_at = data.get("captured_at")
-    if captured_at is not None:
-        captured_at = str(captured_at)
+    captured_at = normalize_captured_at(data.get("captured_at"))
+
+    device_id = data.get("device_id")
+    device_id_issue = None
+    if isinstance(device_id, str):
+        device_id = device_id.strip()
+        if not device_id or device_id.lower() == "unknown":
+            device_id = None
+    if device_id is not None and not validate_device_id(device_id):
+        device_id = None
+        device_id_issue = "id_invalid"
+
+    device_id_source = data.get("device_id_source")
+    if device_id is None or device_id_source not in ("qr", "manual"):
+        device_id_source = None
 
     device_name = data.get("device_name")
     if device_name is not None:
@@ -98,4 +129,7 @@ def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
         operator_note=operator_note,
         scale_min=scale_min,
         scale_max=scale_max,
+        device_id=device_id,
+        device_id_source=device_id_source,
+        device_id_issue=device_id_issue,
     )
