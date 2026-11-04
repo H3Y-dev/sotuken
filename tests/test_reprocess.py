@@ -97,6 +97,7 @@ class TestReprocess(unittest.TestCase):
                 first_id = ingest_result(
                     self.storage, image_path, None, {"stage": "ok", "value": 10.0}
                 )
+                first_version = self.storage.get_all_readings()[0].pipeline_version
                 # 通常取り込みで同一画像を再投入 → 重複排除でスキップされる(None)
                 skipped = ingest_result(
                     self.storage, image_path, None, {"stage": "ok", "value": 10.0}
@@ -115,7 +116,7 @@ class TestReprocess(unittest.TestCase):
 
             readings = self.storage.get_all_readings()
             self.assertEqual(2, len(readings))
-            self.assertEqual({None, "v9"}, {reading.pipeline_version for reading in readings})
+            self.assertEqual({first_version, "v9"}, {reading.pipeline_version for reading in readings})
             self.assertEqual(1, len({reading.image_sha256 for reading in readings}))
 
 
