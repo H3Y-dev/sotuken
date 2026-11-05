@@ -22,7 +22,6 @@ def main() -> None:
             print(f"[受信口] 別プロセスで起動済みです: {receiver_info.get('url')}")
         else:
             print(f"[受信口] 待ち受け開始: {receiver_info.get('url')}")
-            print(f"[受信口] 合言葉 (Token): {receiver_info.get('token')}")
     else:
         print(f"[受信口] 警告: 受信口の起動に失敗しました: {receiver_info.get('error')}")
 

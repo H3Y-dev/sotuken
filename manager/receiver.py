@@ -1,28 +1,37 @@
 """
 スマホ撮影画像 受信口モジュール（段階1: PC側の受信口）。
 Wi-Fi経由で送信される計測画像およびサイドカーJSONを受信し、incoming/ フォルダへ書き込みます。
-標準ライブラリ（http.server.ThreadingHTTPServer, hashlib, base64, json, ipaddress, secrets）のみで構成されます。
+HTTP受信は標準ライブラリ、ペアリングQRの画像生成は既存のqrcodeを使います。
 """
 import argparse
 import base64
 import hashlib
 import http.server
 import ipaddress
+import io
 import json
 import os
 import re
 import secrets
 import socket
+import shutil
 import sys
 import threading
+import tempfile
+import time
 import uuid
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from typing import Any, Callable, Dict, Optional, Tuple
 
 # 既定値
 DEFAULT_PORT = 8765
 MAX_BODY_SIZE = 30 * 1024 * 1024  # 30 MB
+MAX_PAIR_BODY_SIZE = 2048
+PAIR_TIMEOUT = 3.0
+PAIR_LIFETIME = 300
+MAX_PAIR_FAILURES = 5
 
 # ファイル名検査パターン
 # 形: YYYYMMDDTHHMMSS_<local_id>.<拡張子>、英数と _ - . のみ、拡張子は jpg/jpeg/png
@@ -50,23 +59,32 @@ def get_default_incoming_dir() -> str:
 
 def load_or_create_pc_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    PC受信口の設定を読み込む。存在しない、または項目が欠けている場合は生成・保存する。
-    合言葉（token）は secrets による乱数で初回生成される。
+    PC受信口の設定を読み込む。初回生成と旧設定へのreceiver_id追加を原子的に保存する。
+    既存設定が壊れている場合は退避コピーを残し、合言葉を再生成せずエラーにする。
     """
     if config_path is None:
         config_path = get_default_config_path()
 
     config: Dict[str, Any] = {}
-    if os.path.exists(config_path):
+    existing = os.path.exists(config_path)
+    if existing:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, dict):
-                    config = data
-        except Exception:
-            config = {}
+                if not isinstance(data, dict) or not isinstance(data.get("token"), str) or not data["token"].strip():
+                    raise ValueError("token がないか不正です")
+                if "receiver_id" in data:
+                    uuid.UUID(data["receiver_id"])
+                config = data
+        except (ValueError, TypeError, AttributeError) as exc:
+            backup = f"{config_path}.corrupt-{uuid.uuid4().hex}"
+            shutil.copy2(config_path, backup)
+            raise ValueError(f"受信設定が破損しています。原本を保持し退避しました: {backup}") from exc
 
     updated = False
+    if "receiver_id" not in config:
+        config["receiver_id"] = str(uuid.uuid4())
+        updated = True
     if "port" not in config or not isinstance(config["port"], int):
         config["port"] = DEFAULT_PORT
         updated = True
@@ -77,10 +95,27 @@ def load_or_create_pc_config(config_path: Optional[str] = None) -> Dict[str, Any
 
     if updated:
         os.makedirs(os.path.dirname(os.path.abspath(config_path)), exist_ok=True)
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
+        fd, temporary = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(config_path)),
+                                         prefix=f".{os.path.basename(config_path)}-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, config_path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     return config
+
+
+def pairing_qr_png(payload: str) -> bytes:
+    """ペアリング専用ペイロードをPNGにする（秘密はファイルに保存しない）。"""
+    import qrcode
+    output = io.BytesIO()
+    qrcode.make(payload).save(output, format="PNG")
+    return output.getvalue()
 
 
 def is_private_client_ip(client_ip: str) -> bool:
@@ -143,7 +178,8 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         if getattr(self.server, "quiet", False):
             return
-        sys.stderr.write(f"[受信口] {self.address_string()} - {format % args}\n")
+        # 要求行には任意のクエリや秘密が含まれ得るため記録しない。
+        sys.stderr.write(f"[受信口] {self.address_string()} - HTTP要求\n")
 
     def _drain_rfile(self) -> None:
         """WinError 10054 (TCP RST) 防止のため、ソケットバッファに残っている未読データを安全に読み捨てる。"""
@@ -170,6 +206,7 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -205,8 +242,50 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
 
         self._send_json(404, {"error": f"パスが見つかりません: {self.path}"})
 
+    def _pair(self) -> None:
+        self.close_connection = True
+        self.connection.settimeout(PAIR_TIMEOUT)
+        try:
+            if self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1:
+                raise ValueError
+            size = int(self.headers.get("Content-Length", ""))
+            if size > MAX_PAIR_BODY_SIZE:
+                self._send_json(413, {"error": "登録要求が大きすぎます"})
+                return
+            if size <= 0 or self.headers.get_content_type() != "application/json":
+                raise ValueError
+            deadline = time.monotonic() + PAIR_TIMEOUT
+            body = bytearray()
+            while len(body) < size:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError
+                self.connection.settimeout(remaining)
+                chunk = self.rfile.read1(size - len(body))
+                if not chunk:
+                    raise ValueError
+                body.extend(chunk)
+            data = json.loads(body.decode("utf-8"))
+            if not isinstance(data, dict) or set(data) != {"token"} or not isinstance(data["token"], str):
+                raise ValueError
+        except (ValueError, UnicodeError):
+            self._send_json(400, {"error": "登録要求のJSONが不正です"})
+            return
+        except (TimeoutError, OSError):
+            self._send_json(408, {"error": "登録要求の読み取りがタイムアウトしました"})
+            return
+        result = self.server.exchange_pairing(data["token"])
+        if result is None:
+            self._send_json(403, {"error": "招待が無効です。PCでQRを作り直してください"})
+            return
+        self._send_json(200, result)
+
     def do_POST(self) -> None:
         if not self._check_ip_allowed():
+            return
+
+        if self.path == "/pair":
+            self._pair()
             return
 
         if self.path != "/upload":
@@ -371,15 +450,72 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         check_client_ip: Optional[Callable[[str], bool]] = None,
         quiet: bool = False,
         handler_class: Any = ReceiverHandler,
+        receiver_id: Optional[str] = None,
     ):
+        self.pair_lock = threading.Lock()
+        self._invitation = None
         super().__init__(server_address, handler_class)
         self.upload_lock = threading.Lock()
         self.token = token
+        self.receiver_id = receiver_id or str(uuid.uuid4())
+        self.pc_name = "".join(c for c in socket.gethostname() if c.isprintable())[:64] or "PC"
         self.incoming_dir = os.path.abspath(incoming_dir)
         os.makedirs(self.incoming_dir, exist_ok=True)
         self.check_client_ip = check_client_ip or is_private_client_ip
         self.quiet = quiet
         self.daemon_threads = True
+
+    def start_pairing(self, url: str) -> Dict[str, Any]:
+        origin = urlsplit(url)
+        if (origin.scheme != "http" or not origin.hostname or not is_private_client_ip(origin.hostname)
+                or origin.port is None or not 1 <= origin.port <= 65535 or origin.username is not None
+                or origin.password is not None or origin.path or origin.query or origin.fragment):
+            raise ValueError("登録URLはプライベートIPv4とポートを持つHTTP originにしてください")
+        with self.pair_lock:
+            payload = dict(v=1, kind="receiver-pair", url=url, token=secrets.token_urlsafe(32),
+                           receiver_id=self.receiver_id, pc_name=self.pc_name,
+                           expires_at=int(time.time()) + PAIR_LIFETIME)
+            self._invitation = dict(payload=payload, deadline=time.monotonic() + PAIR_LIFETIME, failures=0)
+            return dict(payload)
+
+    def cancel_pairing(self) -> None:
+        with self.pair_lock:
+            self._invitation = None
+
+    def pairing_status(self) -> Optional[Dict[str, Any]]:
+        with self.pair_lock:
+            invite = self._invitation
+            if invite is None or time.monotonic() >= invite["deadline"]:
+                self._invitation = None
+                return None
+            return dict(payload=dict(invite["payload"]), remaining=max(1, int(invite["deadline"] - time.monotonic())))
+
+    def pairing_payload(self) -> Optional[str]:
+        status = self.pairing_status()
+        if status is None:
+            return None
+        return "SOTUKEN-PAIR:" + json.dumps(status["payload"], ensure_ascii=False, separators=(",", ":"))
+
+    def exchange_pairing(self, token: str) -> Optional[Dict[str, Any]]:
+        with self.pair_lock:
+            invite = self._invitation
+            if invite is None:
+                return None
+            if time.monotonic() >= invite["deadline"]:
+                self._invitation = None
+                return None
+            if not token.isascii() or not secrets.compare_digest(token, invite["payload"]["token"]):
+                invite["failures"] += 1
+                if invite["failures"] >= MAX_PAIR_FAILURES:
+                    self._invitation = None
+                return None
+            self._invitation = None  # 応答送信前に消費し、応答喪失でも再交換させない。
+            return dict(receiver_id=self.receiver_id, pc_name=self.pc_name,
+                        token=self.token, url=invite["payload"]["url"])
+
+    def server_close(self) -> None:
+        self.cancel_pairing()
+        super().server_close()
 
 
 def is_receiver_healthy(port: int, timeout: float = 1.0, token: str = "") -> bool:
@@ -469,6 +605,7 @@ def init_receiver_for_app(
                 ("0.0.0.0", actual_port),
                 token=token,
                 incoming_dir=incoming_dir,
+                receiver_id=config.get("receiver_id"),
             )
             bound_port = server.server_address[1]
             if bound_port != actual_port:
@@ -538,10 +675,10 @@ def main() -> None:
     lan_ip = get_lan_ipv4()
     print(f"[受信口] 待ち受け開始: 0.0.0.0:{port} (保存先: {incoming_dir})")
     print(f"[受信口] スマホの送信先: http://{lan_ip}:{port}")
-    print(f"[受信口] 合言葉 (Token): {token}")
     print("[受信口] 停止するには Ctrl+C を押してください。")
 
-    server = ReceiverServer(("0.0.0.0", port), token=token, incoming_dir=incoming_dir)
+    server = ReceiverServer(("0.0.0.0", port), token=token, incoming_dir=incoming_dir,
+                            receiver_id=config["receiver_id"])
     try:
         server.serve_forever()
     except KeyboardInterrupt:

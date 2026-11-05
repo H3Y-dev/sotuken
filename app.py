@@ -13,7 +13,7 @@ from manager.export import (export_to_csv, export_to_jsonl, filter_readings,
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
-from manager.receiver import init_receiver_for_app
+from manager.receiver import init_receiver_for_app, pairing_qr_png
 
 
 def read_meter(image_path, use_vlm=False):
@@ -108,13 +108,33 @@ def _load_style():
 _load_style()
 
 
-@st.cache_resource
-def _start_receiver():
-    """スマホからの無線受信口（manager/receiver.py）をバックグラウンドスレッドで1回だけ起動する。"""
-    return init_receiver_for_app()
+@st.fragment(run_every="1s")
+def _show_pairing(server):
+    current_url = init_receiver_for_app()["url"]
+    if st.button("スマホを登録"):
+        server.start_pairing(current_url)
+    if st.button("登録を中止"):
+        server.cancel_pairing()
+    status = server.pairing_status()
+    if status is None:
+        st.caption("登録済み・期限切れ・中止後は、QRを作り直してください。")
+        return
+    if status["payload"]["url"] != current_url:
+        server.cancel_pairing()
+        st.warning("PCのURLが変わりました。QRを作り直してください。")
+        return
+    payload = server.pairing_payload()
+    if payload is not None:
+        st.image(pairing_qr_png(payload), caption="スマホの送信先QR読取で登録してください")
+        st.caption(f"残り {status['remaining']} 秒")
+        st.text(status["payload"]["url"])
+        st.caption("交換に失敗した場合や応答が届かない場合は、QRを作り直してください。")
 
 
-_receiver_info = _start_receiver()
+try:
+    _receiver_info = init_receiver_for_app()
+except (ValueError, OSError) as exc:
+    _receiver_info = {"running": False, "error": str(exc)}
 
 with st.sidebar:
     st.header("スマホの送信先")
@@ -123,11 +143,16 @@ with st.sidebar:
             st.info("別プロセスで起動済みです")
         st.caption("同じWi-Fiに接続したスマホアプリの送信先設定に入力してください。")
         st.markdown(f"**送信先URL**:\n`{_receiver_info['url']}`")
-        st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
+        with st.expander("手入力用の合言葉を表示"):
+            st.code(_receiver_info['token'])
+        if _receiver_info.get("server") is not None:
+            _show_pairing(_receiver_info["server"])
+        else:
+            st.caption("QR登録は受信口を起動した画面で行ってください。別プロセスを停止してこの画面を再読み込みすると利用できます。")
     else:
         st.error(f"受信口が起動していません: {_receiver_info.get('error')}")
-        st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
-        st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
+        if _receiver_info.get("url"):
+            st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
 
 @st.cache_data
 def _get_cached_history(db_path: str, mtime: float):
