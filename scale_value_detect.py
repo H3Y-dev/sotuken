@@ -16,6 +16,7 @@ import threading
 from statistics import median
 
 import cv2
+import numpy as np
 
 import tick_detect
 import vlm_scale_value
@@ -133,6 +134,52 @@ def _split_merged_number_boxes(candidates):
         split_candidates.extend([left_candidate, right_candidate])
 
     return split_candidates
+
+
+def _mask_qr_for_ocr(img):
+    """読み取れたQRを囲む白い四角板だけを、周囲の色で埋める。"""
+    if not isinstance(img, np.ndarray) or img.ndim not in (2, 3) or not img.size:
+        return img
+    from manager.qr_decode import _get_wechat_detector
+
+    detector = _get_wechat_detector()
+    if detector is None or min(img.shape[:2]) < 64:
+        return img
+    try:
+        texts, boxes = detector.detectAndDecode(img)
+    except cv2.error:
+        return img
+    if not texts:
+        return img
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    # shortcut: 背景から分離した白板だけ対象, 同色背景の救済が必要なら局所OCRへ切り替える。
+    _, white = cv2.threshold(gray, 245, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    masked = img
+    for text, box in zip(texts, boxes):
+        if not text:
+            continue
+        qr_area = abs(cv2.contourArea(box))
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if not 1.5 * qr_area < area < 5 * qr_area:
+                continue
+            polygon = cv2.approxPolyDP(contour, cv2.arcLength(contour, True) * .02, True)
+            if len(polygon) != 4 or not cv2.isContourConvex(polygon):
+                continue
+            if not all(cv2.pointPolygonTest(polygon, tuple(map(float, point)), False) > 0
+                       for point in box):
+                continue
+            mask = np.zeros(gray.shape, np.uint8)
+            cv2.fillConvexPoly(mask, polygon, 255)
+            ring = cv2.dilate(mask, np.ones((11, 11), np.uint8)) - mask
+            if not np.any(ring):
+                continue
+            if masked is img:
+                masked = img.copy()
+            masked[mask != 0] = np.median(img[ring != 0], axis=0)
+            break
+    return masked
 
 
 def read_scale_numbers(img):
@@ -1193,6 +1240,34 @@ def _recheck_primary_scale(img, numbers, ticks, center, max_angle_deg, min_point
 
 def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                         use_vlm=True, diagnostics_out=None, *, numbered_points_out=None):
+    """通常の目盛り同定が失敗した場合だけ、QR板を除いた画像で再試行する。"""
+    result = _detect_scale_values(
+        img, ticks, center, max_angle_deg, min_points, use_vlm=use_vlm,
+        diagnostics_out=diagnostics_out,
+        numbered_points_out=numbered_points_out)
+    if result is not None:
+        return result
+    masked = _mask_qr_for_ocr(img)
+    if masked is img:
+        return None
+    # 成功済みの判定や針・目盛りの座標を変えず、数字OCRの未同定だけを救済する。
+    retry_diagnostics = {}
+    retry_points = {} if numbered_points_out is not None else None
+    result = _detect_scale_values(
+        masked, ticks, center, max_angle_deg, min_points, use_vlm=use_vlm,
+        diagnostics_out=retry_diagnostics, numbered_points_out=retry_points)
+    if result is None or not _is_consistent_recovery(
+            read_scale_numbers(masked), result, center, max_angle_deg):
+        return None
+    if diagnostics_out is not None:
+        diagnostics_out.update(retry_diagnostics)
+    if numbered_points_out is not None:
+        numbered_points_out.update(retry_points)
+    return result
+
+
+def _detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
+                         use_vlm=True, diagnostics_out=None, *, numbered_points_out=None):
     """
     元画像と、CLAHE（コントラスト強調）を適用した複数のバリアントそれぞれで
     OCR＋目盛り対応付けを行い、min/maxの判定が一致するかをクロスチェックする。
