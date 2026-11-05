@@ -6,12 +6,54 @@ from unittest import mock
 from manager.ingest import ingest_result
 from manager.reprocess import reprocess_all, reprocess_image
 from manager.storage import Storage
+from manager.batch import calculate_file_hash
 
 
 class TestReprocess(unittest.TestCase):
 
     def setUp(self):
         self.storage = Storage(":memory:")
+
+    def test_reprocess_inherits_latest_image_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "meter.jpg")
+            with open(path, "wb") as stream:
+                stream.write(b"image")
+            image_hash = calculate_file_hash(path)
+            old_id = self.storage.save_reading("old name", path, {"stage": "ok"}, image_hash)
+            latest_id = self.storage.save_reading("current name", path, {"stage": "ok"}, image_hash)
+            metadata = ("A-101", "2026-08-21T01:00:00Z", "2026-08-22T01:00:00", "images/meter.jpg")
+            with self.storage.connection() as conn:
+                conn.execute("UPDATE meter_readings SET device_id=?, captured_at=?, received_at=?, image_rel=? WHERE id=?",
+                             (*metadata, latest_id))
+            with mock.patch("manager.reprocess.cv2.imdecode", return_value=object()), mock.patch(
+                "meter_pipeline.read_meter", return_value={"stage": "ok", "value": 12.5}
+            ):
+                new_id = reprocess_image(self.storage, path, "v2")
+            with self.storage.connection() as conn:
+                row = conn.execute("SELECT device_name, device_id, captured_at, received_at, image_rel, pipeline_version FROM meter_readings WHERE id=?",
+                                   (new_id,)).fetchone()
+                self.assertEqual(conn.execute("SELECT device_name FROM meter_readings WHERE id=?", (old_id,)).fetchone()[0], "old name")
+            self.assertEqual(row, ("current name", *metadata, "v2"))
+            for include_raw in (True, False):
+                reading = self.storage.get_all_readings(include_raw=include_raw)[0]
+                self.assertEqual((reading.device_id, reading.captured_at, reading.received_at, reading.image_rel), metadata)
+                self.assertEqual(reading.device_name, "current name")
+                self.assertEqual(reading.pipeline_version, "v2")
+
+    def test_reprocess_legacy_path_preserves_unknown_and_null_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "meter.jpg")
+            with open(path, "wb") as stream:
+                stream.write(b"image")
+            self.storage.save_reading("unknown", path, {"stage": "ok"})
+            with mock.patch("manager.reprocess.cv2.imdecode", return_value=object()), mock.patch(
+                "meter_pipeline.read_meter", return_value={"stage": "ok", "value": 12.5}
+            ):
+                new_id = reprocess_image(self.storage, path, "v2")
+            with self.storage.connection() as conn:
+                row = conn.execute("SELECT device_name, device_id, captured_at, received_at, image_rel FROM meter_readings WHERE id=?", (new_id,)).fetchone()
+            self.assertEqual(row, ("unknown", None, None, None, None))
 
     def test_reprocess_image_saves_pipeline_version(self):
         with tempfile.TemporaryDirectory() as temp_dir:

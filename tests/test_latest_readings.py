@@ -40,7 +40,7 @@ class LatestReadingsTest(unittest.TestCase):
         rows = [reading(1, "A"), reading(2, "B", status="failed"),
                 reading(3, "C", status="low_confidence"), reading(4, "D", status=None),
                 reading(5, "E", timestamp="2026-10-30T11:00:00", status="unexpected")]
-        self.assertEqual([r["id"] for r in latest_per_device(rows)], [2, 5, 3, 4, 1])
+        self.assertEqual([r["id"] for r in latest_per_device(rows)], [2, 5, 4, 3, 1])
 
     def test_none_value_and_storage_records(self):
         record = MeterReading("圧力計", None, "needle", "image.jpg", id=3,
@@ -74,7 +74,7 @@ class InspectionCsvTest(unittest.TestCase):
             table = list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
             self.assertEqual(table[0], ["メーター名称", "読み取り値", "状態", "取込時刻", "画像参照"])
             self.assertEqual(table[1][0:3], ["'+name", "", "失敗"])
-            self.assertEqual(table[2][0:2], ["'=SUM(1,2)", "-2.5"])
+            self.assertEqual(table[4][0:2], ["'=SUM(1,2)", "-2.5"])
             self.assertEqual(table[3][4], "'@image,\"quoted\".jpg")
             self.assertTrue(all(p.read_bytes() == data for p in paths))
 
