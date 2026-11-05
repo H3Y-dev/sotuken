@@ -2,7 +2,7 @@ import csv  # CSVファイルを読み書きするための標準ライブラリ
 import json
 import os
 import tempfile
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from pathlib import Path
 
 from manager.ingest import UNKNOWN_DEVICE
@@ -18,7 +18,7 @@ def filter_readings(readings, device_name=None, date_from=None, date_to=None):
         if device_name not in (None, "すべて") and reading.device_name != device_name:
             continue
 
-        timestamp = datetime.fromisoformat(reading.timestamp)
+        timestamp = _reading_time(reading)
         if start and timestamp < start:
             continue
         if end and timestamp > end:
@@ -45,21 +45,31 @@ def _field(reading, *names, **kwargs):
     return default
 
 
+def _reading_time(reading):
+    timestamp = datetime.fromisoformat(_field(reading, "captured_at", "received_at", "timestamp"))
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+    return timestamp
+
+
 def export_to_csv(readings, output_path):
     """記録リストをCSVファイルへ出力する。"""
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         # ヘッダー行（確定スキーマに対応）
-        writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path"])
+        writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path",
+                         "device_id", "device_id_source", "device_id_issue", "pipeline_version", "received_at", "image_rel"])
         for r in readings:
             writer.writerow([
                 _field(r, "reading_id", "id"),
-                _field(r, "captured_at", "timestamp"),
+                _field(r, "captured_at"),
                 _field(r, "device_name"),
                 _field(r, "value"),
                 _field(r, "status", "stage"),
                 _field(r, "failure_stage"),
                 _field(r, "image_path"),
+                *[_field(r, field) for field in ("device_id", "device_id_source", "device_id_issue",
+                                               "pipeline_version", "received_at", "image_rel")],
             ])
 
 
@@ -69,10 +79,9 @@ def export_to_jsonl(readings, output_path):
         "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
         "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
         "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
+        "device_id", "device_id_source", "device_id_issue", "image_rel",
     ]
-    # DB層(MeterReading)は名前が違う項目がある。CSVと同じく旧名からも値を取る
-    # （これが無いと app.py から書き出した JSONL は撮影日時が全件 null になっていた）
-    aliases = {"reading_id": ("id",), "captured_at": ("timestamp",), "status": ("stage",)}
+    aliases = {"reading_id": ("id",), "status": ("stage",)}
     with open(output_path, "w", encoding="utf-8") as f:
         for r in readings:
             row_dict = {field: _field(r, field, *aliases.get(field, ())) for field in fields}
@@ -105,7 +114,7 @@ def latest_per_device(readings) -> list[dict]:
     labels = {"ok": "正常", "low_confidence": "要確認", "failed": "失敗"}
 
     def recency(row):
-        return datetime.fromisoformat(row["timestamp"]), row.get("id") or 0
+        return _reading_time(row), row.get("id") or 0
 
     for reading in readings:
         row = dict(reading) if isinstance(reading, dict) else vars(reading).copy()
@@ -120,7 +129,7 @@ def latest_per_device(readings) -> list[dict]:
             named[name] = row
 
     rows = list(named.values()) + unnamed
-    rows.sort(key=lambda row: datetime.fromisoformat(row["timestamp"]), reverse=True)
+    rows.sort(key=recency, reverse=True)
     priority = {"失敗": 0, "要確認": 1, "正常": 2}
     rows.sort(key=lambda row: priority[row["status_label"]])
     return rows
