@@ -161,6 +161,23 @@ private fun QueueListRow(
                         maxLines = 2,
                     )
                 }
+                                if (item.sendState == SendState.FAILED && !item.lastError.isNullOrBlank()) {
+                    Text(
+                        text = item.lastError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                    )
+                }
+                
+                folderReasonLabel(item)?.let { reason ->
+                    Text(
+                        text = reason,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                    )
+                }
             }
         }
     }
