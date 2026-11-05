@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import cv2
 import numpy as np
@@ -66,6 +67,50 @@ class TestQrDecode(unittest.TestCase):
         self.assertGreaterEqual(len(result.payloads), 2)
         self.assertIn(p1, result.payloads)
         self.assertIn(p2, result.payloads)
+
+    def test_adjacent_qr_001_and_002_plates(self):
+        payloads = [build_payload(f"QR-00{i}", f"test{i}") for i in (1, 2)]
+        canvas = np.full((960, 1280, 3), 200, dtype=np.uint8)
+        for index, payload in enumerate(payloads):
+            # embed_qr_into_synthetic と同じ200px板・150pxのQR。
+            plate = np.full((200, 200, 3), 255, dtype=np.uint8)
+            plate[8:158, 25:175] = cv2.resize(
+                _make_qr_image(payload), (150, 150), interpolation=cv2.INTER_NEAREST
+            )
+            x = 824 - index * 200
+            canvas[736:936, x:x + 200] = plate
+
+        result = read_device_qr(canvas)
+        self.assertEqual(result.status, "multiple")
+        self.assertIsNone(result.device_id)
+        self.assertIsNone(result.device_name)
+        self.assertCountEqual(result.payloads, payloads)
+
+    def test_device_ids_are_combined_across_decoders(self):
+        payloads = [build_payload(f"QR-00{i}", f"test{i}") for i in (1, 2)]
+        with (
+            patch("manager.qr_decode._decode_with_wechat", return_value=[payloads[0]]),
+            patch("manager.qr_decode._decode_with_aruco", return_value=[payloads[1]]),
+            patch("manager.qr_decode._decode_with_std", return_value=[]),
+        ):
+            result = read_device_qr(np.full((400, 400, 3), 255, dtype=np.uint8))
+        self.assertEqual(result.status, "multiple")
+        self.assertIsNone(result.device_id)
+        self.assertCountEqual(result.payloads, payloads)
+
+    def test_device_ids_are_combined_across_crops(self):
+        payloads = [build_payload(f"QR-00{i}", f"test{i}") for i in (1, 2)]
+        with (
+            patch("manager.qr_decode._decode_with_wechat", side_effect=[
+                [payloads[0]], [payloads[0]], [payloads[1]]
+            ]),
+            patch("manager.qr_decode._decode_with_aruco", return_value=[]),
+            patch("manager.qr_decode._decode_with_std", return_value=[]),
+        ):
+            result = read_device_qr(np.full((960, 1280, 3), 255, dtype=np.uint8))
+        self.assertEqual(result.status, "multiple")
+        self.assertIsNone(result.device_id)
+        self.assertCountEqual(result.payloads, payloads)
 
     def test_case_c_two_device_qrs_same_id(self):
         """(c) 同じidのQR2つ -> found"""

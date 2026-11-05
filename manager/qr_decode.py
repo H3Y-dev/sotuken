@@ -228,8 +228,10 @@ def read_device_qr(image_path_or_array: Union[str, Path, np.ndarray]) -> QrResul
                 method=None,
             )
 
-        all_non_device_payloads: list[str] = []
-        first_non_device_method: str | None = None
+        all_payloads: list[str] = []
+        device_infos: dict[str, dict] = {}
+        first_device_method: str | None = None
+        first_payload_method: str | None = None
 
         # 読む順序:
         # (1) WeChat・全体
@@ -277,50 +279,44 @@ def read_device_qr(image_path_or_array: Union[str, Path, np.ndarray]) -> QrResul
             if not payloads:
                 continue
 
-            # 機器QRの判定
-            device_infos: list[dict] = []
+            if first_payload_method is None:
+                first_payload_method = method_name
             for text in payloads:
+                if text in all_payloads:
+                    continue
+                all_payloads.append(text)
                 parsed = parse_payload(text)
                 if parsed is not None and "id" in parsed:
-                    device_infos.append(parsed)
+                    device_infos.setdefault(parsed["id"], parsed)
+                    if first_device_method is None:
+                        first_device_method = method_name
 
-            if device_infos:
-                # 異なるidの数を集計
-                unique_ids = list(dict.fromkeys(info["id"] for info in device_infos))
-                if len(unique_ids) >= 2:
-                    return QrResult(
-                        status="multiple",
-                        device_id=None,
-                        device_name=None,
-                        payloads=payloads,
-                        method=method_name,
-                    )
-                else:
-                    # 1つ（同一idの重複は1つとして扱う）
-                    matched_info = device_infos[0]
-                    return QrResult(
-                        status="found",
-                        device_id=matched_info["id"],
-                        device_name=matched_info.get("name"),
-                        payloads=payloads,
-                        method=method_name,
-                    )
-            else:
-                # 機器QRではないQRが読めた場合
-                for text in payloads:
-                    if text not in all_non_device_payloads:
-                        all_non_device_payloads.append(text)
-                if first_non_device_method is None:
-                    first_non_device_method = method_name
+            if len(device_infos) >= 2:
+                return QrResult(
+                    status="multiple",
+                    payloads=all_payloads,
+                    method=method_name,
+                )
+
+        # 方式や切り抜きごとに読めるQRが違うため、1つ見つけても最後まで照合する。
+        if device_infos:
+            matched_info = next(iter(device_infos.values()))
+            return QrResult(
+                status="found",
+                device_id=matched_info["id"],
+                device_name=matched_info.get("name"),
+                payloads=all_payloads,
+                method=first_device_method,
+            )
 
         # すべての方式で機器QRが読めなかった場合
-        if all_non_device_payloads:
+        if all_payloads:
             return QrResult(
                 status="not_device",
                 device_id=None,
                 device_name=None,
-                payloads=all_non_device_payloads,
-                method=first_non_device_method,
+                payloads=all_payloads,
+                method=first_payload_method,
             )
 
         return QrResult(
