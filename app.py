@@ -10,6 +10,8 @@ from image_cache import get_thumbnail_path
 from manager.export import (export_to_csv, export_to_jsonl, filter_readings,
                             group_by_device, readings_to_series,
                             latest_per_device, export_inspection_csv)
+from manager.inspection_ui import (default_inspection_id, device_choices, missing_devices,
+                                   preview_inspection, save_inspection)
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
@@ -181,7 +183,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab1, tab2 = st.tabs(["読み取り", "記録"])
+tab1, tab2, tab3 = st.tabs(["読み取り", "記録", "点検結果"])
 
 with tab1:
     st.header("画像から読み取る")
@@ -367,3 +369,41 @@ with tab2:
                 color="#2B4A6F",
                 height=280,
             )
+
+with tab3:
+    st.header("点検結果")
+    _choices = device_choices(manager.storage)
+    if not _choices:
+        st.info("機器が登録されていません。")
+    else:
+        _today = date.today()
+        _insp_id = st.text_input("点検ID", value=default_inspection_id(), key="insp_id")
+        _col_from, _col_to = st.columns(2)
+        _insp_from = _col_from.date_input("開始日", value=_today, key="insp_from")
+        _insp_to = _col_to.date_input("終了日", value=_today, key="insp_to")
+        _insp_devices = st.multiselect("対象機器", list(_choices), default=list(_choices),
+                                       format_func=_choices.get, key="insp_devices")
+        _insp_result = None
+        try:
+            _insp_result, _insp_table = preview_inspection(
+                manager.storage, _insp_id, _insp_from, _insp_to, _insp_devices)
+        except ValueError as exc:
+            st.error(f"点検結果を作れません: {exc}")
+        if _insp_result is not None:
+            if _insp_table:
+                st.dataframe(pd.DataFrame(_insp_table), use_container_width=True, hide_index=True)
+            else:
+                st.info("期間内に対象機器の記録がありません。")
+            _missing = missing_devices(_insp_result)
+            if _missing:
+                st.warning("期間内に撮影が無い機器: " + "、".join(_missing))
+            if st.button("書き出す", type="primary", key="insp_export"):
+                try:
+                    st.session_state["insp_paths"] = save_inspection(_insp_result)
+                except Exception as exc:
+                    st.session_state.pop("insp_paths", None)
+                    st.error(f"点検結果を書き出せませんでした: {exc}")
+            _paths = st.session_state.get("insp_paths")
+            if _paths:
+                st.success("保存しました:\n\n" + "\n\n".join(_paths.values()))
+
