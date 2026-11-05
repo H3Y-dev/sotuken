@@ -1,9 +1,11 @@
 package jp.sotuken.metercapture.queue
 
 import java.io.File
+import java.io.IOException
 import jp.sotuken.metercapture.queue.sender.FolderSender
 import jp.sotuken.metercapture.queue.sender.Sender
 import jp.sotuken.metercapture.queue.sender.SenderPayloads
+import jp.sotuken.metercapture.queue.sender.PermanentSendException
 
 /**
  * 送信Workerのルーティングロジック。
@@ -29,7 +31,7 @@ class SendRouter(
         val httpSender = httpSenderProvider()
         // HTTPを使えない理由。送信箱へ回した項目の lastError に残す。
         var fallbackReason: String? = null
-        val isHttpReachable = if (httpSender == null) {
+        var isHttpReachable = if (httpSender == null) {
             fallbackReason = "送信先未設定"
             false
         } else {
@@ -54,6 +56,7 @@ class SendRouter(
             queueStore.markSending(item.localId)
             var sentViaHttp = false
             var note = fallbackReason
+            var permanentFailure = false
 
             // 3. 送信先が設定済みでGET /healthが通ればHTTP送信を試みる
             if (isHttpReachable) {
@@ -62,7 +65,13 @@ class SendRouter(
                     queueStore.markSent(item.localId, QueueItem.VIA_HTTP)
                     sentViaHttp = true
                 } else {
-                    note = "HTTP失敗: ${reasonOf(httpResult.exceptionOrNull())}"
+                    val error = httpResult.exceptionOrNull()
+                    note = "HTTP失敗: ${reasonOf(error)}"
+                    permanentFailure = error is PermanentSendException
+                    if (error is IOException) {
+                        isHttpReachable = false
+                        fallbackReason = note
+                    }
                 }
             }
 
@@ -70,7 +79,11 @@ class SendRouter(
             if (!sentViaHttp) {
                 val folderResult = folderSender.send(item)
                 if (folderResult.isSuccess) {
-                    queueStore.markSent(item.localId, QueueItem.VIA_FOLDER, note)
+                    if (permanentFailure) {
+                        queueStore.markFailed(item.localId, requireNotNull(note))
+                    } else {
+                        queueStore.markSent(item.localId, QueueItem.VIA_FOLDER, note)
+                    }
                 } else {
                     val error = folderResult.exceptionOrNull()?.message ?: "Folder sender failed"
                     queueStore.markFailed(item.localId, error)
@@ -83,6 +96,7 @@ class SendRouter(
         if (isHttpReachable) {
             val nonNullHttpSender = requireNotNull(httpSender)
             for (item in sentFolderItems) {
+                if (!isHttpReachable) break
                 val baseName = SenderPayloads.buildBaseName(item)
                 val ext = File(item.imagePath).extension.ifBlank { "jpg" }
                 val jsonFile = File(outboxDir, "$baseName.json")
@@ -97,10 +111,14 @@ class SendRouter(
                         }
                         queueStore.updateSentVia(item.localId, QueueItem.VIA_HTTP)
                     } else {
-                        queueStore.updateLastError(
-                            item.localId,
-                            "追い送り失敗: ${reasonOf(httpResult.exceptionOrNull())}",
-                        )
+                        val error = httpResult.exceptionOrNull()
+                        val note = "追い送り失敗: ${reasonOf(error)}"
+                        if (error is PermanentSendException) {
+                            queueStore.markFailed(item.localId, note)
+                        } else {
+                            queueStore.updateLastError(item.localId, note)
+                        }
+                        if (error is IOException) isHttpReachable = false
                     }
                 }
             }
