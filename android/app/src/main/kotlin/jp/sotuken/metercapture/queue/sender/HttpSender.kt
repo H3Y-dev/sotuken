@@ -9,6 +9,10 @@ import jp.sotuken.metercapture.queue.QueueItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+class PermanentSendException(message: String) : Exception(message)
+
+class TemporarySendException(message: String) : Exception(message)
+
 /**
  * Wi-Fi経由で手元PCの受信口（manager/receiver.py）へ画像を送信するSender。
  * 外部依存なし（HttpURLConnection のみ）。
@@ -54,11 +58,16 @@ class HttpSender(
                 }
 
                 val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_OK) {
+                if (responseCode in 200..299) {
                     Unit
                 } else {
                     val errorBody = readResponseText(connection)
-                    throw IOException("Upload failed with HTTP $responseCode: $errorBody")
+                    val message = "Upload failed with HTTP $responseCode: $errorBody"
+                    throw if (responseCode == 400 || responseCode == 413) {
+                        PermanentSendException(message)
+                    } else {
+                        TemporarySendException(message)
+                    }
                 }
             } finally {
                 connection.disconnect()
@@ -66,7 +75,7 @@ class HttpSender(
         }
     }
 
-    fun health(): Result<Unit> = health(baseUrl, token)
+    suspend fun health(): Result<Unit> = health(baseUrl, token)
 
     companion object {
         const val HEALTH_CONNECT_TIMEOUT_MS = 2000
@@ -78,31 +87,33 @@ class HttpSender(
          * 受信口の疎通確認（GET /health）。
          * 接続2秒・読み取り3秒でタイムアウト。
          */
-        fun health(
+        suspend fun health(
             baseUrl: String,
             token: String,
             connectTimeoutMs: Int = HEALTH_CONNECT_TIMEOUT_MS,
             readTimeoutMs: Int = HEALTH_READ_TIMEOUT_MS,
-        ): Result<Unit> = runCatching {
-            val healthUrl = buildUrl(baseUrl, "/health")
-            val connection = (healthUrl.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = connectTimeoutMs
-                readTimeout = readTimeoutMs
-                instanceFollowRedirects = false
-                setRequestProperty("X-Sotuken-Token", token)
-            }
-
-            try {
-                val responseCode = connection.responseCode
-                if (responseCode == HttpURLConnection.HTTP_OK) {
-                    Unit
-                } else {
-                    val errorBody = readResponseText(connection)
-                    throw IOException("Health check failed with HTTP $responseCode: $errorBody")
+        ): Result<Unit> = withContext(Dispatchers.IO) {
+            runCatching {
+                val healthUrl = buildUrl(baseUrl, "/health")
+                val connection = (healthUrl.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = connectTimeoutMs
+                    readTimeout = readTimeoutMs
+                    instanceFollowRedirects = false
+                    setRequestProperty("X-Sotuken-Token", token)
                 }
-            } finally {
-                connection.disconnect()
+
+                try {
+                    val responseCode = connection.responseCode
+                    if (responseCode == HttpURLConnection.HTTP_OK) {
+                        Unit
+                    } else {
+                        val errorBody = readResponseText(connection)
+                        throw IOException("Health check failed with HTTP $responseCode: $errorBody")
+                    }
+                } finally {
+                    connection.disconnect()
+                }
             }
         }
 

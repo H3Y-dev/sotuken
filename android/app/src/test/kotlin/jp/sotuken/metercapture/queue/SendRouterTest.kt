@@ -1,6 +1,9 @@
 package jp.sotuken.metercapture.queue
 
 import java.io.File
+import java.net.SocketTimeoutException
+import jp.sotuken.metercapture.queue.sender.PermanentSendException
+import jp.sotuken.metercapture.queue.sender.TemporarySendException
 import jp.sotuken.metercapture.queue.sender.FolderSender
 import jp.sotuken.metercapture.queue.sender.Sender
 import jp.sotuken.metercapture.queue.sender.SenderPayloads
@@ -415,6 +418,96 @@ class SendRouterTest {
             block(outbox, imageFile)
         } finally {
             tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun permanentRejectionKeepsOutboxAndAllowsManualRetry() = runTest {
+        withTestEnv { outbox, image ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val id = store.enqueue(image, emptyMeta())
+            var calls = 0
+            val sender = object : Sender {
+                override suspend fun send(item: QueueItem): Result<Unit> {
+                    calls++
+                    return Result.failure(PermanentSendException("HTTP 413"))
+                }
+            }
+            val router = SendRouter(dao, store, outbox, { sender }, { Result.success(Unit) })
+            router.route()
+            router.route()
+            assertEquals(1, calls)
+            assertEquals(SendState.FAILED, dao.findById(id)?.sendState)
+            assertTrue(dao.findById(id)?.lastError.orEmpty().contains("413"))
+            assertTrue(outbox.listFiles().orEmpty().isNotEmpty())
+            store.retry(id)
+            assertEquals(SendState.PENDING, dao.findById(id)?.sendState)
+        }
+    }
+
+    @Test
+    fun catchUpPermanentRejectionStopsAutomaticRetry() = runTest {
+        withTestEnv { outbox, image ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val id = store.enqueue(image, emptyMeta())
+            SendRouter(dao, store, outbox, { null }, { Result.success(Unit) }).route()
+            val sender = object : Sender {
+                override suspend fun send(item: QueueItem) =
+                    Result.failure<Unit>(PermanentSendException("HTTP 400"))
+            }
+            SendRouter(dao, store, outbox, { sender }, { Result.success(Unit) }).route()
+            assertEquals(SendState.FAILED, dao.findById(id)?.sendState)
+            assertTrue(outbox.listFiles().orEmpty().isNotEmpty())
+            store.retry(id)
+            assertEquals(SendState.PENDING, dao.findById(id)?.sendState)
+        }
+    }
+
+    @Test
+    fun timeoutAfterReceiverSaveKeepsOutboxAndShortCircuitsRemainingUploads() = runTest {
+        withTestEnv { outbox, image ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val ids = List(3) { store.enqueue(image, emptyMeta()) }
+            val receiverSaved = mutableListOf<String>()
+            val sender = object : Sender {
+                override suspend fun send(item: QueueItem): Result<Unit> {
+                    receiverSaved.add(item.localId)
+                    return Result.failure(SocketTimeoutException("response lost after save"))
+                }
+            }
+            SendRouter(dao, store, outbox, { sender }, { Result.success(Unit) }).route()
+            assertEquals(1, receiverSaved.size)
+            for (id in ids) {
+                assertEquals(QueueItem.VIA_FOLDER, dao.findById(id)?.sentVia)
+                assertTrue(dao.findById(id)?.lastError.orEmpty().contains("response lost"))
+            }
+            assertEquals(6, outbox.listFiles().orEmpty().size)
+            val recovered = RecordingSender()
+            SendRouter(dao, store, outbox, { recovered }, { Result.success(Unit) }).route()
+            assertEquals(3, recovered.sentItems.size)
+            assertEquals(0, outbox.listFiles().orEmpty().size)
+        }
+    }
+
+    @Test
+    fun temporaryHttpResponseDoesNotShortCircuitOtherItems() = runTest {
+        withTestEnv { outbox, image ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            repeat(2) { store.enqueue(image, emptyMeta()) }
+            var calls = 0
+            val sender = object : Sender {
+                override suspend fun send(item: QueueItem): Result<Unit> {
+                    calls++
+                    return Result.failure(TemporarySendException("HTTP 401"))
+                }
+            }
+            SendRouter(dao, store, outbox, { sender }, { Result.success(Unit) }).route()
+            assertEquals(2, calls)
+            assertEquals(2, dao.findByState(SendState.SENT).size)
         }
     }
 
