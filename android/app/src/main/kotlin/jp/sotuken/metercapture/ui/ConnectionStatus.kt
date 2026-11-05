@@ -92,3 +92,9 @@ fun folderReasonLabel(item: QueueItem): String? {
     }
     return "PCに届かず、送信箱に保存: $reason"
 }
+fun connectionResultLabel(state: ConnectionBarState, reason: String): String = when (state) {
+    ConnectionBarState.NOT_CONFIGURED -> "未設定"
+    ConnectionBarState.CHECKING -> "確認中"
+    ConnectionBarState.CONNECTED -> "接続中"
+    ConnectionBarState.UNREACHABLE -> "届かない（$reason）"
+}

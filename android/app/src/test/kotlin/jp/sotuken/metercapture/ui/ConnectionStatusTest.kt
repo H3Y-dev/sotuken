@@ -129,6 +129,17 @@ class ConnectionStatusTest {
             connectionBarText(ConnectionBarState.UNREACHABLE, 2, "なし", "接続できません"),
         )
     }
+    
+    @Test
+    fun resultLabelShowsReasonOnlyWhenUnreachable() {
+        assertEquals("未設定", connectionResultLabel(ConnectionBarState.NOT_CONFIGURED, ""))
+        assertEquals("確認中", connectionResultLabel(ConnectionBarState.CHECKING, ""))
+        assertEquals("接続中", connectionResultLabel(ConnectionBarState.CONNECTED, ""))
+        assertEquals(
+            "届かない（接続できません）",
+            connectionResultLabel(ConnectionBarState.UNREACHABLE, "接続できません"),
+        )
+    }
 
     @Test
     fun folderReasonLabelOnlyForFolderSentWithError() {
@@ -150,4 +161,5 @@ class ConnectionStatusTest {
         val failed = item("5", SendState.FAILED, lastError = "x")
         assertNull(folderReasonLabel(failed))
     }
+    
 }
