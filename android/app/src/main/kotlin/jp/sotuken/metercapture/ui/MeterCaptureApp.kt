@@ -154,7 +154,25 @@ fun MeterCaptureApp(queueStore: QueueStore) {
             }
         }
         if (showHistoryScreen) {
-            QueueListScreen(items = queueItems, onClose = { showHistoryScreen = false })
+            QueueListScreen(
+                items = queueItems,
+                onClose = { showHistoryScreen = false },
+                onRetry = { localId ->
+                    coroutineScope.launch {
+                        try {
+                            queueStore.retry(localId)
+                            QueueSendScheduler.enqueueSend(context)
+                        } catch (_: Exception) {
+                        }
+                    }
+                },
+                onSendNow = {
+                    try {
+                        QueueSendScheduler.enqueueSend(context)
+                    } catch (_: Exception) {
+                    }
+                },
+            )
         }
         
         if (showSettingsDialog) {
@@ -209,6 +227,10 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                         validationError = "合言葉を入力してください"
                                     } else {
                                         receiverSettings.save(urlInput, tokenInput)
+                                        try {
+                                            QueueSendScheduler.enqueueSend(context)
+                                        } catch (_: Exception) {
+                                        }
                                         showSettingsDialog = false
                                     }
                                 }
