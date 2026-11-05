@@ -54,6 +54,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     var capturedImage by remember { mutableStateOf<CapturedImage?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showPairingScreen by remember { mutableStateOf(false) }
 	var showHistoryScreen by remember { mutableStateOf(false) }
 	val deviceNameCandidates = remember(queueItems) { buildDeviceNameCandidates(queueItems) }
     // 入力済みの機器名は撮影のたびに残す。まだ触っていなければ、直前に撮った機器名を初期値にする。
@@ -100,7 +101,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                     }
                 }
 
-                if (hasCameraPermission) {
+                if (hasCameraPermission && !showPairingScreen) {
                 	CaptureMetaForm(
                         deviceName = deviceNameInput,
                         onDeviceNameChange = { deviceNameEdited = it },
@@ -175,6 +176,15 @@ fun MeterCaptureApp(queueStore: QueueStore) {
             )
         }
         
+        if (showPairingScreen) {
+            PairingScreen(
+                pendingCount = queueItems.count {
+                    it.sendState != jp.sotuken.metercapture.queue.SendState.SENT ||
+                        it.sentVia != jp.sotuken.metercapture.queue.QueueItem.VIA_HTTP
+                },
+                onClose = { showPairingScreen = false },
+            )
+        }
         if (showSettingsDialog) {
             val receiverSettings = remember { ReceiverSettings(context) }
             var urlInput by remember { mutableStateOf(receiverSettings.getUrl() ?: "") }
@@ -186,6 +196,10 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 title = { Text("送信先の設定") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            showSettingsDialog = false
+                            showPairingScreen = true
+                        }) { Text("QRで登録") }
                         OutlinedTextField(
                             value = urlInput,
                             onValueChange = {

@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 internal fun ColumnScope.CameraCapturePanel(
     onSaved: (CapturedImage) -> Unit,
     onError: (String) -> Unit,
+    temporaryCapture: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -118,6 +119,7 @@ internal fun ColumnScope.CameraCapturePanel(
             takePhoto(
                 context = context,
                 imageCapture = capture,
+                temporaryCapture = temporaryCapture,
                 onSaved = {
                     isCapturing = false
                     onSaved(it)
@@ -138,9 +140,10 @@ private fun takePhoto(
     imageCapture: ImageCapture,
     onSaved: (CapturedImage) -> Unit,
     onError: (String) -> Unit,
+    temporaryCapture: Boolean,
 ) {
     val capturedAtEpochMillis = System.currentTimeMillis()
-    val baseDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+    val baseDir = if (temporaryCapture) context.cacheDir else context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
     if (baseDir == null) {
         onError("撮影画像の保存先を利用できません")
         return
