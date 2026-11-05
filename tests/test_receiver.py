@@ -4,6 +4,10 @@ PC側受信口（manager/receiver.py）の単体テスト。
 プロトコル仕様（GET /health, POST /upload, 認証, 検査, 重複排除, 403）を検証します。
 """
 import base64
+import concurrent.futures
+import http.client
+import socket
+from unittest.mock import patch
 import hashlib
 import json
 import os
@@ -84,11 +88,85 @@ class TestReceiverServer(unittest.TestCase):
 
     def test_health_check_returns_ok(self):
         """GET /health で 200 {"ok":true,"service":"sotuken-receiver","version":1} が返ること。"""
-        status, data = self._request("GET", "/health")
+        status, data = self._request("GET", "/health", headers={"X-Sotuken-Token": self.token})
         self.assertEqual(200, status)
         self.assertEqual(True, data.get("ok"))
         self.assertEqual("sotuken-receiver", data.get("service"))
         self.assertEqual(1, data.get("version"))
+
+    def test_health_rejects_missing_or_wrong_token(self):
+        for headers in ({}, {"X-Sotuken-Token": "wrong"}):
+            self.assertEqual(401, self._request(headers=headers)[0])
+
+    def test_health_without_configured_token(self):
+        self.server.token = ""
+        self.assertEqual(200, self._request()[0])
+
+    def test_health_probe_uses_token(self):
+        self.assertFalse(is_receiver_healthy(self.port))
+        self.assertFalse(is_receiver_healthy(self.port, token="wrong"))
+        self.assertTrue(is_receiver_healthy(self.port, token=self.token))
+
+    def test_upload_syncs_files_before_replace(self):
+        name = "20261021T153000_synced.png"
+        body = b"image"
+        headers = self._make_upload_headers(name, {"local_id": "synced"}, body)
+        replace = os.replace
+        synced = []
+        fsync = os.fsync
+        def sync(fd):
+            fsync(fd)
+            synced.append(fd)
+        def publish(source, target):
+            self.assertEqual(1, len(synced))
+            synced.clear()
+            self.assertTrue(source.endswith(".part"))
+            self.assertRegex(os.path.basename(source), r"\.[0-9a-f]{12}\.(json\.)?part$")
+            replace(source, target)
+        with patch("manager.receiver.os.fsync", side_effect=sync) as sync_mock, patch("manager.receiver.os.replace", side_effect=publish):
+            self.assertEqual(200, self._request("POST", "/upload", headers, body)[0])
+        self.assertEqual(2, sync_mock.call_count)
+
+    def test_duplicate_with_different_content_returns_409(self):
+        name = "20261021T153000_conflict.png"
+        for body, expected in ((b"original", 200), (b"different", 409)):
+            headers = self._make_upload_headers(name, {"local_id": "conflict"}, body)
+            self.assertEqual(expected, self._request("POST", "/upload", headers, body)[0])
+        with open(os.path.join(self.incoming_dir, name), "rb") as image:
+            self.assertEqual(b"original", image.read())
+
+    def test_simultaneous_uploads(self):
+        name = "20261021T153000_parallel.png"
+        barrier = threading.Barrier(2)
+        def upload(body):
+            headers = self._make_upload_headers(name, {"local_id": "parallel"}, body)
+            barrier.wait(timeout=5)
+            return self._request("POST", "/upload", headers, body)
+        for bodies, expected in (((b"same", b"same"), [200, 200]),
+                                 ((b"first", b"second"), [200, 409])):
+            with self.subTest(bodies=bodies):
+                for filename in os.listdir(self.incoming_dir):
+                    os.remove(os.path.join(self.incoming_dir, filename))
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                    results = list(pool.map(upload, bodies))
+                self.assertEqual(expected, sorted(status for status, _ in results))
+                if bodies[0] == bodies[1]:
+                    self.assertEqual(1, sum(bool(data.get("duplicate")) for _, data in results))
+                self.assertFalse(any(f.endswith(".part") for f in os.listdir(self.incoming_dir)))
+                with open(os.path.join(self.incoming_dir, name), "rb") as image:
+                    self.assertIn(image.read(), bodies)
+
+    def test_short_body_returns_400_without_files(self):
+        headers = self._make_upload_headers("20261021T153000_short.png", {"local_id": "short"}, b"full-body")
+        request = "POST /upload HTTP/1.0\r\n" + "".join(f"{k}: {v}\r\n" for k, v in headers.items()) + "\r\n"
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as sock:
+            sock.sendall(request.encode("ascii") + b"short")
+            sock.shutdown(socket.SHUT_WR)
+            response = http.client.HTTPResponse(sock)
+            response.begin()
+            self.assertEqual(400, response.status)
+            response.read()
+        self.assertEqual([], os.listdir(self.incoming_dir))
 
     def test_unknown_path_returns_404(self):
         """未知のパスへのアクセスは 404 が返ること。"""
@@ -235,14 +313,14 @@ class TestReceiverServer(unittest.TestCase):
         status, _ = self._request("POST", "/upload", headers=headers, body=body)
         self.assertEqual(400, status)
 
-    def test_content_length_oversize_returns_400(self):
-        """30MB を超える Content-Length は 400 で拒否されること。"""
+    def test_content_length_oversize_returns_413(self):
+        """30MB を超える Content-Length は 413 で拒否されること。"""
         file_name = "20261021T153000_loc-01.png"
         headers = self._make_upload_headers(file_name, {"local_id": "loc-01"}, b"small")
         headers["Content-Length"] = str(31 * 1024 * 1024)  # 31MB
 
         status, _ = self._request("POST", "/upload", headers=headers, body=b"small")
-        self.assertEqual(400, status)
+        self.assertEqual(413, status)
 
     def test_non_private_ip_returns_403(self):
         """
@@ -345,7 +423,11 @@ class TestInitReceiverForApp(unittest.TestCase):
         self.assertIsNotNone(server1)
 
         # 2回目の呼び出し
-        info2 = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
+        with patch("manager.receiver.get_lan_ipv4", return_value="192.168.1.99") as get_ip:
+            info2 = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
+        get_ip.assert_called_once_with()
+        self.assertEqual("192.168.1.99", info2["lan_ip"])
+        self.assertEqual(f"http://192.168.1.99:{port}", info2["url"])
         self.assertTrue(info2["running"])
         self.assertIs(info1, info2)
         self.assertIs(info1["server"], info2["server"])
@@ -353,7 +435,7 @@ class TestInitReceiverForApp(unittest.TestCase):
 
         # /health にアクセスして疎通を確認
         url = f"http://127.0.0.1:{info1['port']}/health"
-        req = urllib.request.Request(url, method="GET")
+        req = urllib.request.Request(url, headers={"X-Sotuken-Token": info1["token"]}, method="GET")
         with urllib.request.urlopen(req, timeout=2.0) as resp:
             self.assertEqual(200, resp.status)
             data = json.loads(resp.read().decode("utf-8"))
@@ -374,7 +456,8 @@ class TestInitReceiverForApp(unittest.TestCase):
         ext_thread.start()
 
         try:
-            info = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
+            with patch("manager.receiver.load_or_create_pc_config", return_value={"token": "external-token"}):
+                info = init_receiver_for_app(port=port, incoming_dir=self.tmp.name)
             self.assertTrue(info["running"])
             self.assertTrue(info.get("external_process"))
             self.assertIsNone(info["server"])

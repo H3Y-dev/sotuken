@@ -15,6 +15,7 @@ import secrets
 import socket
 import sys
 import threading
+import uuid
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -180,11 +181,21 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             return False
         return True
 
+    def _check_token(self) -> bool:
+        req_token = self.headers.get("X-Sotuken-Token")
+        if not req_token or not secrets.compare_digest(req_token, self.server.token):
+            self._send_json(401, {"error": "合言葉（X-Sotuken-Token）が一致しないか未指定です"})
+            return False
+
+        return True
+
     def do_GET(self) -> None:
         if not self._check_ip_allowed():
             return
 
         if self.path == "/health":
+            if self.server.token and not self._check_token():
+                return
             self._send_json(200, {
                 "ok": True,
                 "service": "sotuken-receiver",
@@ -203,9 +214,7 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             return
 
         # 1. 合言葉（Token）の検査
-        req_token = self.headers.get("X-Sotuken-Token")
-        if not req_token or not secrets.compare_digest(req_token, self.server.token):
-            self._send_json(401, {"error": "合言葉（X-Sotuken-Token）が一致しないか未指定です"})
+        if not self._check_token():
             return
 
         # 2. Content-Length の検査
@@ -223,7 +232,7 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if content_length > MAX_BODY_SIZE:
-            self._send_json(400, {"error": f"ファイルサイズが上限（{MAX_BODY_SIZE // (1024 * 1024)}MB）を超えています: {content_length} bytes"})
+            self._send_json(413, {"error": f"ファイルサイズが上限（{MAX_BODY_SIZE // (1024 * 1024)}MB）を超えています: {content_length} bytes"})
             return
 
         # 3. ファイル名の検査
@@ -290,46 +299,61 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": f"画像本文のSHA-256がヘッダーと一致しません (受信: {actual_sha256}, 期待: {header_sha256})"})
             return
 
-        # 6. 重複検査（正式な画像ファイルが既に存在するか）
-        incoming_dir = self.server.incoming_dir
-        os.makedirs(incoming_dir, exist_ok=True)
-        final_image_path = os.path.join(incoming_dir, file_name)
+        # 重複確認から保存までを保護し、異なる内容の同時到着でも上書きしない。
+        with self.server.upload_lock:
+            # 6. 重複検査（正式な画像ファイルが既に存在するか）
+            incoming_dir = self.server.incoming_dir
+            os.makedirs(incoming_dir, exist_ok=True)
+            final_image_path = os.path.join(incoming_dir, file_name)
 
-        if os.path.exists(final_image_path):
+            if os.path.exists(final_image_path):
+                try:
+                    with open(final_image_path, "rb") as existing:
+                        existing_sha256 = hashlib.sha256(existing.read()).hexdigest()
+                except OSError as exc:
+                    self._send_json(500, {"error": f"既存画像の確認に失敗しました: {exc}"})
+                    return
+                if existing_sha256 != actual_sha256:
+                    self._send_json(409, {"error": "同名の画像が異なる内容で既に保存されています"})
+                    return
+                self._send_json(200, {
+                    "stored": file_name,
+                    "duplicate": True,
+                })
+                return
+
+            # 7. incoming/ への書き込み
+            # 一時ファイルを同期してから、JSON、画像の順で正式名へ置き換える。
+            part_id = uuid.uuid4().hex[:12]
+            part_json_path = os.path.join(incoming_dir, f"{file_name}.{part_id}.json.part")
+            final_json_path = os.path.join(incoming_dir, f"{base_name}.json")
+            part_image_path = os.path.join(incoming_dir, f"{file_name}.{part_id}.part")
+
+            try:
+                with open(part_json_path, "wb") as f:
+                    f.write(sidecar_bytes)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(part_json_path, final_json_path)
+
+                with open(part_image_path, "wb") as f:
+                    f.write(body)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(part_image_path, final_image_path)
+            except OSError as exc:
+                for p in (part_json_path, part_image_path):
+                    if os.path.exists(p):
+                        try:
+                            os.remove(p)
+                        except OSError:
+                            pass
+                self._send_json(500, {"error": f"ファイルの保存に失敗しました: {exc}"})
+                return
+
             self._send_json(200, {
                 "stored": file_name,
-                "duplicate": True,
             })
-            return
-
-        # 7. incoming/ への書き込み
-        # 規約: サイドカーJSONを <name>.json.part で書いて <base>.json へリネーム
-        #       画像を <name>.part で書いて正式名へリネーム
-        part_json_path = os.path.join(incoming_dir, f"{file_name}.json.part")
-        final_json_path = os.path.join(incoming_dir, f"{base_name}.json")
-        part_image_path = os.path.join(incoming_dir, f"{file_name}.part")
-
-        try:
-            with open(part_json_path, "wb") as f:
-                f.write(sidecar_bytes)
-            os.replace(part_json_path, final_json_path)
-
-            with open(part_image_path, "wb") as f:
-                f.write(body)
-            os.replace(part_image_path, final_image_path)
-        except OSError as exc:
-            for p in (part_json_path, part_image_path):
-                if os.path.exists(p):
-                    try:
-                        os.remove(p)
-                    except OSError:
-                        pass
-            self._send_json(500, {"error": f"ファイルの保存に失敗しました: {exc}"})
-            return
-
-        self._send_json(200, {
-            "stored": file_name,
-        })
 
 
 class ReceiverServer(http.server.ThreadingHTTPServer):
@@ -349,6 +373,7 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         handler_class: Any = ReceiverHandler,
     ):
         super().__init__(server_address, handler_class)
+        self.upload_lock = threading.Lock()
         self.token = token
         self.incoming_dir = os.path.abspath(incoming_dir)
         os.makedirs(self.incoming_dir, exist_ok=True)
@@ -357,13 +382,13 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         self.daemon_threads = True
 
 
-def is_receiver_healthy(port: int, timeout: float = 1.0) -> bool:
+def is_receiver_healthy(port: int, timeout: float = 1.0, token: str = "") -> bool:
     """
     ローカルホスト（127.0.0.1:{port}/health）に問い合わせ、
     sotuken-receiver が正常に応答するかを判定する。
     """
     url = f"http://127.0.0.1:{port}/health"
-    req = urllib.request.Request(url, method="GET")
+    req = urllib.request.Request(url, headers={"X-Sotuken-Token": token}, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if resp.status == 200:
@@ -411,6 +436,8 @@ def init_receiver_for_app(
 
     with _receiver_lock:
         if _cached_receiver_info is not None:
+            _cached_receiver_info["lan_ip"] = get_lan_ipv4()
+            _cached_receiver_info["url"] = f"http://{_cached_receiver_info['lan_ip']}:{_cached_receiver_info['port']}"
             return _cached_receiver_info
 
         config = load_or_create_pc_config(config_path)
@@ -423,7 +450,7 @@ def init_receiver_for_app(
             incoming_dir = get_default_incoming_dir()
 
         # ポート指定がある場合、すでに別プロセスで受信口が動いていれば検知
-        if actual_port != 0 and is_receiver_healthy(actual_port):
+        if actual_port != 0 and is_receiver_healthy(actual_port, token=token):
             _cached_receiver_info = {
                 "running": True,
                 "port": actual_port,
@@ -467,7 +494,7 @@ def init_receiver_for_app(
             }
             return _cached_receiver_info
         except Exception as exc:
-            if is_receiver_healthy(actual_port):
+            if is_receiver_healthy(actual_port, token=token):
                 _cached_receiver_info = {
                     "running": True,
                     "port": actual_port,
