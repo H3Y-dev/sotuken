@@ -10,6 +10,7 @@ import http.server
 import ipaddress
 import io
 import json
+import math
 import os
 import re
 import secrets
@@ -25,6 +26,8 @@ import urllib.request
 from urllib.parse import urlsplit
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from manager.sidecar import normalize_captured_at
+
 # 既定値
 DEFAULT_PORT = 8765
 MAX_BODY_SIZE = 30 * 1024 * 1024  # 30 MB
@@ -32,6 +35,16 @@ MAX_PAIR_BODY_SIZE = 2048
 PAIR_TIMEOUT = 3.0
 PAIR_LIFETIME = 300
 MAX_PAIR_FAILURES = 5
+UPLOAD_TIMEOUT = 60.0  # /upload の本文全体を読み切る期限（秒）。画像用に/pairより十分長い。
+MAX_CONCURRENT_UPLOADS = 4  # 同時に本文を受信できる数。超過は503+Retry-After
+UPLOAD_RETRY_AFTER = 5
+
+# サイドカーJSONの文字列長上限（manager/sidecar.py の SidecarMetadata の項目に対応）
+SIDECAR_STRING_LIMITS = {
+    "local_id": 128, "captured_at": 64, "device_name": 256, "operator_note": 2000,
+    "device_id": 128, "device_id_source": 16, "device_id_issue": 32,
+}
+SIDECAR_NUMBER_KEYS = ("operator_value", "scale_min", "scale_max")
 
 # ファイル名検査パターン
 # 形: YYYYMMDDTHHMMSS_<local_id>.<拡張子>、英数と _ - . のみ、拡張子は jpg/jpeg/png
@@ -159,6 +172,41 @@ def get_lan_ipv4() -> str:
         return "127.0.0.1"
 
 
+def validate_sidecar_metadata(data: Dict[str, Any]) -> Optional[str]:
+    """
+    受信したサイドカーJSON（辞書）を検証し、不正なら理由の文字列、問題なければ None を返す。
+    manager/sidecar.py の SidecarMetadata の項目に合わせる。項目の省略・null は従来どおり許可し、
+    未知のキーも許容する（互換性維持）。local_id の存在とファイル名との一致は呼び出し側で検査する。
+    注意: 画像のSHA-256は転送の破損検出用で、送信者の認証の代わりにはならない（認証は合言葉で行う）。
+    """
+    for key, limit in SIDECAR_STRING_LIMITS.items():
+        value = data.get(key)
+        if value is None:
+            continue
+        if key == "local_id" and isinstance(value, (int, float)) and not isinstance(value, bool):
+            value = str(value)  # 既存の str(local_id) 照合と互換
+        if not isinstance(value, str):
+            return f"{key} は文字列である必要があります"
+        if len(value) > limit:
+            return f"{key} が長すぎます（上限{limit}文字）"
+    for key in SIDECAR_NUMBER_KEYS:
+        value = data.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return f"{key} は数値である必要があります"
+        try:
+            finite = math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if not finite:
+            return f"{key} は有限の数値である必要があります（NaN/Infinity は不可）"
+    captured_at = data.get("captured_at")
+    if captured_at is not None and normalize_captured_at(captured_at) is None:
+        return "captured_at がISO 8601形式ではありません"
+    return None
+
+
 def decode_base64url(s: str) -> bytes:
     """
     Base64URL文字列（パディングの有無を許容）をバイト列へデコードする。
@@ -199,7 +247,8 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
         except Exception:
             pass
 
-    def _send_json(self, status_code: int, data: Dict[str, Any]) -> None:
+    def _send_json(self, status_code: int, data: Dict[str, Any],
+                   extra_headers: Optional[Dict[str, str]] = None) -> None:
         if status_code >= 400:
             self._drain_rfile()
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -207,6 +256,8 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -352,6 +403,11 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "サイドカーJSONの形式が不正です（JSONオブジェクトである必要があります）"})
             return
 
+        reason = validate_sidecar_metadata(sidecar_data)
+        if reason is not None:
+            self._send_json(400, {"error": f"サイドカーJSONが不正です: {reason}"})
+            return
+
         sidecar_local_id = sidecar_data.get("local_id")
         if sidecar_local_id is None or str(sidecar_local_id).strip() == "":
             self._send_json(400, {"error": "サイドカーJSONに local_id が含まれていません"})
@@ -368,7 +424,34 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(400, {"error": "X-Image-Sha256 ヘッダーが必要です"})
             return
 
-        body = self.rfile.read(content_length)
+        # 同時受信数の上限。超過は一時エラー(503)として返し、スマホ側の保持・再送に任せる。
+        if not self.server.upload_slots.acquire(blocking=False):
+            self.close_connection = True
+            self._send_json(503, {"error": "同時受信数の上限に達しています。少し待って再送してください"},
+                            {"Retry-After": str(UPLOAD_RETRY_AFTER)})
+            return
+        try:
+            # 本文全体の期限。低速送信や途中停止で受信スレッドを占有させない。
+            # 本文はメモリ上で受け取りディスクへは完了後にだけ書くため、タイムアウト時に.partは残らない。
+            self.close_connection = True
+            deadline = time.monotonic() + self.server.upload_timeout
+            body_buffer = bytearray()
+            try:
+                while len(body_buffer) < content_length:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError
+                    self.connection.settimeout(remaining)
+                    chunk = self.rfile.read1(min(65536, content_length - len(body_buffer)))
+                    if not chunk:
+                        break
+                    body_buffer.extend(chunk)
+            except (TimeoutError, OSError):
+                self._send_json(408, {"error": "画像本文の読み取りがタイムアウトしました。再送してください"})
+                return
+        finally:
+            self.server.upload_slots.release()
+        body = bytes(body_buffer)
         if len(body) != content_length:
             self._send_json(400, {"error": f"受信バイト数（{len(body)}）が Content-Length（{content_length}）と一致しません"})
             return
@@ -451,11 +534,15 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         quiet: bool = False,
         handler_class: Any = ReceiverHandler,
         receiver_id: Optional[str] = None,
+        max_concurrent_uploads: int = MAX_CONCURRENT_UPLOADS,
+        upload_timeout: float = UPLOAD_TIMEOUT,
     ):
         self.pair_lock = threading.Lock()
         self._invitation = None
         super().__init__(server_address, handler_class)
         self.upload_lock = threading.Lock()
+        self.upload_slots = threading.BoundedSemaphore(max_concurrent_uploads)
+        self.upload_timeout = upload_timeout
         self.token = token
         self.receiver_id = receiver_id or str(uuid.uuid4())
         self.pc_name = "".join(c for c in socket.gethostname() if c.isprintable())[:64] or "PC"
