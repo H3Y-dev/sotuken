@@ -8,6 +8,13 @@ from pathlib import Path
 from manager.ingest import UNKNOWN_DEVICE
 
 
+def write_report_csv(rows, columns, stream):
+    """Write only the report's public columns to an already opened stream."""
+    writer = csv.DictWriter(stream, fieldnames=columns, extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(rows)
+
+
 def filter_readings(readings, device_name=None, date_from=None, date_to=None):
     """記録リストを機器名と日付範囲で絞り込む。"""
     start = datetime.combine(date_from, time.min) if date_from else None
