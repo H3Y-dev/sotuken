@@ -53,4 +53,28 @@ class RoomInspectionStoreTest {
     @Test fun deleteStopsAndKeepsInspectionWhenPhotoIsSending() = runTest {
         val item = create(); queue.insert(photo(inspectionId = item.inspectionId).copy(sendState = SendState.SENDING)); assertFalse(store.delete(item.inspectionId)); assertNotNull(dao.findById(item.inspectionId)); assertNotNull(queue.findById("photo"))
     }
+    @Test fun deletePhotoOnlyWhileInProgress() = runTest {
+        val item = create()
+        val id = store.addPhoto(item.inspectionId, temp.newFile("single.jpg"), CaptureMeta(null, null, null))
+        assertEquals(DeleteResult.DELETED, store.deletePhoto(item.inspectionId, id))
+        assertNull(queue.findById(id))
+        assertNotNull(dao.findById(item.inspectionId))
+        val remaining = store.addPhoto(item.inspectionId, temp.newFile("remaining.jpg"), CaptureMeta(null, null, null))
+        dao.update(item.copy(state = InspectionState.WAITING))
+        assertTrue(runCatching { store.deletePhoto(item.inspectionId, remaining) }.exceptionOrNull() is IllegalStateException)
+        assertNotNull(queue.findById(remaining))
+    }
+    @Test fun deletePhotoOfOtherInspectionIsNotFound() = runTest {
+        val item = create()
+        val other = create()
+        val id = store.addPhoto(other.inspectionId, temp.newFile("other.jpg"), CaptureMeta(null, null, null))
+        assertEquals(DeleteResult.NOT_FOUND, store.deletePhoto(item.inspectionId, id))
+        assertNotNull(queue.findById(id))
+    }
+    @Test fun deletePhotoWhileSendingIsRejected() = runTest {
+        val item = create()
+        queue.insert(photo(inspectionId = item.inspectionId).copy(sendState = SendState.SENDING))
+        assertEquals(DeleteResult.SENDING, store.deletePhoto(item.inspectionId, "photo"))
+        assertNotNull(queue.findById("photo"))
+    }
 }
