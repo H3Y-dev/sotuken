@@ -17,10 +17,13 @@ data class QueueItem(
     val sentAt: String?,
     val sentVia: String? = null,
     val receiverId: String? = null,
+    val deviceId: String? = null,
+    val deviceIdSource: String? = null,
 ) {
     companion object {
         const val VIA_HTTP = "http"
         const val VIA_FOLDER = "folder"
+        const val DEVICE_ID_SOURCE_QR = "qr"
     }
 }
 
@@ -37,6 +40,8 @@ data class CaptureMeta(
     val deviceName: String?,
     val operatorValue: Double?,
     val operatorNote: String?,
+    val deviceId: String? = null,
+    val deviceIdSource: String? = null,
 )
 
 fun QueueItem.isHeldFor(currentReceiverId: String?): Boolean =

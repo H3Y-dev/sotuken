@@ -33,9 +33,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import jp.sotuken.metercapture.capture.CapturedImage
+import jp.sotuken.metercapture.device.HeldDevice
+import jp.sotuken.metercapture.device.deviceIdForCapture
+import jp.sotuken.metercapture.device.deviceIdSourceForCapture
+import jp.sotuken.metercapture.device.heldDeviceAfterNameEdit
 import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueSendScheduler
 import jp.sotuken.metercapture.queue.QueueStore
+import jp.sotuken.metercapture.settings.DeviceIdSettings
 import jp.sotuken.metercapture.settings.PrivateIpv4Validator
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.launch
@@ -55,10 +60,13 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showPairingScreen by remember { mutableStateOf(false) }
+    val deviceIdSettings = remember { DeviceIdSettings(context) }
+    var heldDevice by remember { mutableStateOf<HeldDevice?>(deviceIdSettings.get()) }
+    var deviceQrScanning by remember { mutableStateOf(false) }
 	var showHistoryScreen by remember { mutableStateOf(false) }
 	val deviceNameCandidates = remember(queueItems) { buildDeviceNameCandidates(queueItems) }
     // 入力済みの機器名は撮影のたびに残す。まだ触っていなければ、直前に撮った機器名を初期値にする。
-    var deviceNameEdited by rememberSaveable { mutableStateOf<String?>(null) }
+    var deviceNameEdited by rememberSaveable { mutableStateOf<String?>(heldDevice?.name) }
     val deviceNameInput = deviceNameEdited ?: deviceNameCandidates.firstOrNull().orEmpty()
     var operatorValueInput by rememberSaveable { mutableStateOf("") }
 
@@ -101,10 +109,30 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                     }
                 }
 
-                if (hasCameraPermission && !showPairingScreen) {
+                DeviceQrSection(
+                    held = heldDevice,
+                    onScanningChange = { deviceQrScanning = it },
+                    onUse = { qr ->
+                        val device = HeldDevice(qr.id, qr.name)
+                        deviceIdSettings.save(device)
+                        heldDevice = device
+                        deviceNameEdited = qr.name
+                    },
+                    onClear = {
+                        deviceIdSettings.clear()
+                        heldDevice = null
+                    },
+                )
+
+                if (hasCameraPermission && !showPairingScreen && !deviceQrScanning) {
                 	CaptureMetaForm(
                         deviceName = deviceNameInput,
-                        onDeviceNameChange = { deviceNameEdited = it },
+                        onDeviceNameChange = {
+                            deviceNameEdited = it
+                            val kept = heldDeviceAfterNameEdit(heldDevice, it)
+                            if (kept == null && heldDevice != null) deviceIdSettings.clear()
+                            heldDevice = kept
+                        },
                         operatorValue = operatorValueInput,
                         onOperatorValueChange = { operatorValueInput = it },
                         deviceNameCandidates = deviceNameCandidates,
@@ -119,6 +147,8 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                             deviceName = normalizeDeviceName(deviceNameInput),
                                             operatorValue = parseOperatorValue(operatorValueInput),
                                             operatorNote = null,
+                                            deviceId = deviceIdForCapture(heldDevice, deviceNameInput),
+                                            deviceIdSource = deviceIdSourceForCapture(heldDevice, deviceNameInput),
                                         ),
                                     )
                                     try {
