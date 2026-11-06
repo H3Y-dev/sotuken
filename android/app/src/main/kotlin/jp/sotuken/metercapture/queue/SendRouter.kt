@@ -19,6 +19,7 @@ class SendRouter(
     private val healthChecker: suspend () -> Result<Unit>,
     private val folderSender: Sender = FolderSender(outboxDir),
     private val currentReceiverId: String? = null,
+    private val isSendable: suspend (QueueItem) -> Boolean = { true },
 ) {
 
     private fun reasonOf(e: Throwable?): String =
@@ -44,12 +45,13 @@ class SendRouter(
         }
 
         // 今回HTTPに失敗して送信箱へ回した項目を、その場でもう一度送らない。
-        val sentFolderItems = if (isHttpReachable) {
-            queueDao.findByState(SendState.SENT).filter {
-                it.sentVia == QueueItem.VIA_FOLDER && !it.isHeldFor(currentReceiverId)
+        val sentFolderItems = mutableListOf<QueueItem>()
+        if (isHttpReachable) {
+            for (item in queueDao.findByState(SendState.SENT)) {
+                if (item.sentVia == QueueItem.VIA_FOLDER && !item.isHeldFor(currentReceiverId) && isSendable(item)) {
+                    sentFolderItems += item
+                }
             }
-        } else {
-            emptyList()
         }
 
         // 2. PENDING項目を古い順に取得
@@ -57,6 +59,7 @@ class SendRouter(
 
         for (item in pendingItems) {
             if (item.isHeldFor(currentReceiverId)) continue
+            if (!isSendable(item)) continue
             queueStore.markSending(item.localId)
             var sentViaHttp = false
             var note = fallbackReason
