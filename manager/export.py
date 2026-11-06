@@ -15,13 +15,15 @@ def write_report_csv(rows, columns, stream):
     writer.writerows(rows)
 
 
-def filter_readings(readings, device_name=None, date_from=None, date_to=None):
+def filter_readings(readings, device_name=None, date_from=None, date_to=None, inspection_id=None):
     """記録リストを機器名と日付範囲で絞り込む。"""
     start = datetime.combine(date_from, time.min) if date_from else None
     end = datetime.combine(date_to, time.max) if date_to else None
 
     result = []
     for reading in readings:
+        if inspection_id is not None and (_field(reading, "inspection_id") or "") != inspection_id:
+            continue
         if device_name not in (None, "すべて") and reading.device_name != device_name:
             continue
 
@@ -32,6 +34,45 @@ def filter_readings(readings, device_name=None, date_from=None, date_to=None):
             continue
         result.append(reading)
     return result
+
+
+def inspection_options(readings):
+    """巡回のID・表示名・記録件数を返す。選択値には表示名を使わない。"""
+    groups = {}
+    for reading in readings:
+        inspection_id = _field(reading, "inspection_id")
+        if inspection_id:
+            group = groups.setdefault(inspection_id, [None, 0])
+            group[0] = group[0] or _field(reading, "inspection_name")
+            group[1] += 1
+    return [(key, name or key, count) for key, (name, count) in sorted(groups.items())]
+
+
+def inspection_devices(readings):
+    """選択した巡回の記録を機器ID単位にまとめる（欠落IDは一行）。"""
+    groups = {}
+    sources = {"qr": "スマホ(QR)", "sidecar_qr": "スマホ(QR)",
+               "manual": "スマホ(手入力)", "sidecar_manual": "スマホ(手入力)",
+               "pc_qr": "PC(画像のQR)"}
+    for reading in readings:
+        device_id = _field(reading, "device_id") or None
+        group = groups.setdefault(device_id, {"機器ID": device_id or "機器IDなし", "機器名": [],
+                                               "写真の枚数": 0, "最後の撮影時刻": None, "情報の出所": []})
+        group["写真の枚数"] += 1
+        name = _field(reading, "device_name")
+        if name and name != UNKNOWN_DEVICE and name not in group["機器名"]:
+            group["機器名"].append(name)
+        captured_at = _field(reading, "captured_at")
+        if captured_at and (group["最後の撮影時刻"] is None or
+                            _reading_time({"captured_at": captured_at}) >
+                            _reading_time({"captured_at": group["最後の撮影時刻"]})):
+            group["最後の撮影時刻"] = captured_at
+        source = sources.get(_field(reading, "device_id_source"), "なし") if device_id else "なし"
+        if source not in group["情報の出所"]:
+            group["情報の出所"].append(source)
+    return [{**group, "機器名": "、".join(group["機器名"]) or "未設定",
+             "情報の出所": "、".join(sorted(group["情報の出所"]))}
+            for _, group in sorted(groups.items(), key=lambda item: (item[0] is None, item[0] or ""))]
 
 
 def _field(reading, *names, **kwargs):
@@ -65,7 +106,8 @@ def export_to_csv(readings, output_path):
         writer = csv.writer(f)
         # ヘッダー行（確定スキーマに対応）
         writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path",
-                         "device_id", "device_id_source", "device_id_issue", "pipeline_version", "received_at", "image_rel"])
+                         "device_id", "device_id_source", "device_id_issue", "pipeline_version", "received_at", "image_rel",
+                         "inspection_id", "inspection_name"])
         for r in readings:
             writer.writerow([
                 _field(r, "reading_id", "id"),
@@ -76,7 +118,8 @@ def export_to_csv(readings, output_path):
                 _field(r, "failure_stage"),
                 _field(r, "image_path"),
                 *[_field(r, field) for field in ("device_id", "device_id_source", "device_id_issue",
-                                               "pipeline_version", "received_at", "image_rel")],
+                                               "pipeline_version", "received_at", "image_rel",
+                                               "inspection_id", "inspection_name")],
             ])
 
 
@@ -86,7 +129,7 @@ def export_to_jsonl(readings, output_path):
         "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
         "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
         "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
-        "device_id", "device_id_source", "device_id_issue", "image_rel",
+        "device_id", "device_id_source", "device_id_issue", "image_rel", "inspection_id", "inspection_name",
     ]
     aliases = {"reading_id": ("id",), "status": ("stage",)}
     with open(output_path, "w", encoding="utf-8") as f:

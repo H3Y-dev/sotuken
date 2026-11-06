@@ -140,6 +140,7 @@ class MeterManager:
                 "id": r.id,
                 "timestamp": r.timestamp,
                 "device_name": r.device_name,
+                "inspection_name": r.inspection_name or r.inspection_id or "点検なし",
                 "stage": r.stage,
                 "value": r.value,
                 "pipeline_version": r.pipeline_version,

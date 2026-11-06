@@ -9,7 +9,7 @@ import streamlit as st
 from image_cache import get_thumbnail_path
 from manager.export import (export_to_csv, export_to_jsonl, filter_readings,
                             group_by_device, readings_to_series,
-                            latest_per_device, export_inspection_csv)
+                            latest_per_device, export_inspection_csv, inspection_options, inspection_devices)
 from manager.inspection_ui import (default_inspection_id, device_choices, missing_devices,
                                    preview_inspection, save_inspection)
 from manager.manager import MeterManager
@@ -34,12 +34,13 @@ _COLUMN_LABELS = {
     "id": "記録番号",
     "timestamp": "取込日時",
     "device_name": "機器名",
+    "inspection_name": "点検（巡回）",
     "stage": "判定",
     "value": "読み取り値",
     "pipeline_version": "版",
     "image_path": "画像",
 }
-_COLUMN_ORDER = ["記録番号", "取込日時", "機器名", "判定", "読み取り値", "版", "画像"]
+_COLUMN_ORDER = ["記録番号", "取込日時", "機器名", "点検（巡回）", "判定", "読み取り値", "版", "画像"]
 
 
 def _to_display_table(rows):
@@ -254,7 +255,8 @@ with tab1:
 with tab2:
     st.header("読み取りの記録")
     device_options = ["すべて"] + sorted({reading.device_name for reading in history})
-    history_dates = [datetime.fromisoformat(reading.timestamp).date() for reading in history]
+    history_dates = [datetime.fromisoformat(reading.captured_at or reading.received_at or reading.timestamp).date()
+                     for reading in history]
     default_date_from = min(history_dates) if history_dates else date.today()
     default_date_to = max(history_dates) if history_dates else date.today()
 
@@ -266,12 +268,28 @@ with tab2:
     with filter_date_to:
         selected_date_to = st.date_input("終了日", value=default_date_to)
 
+    inspections = inspection_options(history)
+    inspection_labels = {None: "すべて", "": "点検なし(旧データ)"}
+    inspection_labels.update({key: f"{name}（{count}件）" for key, name, count in inspections})
+    selected_inspection = st.selectbox("点検（巡回）", options=list(inspection_labels),
+                                     format_func=inspection_labels.get)
+
     filtered_history = filter_readings(
         history,
         device_name=selected_history_device,
         date_from=selected_date_from,
         date_to=selected_date_to,
+        inspection_id=selected_inspection,
     )
+    st.caption(f"絞り込み結果 {len(filtered_history)}件 / 全{len(history)}件")
+    if selected_inspection:
+        inspection_rows = filter_readings(history, inspection_id=selected_inspection)
+        devices_table = inspection_devices(inspection_rows)
+        st.subheader("この点検のメーター一覧")
+        st.caption("選択した点検全体の一覧（機器名・日付の絞り込み前）")
+        st.dataframe(pd.DataFrame(devices_table), use_container_width=True, hide_index=True)
+        missing_id_count = sum(row["写真の枚数"] for row in devices_table if row["機器ID"] == "機器IDなし")
+        st.caption(f"機器IDなしの写真: {missing_id_count}枚")
     latest_rows = latest_per_device(filtered_history)
     st.header("各メーターの最新の読み取り")
     if latest_rows:
@@ -321,7 +339,7 @@ with tab2:
 
         if st.button("CSVを書き出す"):
             csv_path = "readings_export.csv"
-            export_to_csv(history, csv_path)
+            export_to_csv(filtered_history, csv_path)
             with open(csv_path, "rb") as f:
                 st.download_button(
                     label="CSVを保存",
@@ -332,7 +350,7 @@ with tab2:
 
         if st.button("JSONLを書き出す"):
             jsonl_path = "readings_export.jsonl"
-            export_to_jsonl(history, jsonl_path)
+            export_to_jsonl(filtered_history, jsonl_path)
             with open(jsonl_path, "rb") as f:
                 st.download_button(
                     label="JSONLを保存",

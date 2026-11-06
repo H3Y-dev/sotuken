@@ -43,7 +43,7 @@ def reprocess_image(
     with storage.connection() as conn:
         cursor = conn.execute(
             "SELECT device_name, device_id, device_id_source, device_id_issue, "
-            "captured_at, received_at, image_rel FROM meter_readings "
+            "captured_at, received_at, image_rel, inspection_id, inspection_name FROM meter_readings "
             "WHERE image_sha256 = ? OR (image_sha256 IS NULL AND image_path = ?) "
             "ORDER BY id DESC LIMIT 1",
             (image_hash, image_path),

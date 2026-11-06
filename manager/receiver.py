@@ -26,7 +26,7 @@ import urllib.request
 from urllib.parse import urlsplit
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from manager.sidecar import normalize_captured_at
+from manager.sidecar import normalize_captured_at, normalize_inspection
 
 # 既定値
 DEFAULT_PORT = 8765
@@ -179,6 +179,10 @@ def validate_sidecar_metadata(data: Dict[str, Any]) -> Optional[str]:
     未知のキーも許容する（互換性維持）。local_id の存在とファイル名との一致は呼び出し側で検査する。
     注意: 画像のSHA-256は転送の破損検出用で、送信者の認証の代わりにはならない（認証は合言葉で行う）。
     """
+    # 巡回項目は任意。不正でも写真は拒否せず、保存する値だけを正規化する。
+    if "inspection_id" in data or "inspection_name" in data:
+        data["inspection_id"], data["inspection_name"] = normalize_inspection(
+            data.get("inspection_id"), data.get("inspection_name"))
     for key, limit in SIDECAR_STRING_LIMITS.items():
         value = data.get(key)
         if value is None:
