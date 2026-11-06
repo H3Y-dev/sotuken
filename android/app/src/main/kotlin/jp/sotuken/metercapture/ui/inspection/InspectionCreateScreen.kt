@@ -38,7 +38,7 @@ fun InspectionCreateScreen(state: CreateUiState, onNameChange: (String) -> Unit,
                 Text(route.label, Modifier.padding(start = 12.dp))
             }
         }
-        Text("対象一覧がないため、未撮影の機器は判定できません", style = MaterialTheme.typography.bodySmall)
+        if (state.selectedRouteId == null) Text("対象一覧がないため、未撮影の機器は判定できません", style = MaterialTheme.typography.bodySmall)
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = onStart, enabled = !state.starting, modifier = Modifier.fillMaxWidth()) { Text(if (state.starting) "作成中..." else "点検を始める") }
         TextButton(onClick = onBack, enabled = !state.starting) { Text("戻る") }

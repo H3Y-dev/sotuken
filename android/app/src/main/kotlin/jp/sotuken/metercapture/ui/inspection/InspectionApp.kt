@@ -12,7 +12,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.ZonedDateTime
 import jp.sotuken.metercapture.inspection.*
 import jp.sotuken.metercapture.queue.*
-import jp.sotuken.metercapture.route.parseRouteJson
+import jp.sotuken.metercapture.route.*
+import jp.sotuken.metercapture.settings.pickReachableUrl
+import jp.sotuken.metercapture.queue.sender.HttpSender
+import java.io.File
+import java.time.Instant
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import jp.sotuken.metercapture.ui.*
 import kotlinx.coroutines.CancellationException
@@ -22,9 +26,35 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
+fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, routeRepository: RouteRepository? = null) {
     val context = LocalContext.current
+    val repository = routeRepository ?: remember(context) { RouteRepository(File(context.filesDir, "routes.json")) }
     val scope = rememberCoroutineScope()
+    var savedRoutes by remember(repository) { mutableStateOf(emptyList<SavedRoute>()) }
+    var routeLoading by remember { mutableStateOf(false) }
+    var routeError by remember { mutableStateOf<String?>(null) }
+    var remoteRoutes by remember { mutableStateOf<List<RouteSummary>?>(null) }
+    var confirmRoute by remember { mutableStateOf<RouteDoc?>(null) }
+    var routeSource by remember { mutableStateOf("wifi") }
+    var scanRoute by remember { mutableStateOf(false) }
+    var selectedRouteId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(repository) {
+        try { savedRoutes = withContext(Dispatchers.IO) { repository.load() } }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { routeError = "保存済みルートを読み込めません" }
+    }
+    fun routeOperation(block: suspend () -> Unit) {
+        if (!routeLoading) {
+            routeLoading = true
+            routeError = null
+            scope.launch {
+                try { block() }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { routeError = e.message ?: "ルートの処理に失敗しました" }
+                finally { routeLoading = false }
+            }
+        }
+    }
     val health = rememberReceiverHealth()
     val settings = remember { ReceiverSettings(context) }
     val legacy = remember(queueStore) { LegacyQueueView(queueStore) }
@@ -92,6 +122,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
                             scope.launch {
                                 val latest = inspectionStore.observeInspections().first()
                                 name = ""
+                                selectedRouteId = null
                                 operator = latest.firstOrNull()?.inspection?.operatorName.orEmpty()
                                 place = latest.firstOrNull()?.inspection?.place.orEmpty()
                                 placeholder = defaultInspectionName(ZonedDateTime.now(), latest.map { it.inspection.name })
@@ -99,17 +130,17 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
                                 stack = listOf(AppScreen.Home.encode(), AppScreen.Create.encode())
                             }
                         },
-                        onOpen = { open(it) }, onSettings = { showSettings = true }, onGuide = { showStatus = true }, onRoutes = null, onLegacy = { open(AppScreen.LegacyCapture) },
+                        onOpen = { open(it) }, onSettings = { showSettings = true }, onGuide = { showStatus = true }, onRoutes = { open(AppScreen.Routes) }, onLegacy = { open(AppScreen.LegacyCapture) },
                     )
                     AppScreen.Create -> InspectionCreateScreen(
-                        CreateUiState(name, placeholder, operator, place, emptyList(), null, error, starting),
-                        onNameChange = { name = it; error = null }, onOperatorChange = { operator = it; error = null }, onPlaceChange = { place = it; error = null }, onRouteSelect = {},
+                        CreateUiState(name, placeholder, operator, place, savedRoutes.map { RouteChoice(it.route.routeId, "${it.route.name}（${it.route.devices.size}機器）") }, selectedRouteId, error ?: routeError, starting),
+                        onNameChange = { name = it; error = null }, onOperatorChange = { operator = it; error = null }, onPlaceChange = { place = it; error = null }, onRouteSelect = { selectedRouteId = it },
                         onStart = {
                             if (!starting) {
                                 starting = true
                                 scope.launch {
                                     try {
-                                        val created = withContext(Dispatchers.IO) { inspectionStore.create(NewInspection(name, operator, place)) }
+                                        val created = withContext(Dispatchers.IO) { inspectionStore.create(NewInspection(name, operator, place, savedRoutes.firstOrNull { it.route.routeId == selectedRouteId }?.route)) }
                                         stack = listOf(AppScreen.Home.encode(), AppScreen.Capture(created.inspectionId).encode())
                                         error = null
                                     } catch (e: CancellationException) { throw e
@@ -190,10 +221,63 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
                         val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
                         if (inspection != null) InspectionSendStatusPlaceholder(inspection, photos.filter { it.inspectionId == inspection.inspectionId }, { selectedPhoto = it }, { home() })
                     }
+                    AppScreen.Routes -> RouteListScreen(
+                        buildRouteListUiState(savedRoutes, remoteRoutes, routeLoading, routeError, confirmRoute),
+                        onFetchList = { routeOperation {
+                            if (!settings.isConfigured()) error("PCに接続できません")
+                            val token = settings.getToken().orEmpty()
+                            val candidates = listOfNotNull(settings.getUrl())
+                            val reachable = pickReachableUrl(candidates) { HttpSender.health(it, token) }
+                            // /health の失敗でも /routes を読み、401・404の案内を区別する。
+                            remoteRoutes = RouteClient(reachable.url ?: candidates.first(), token).listRoutes().getOrThrow()
+                        } },
+                        onPick = { id -> routeOperation {
+                            if (!settings.isConfigured()) error("PCに接続できません")
+                            val token = settings.getToken().orEmpty()
+                            val candidates = listOfNotNull(settings.getUrl())
+                            val reachable = pickReachableUrl(candidates) { HttpSender.health(it, token) }
+                            confirmRoute = RouteClient(reachable.url ?: candidates.first(), token).fetchRoute(id).getOrThrow()
+                            routeSource = "wifi"
+                        } },
+                        onScanQr = { routeError = null; scanRoute = true },
+                        onDelete = { id -> routeOperation {
+                            savedRoutes = withContext(Dispatchers.IO) { repository.delete(id) }
+                            if (selectedRouteId == id) selectedRouteId = null
+                        } }, onBack = { back() },
+                    )
                     else -> Text("この画面は次の更新で入ります", Modifier.padding(16.dp))
                 }
             }
         }
+        if (scanRoute && screen == AppScreen.Routes) AlertDialog(
+            onDismissRequest = { scanRoute = false }, title = { Text("ルートのQRを読む") },
+            text = { Column {
+                QrScanPanel(onCodes = { codes ->
+                    if (codes.isNotEmpty()) {
+                        when (val result = parseRouteQr(codes.first())) {
+                            is RouteQrResult.Ok -> { confirmRoute = result.route; routeSource = "qr"; scanRoute = false; routeError = null }
+                            is RouteQrResult.Error -> routeError = result.message
+                        }
+                    }
+                }, onError = { routeError = it })
+                routeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } }, confirmButton = { TextButton(onClick = { scanRoute = false }) { Text("閉じる") } },
+        )
+        confirmRoute?.takeIf { screen == AppScreen.Routes }?.let { route -> AlertDialog(
+            onDismissRequest = { if (!routeLoading) confirmRoute = null },
+            title = { Text(route.name) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${route.devices.size}機器")
+                route.devices.take(5).forEach { Text("${it.name}（${it.id}）") }
+                if (savedRoutes.any { it.route.routeId == route.routeId }) Text("保存済みのルートを新しい内容で置き換えます。作成済みの点検には影響しません。")
+                routeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } },
+            confirmButton = { TextButton(enabled = !routeLoading, onClick = { routeOperation {
+                savedRoutes = withContext(Dispatchers.IO) { repository.save(route, routeSource, Instant.now()) }
+                confirmRoute = null
+            } }) { Text("保存する") } },
+            dismissButton = { TextButton(enabled = !routeLoading, onClick = { confirmRoute = null }) { Text("キャンセル") } },
+        ) }
         if (showSettings) ReceiverSettingsDialog(settings, { showSettings = false }, health::onSettingsChanged, { showPairing = true })
         deleteInspection?.let { inspection -> AlertDialog(
             onDismissRequest = { if (!busy) deleteInspection = null },
