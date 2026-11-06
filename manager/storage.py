@@ -58,6 +58,7 @@ class MeterReading:
     image_rel: Optional[str] = None
     inspection_id: Optional[str] = None
     inspection_name: Optional[str] = None
+    route_id: Optional[str] = None
 
 
 class Storage:
@@ -115,6 +116,7 @@ class Storage:
             ("image_rel", "TEXT"),
             ("inspection_id", "TEXT"),
             ("inspection_name", "TEXT"),
+            ("route_id", "TEXT"),
         )
         tables = {row[0] for row in cursor.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
@@ -131,6 +133,8 @@ class Storage:
         cursor.execute("BEGIN IMMEDIATE")
         try:
             repaired_count = self._create_schema(cursor, additional_columns)
+            from manager.routes import init_tables
+            init_tables(conn)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -287,8 +291,8 @@ class Storage:
                  reading_id, status, input_method, confidence, failure_stage, failure_code,
                  failure_detail, pipeline_version, log_path, overlay_path,
                  device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel,
-                 inspection_id, inspection_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 inspection_id, inspection_name, route_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     now_str, device_name, value, stage, image_path, raw_data_json, image_sha256,
@@ -300,7 +304,7 @@ class Storage:
                     read_result.get("device_id"), read_result.get("device_id_source"),
                     read_result.get("device_id_issue"), read_result.get("captured_at"),
                     read_result.get("received_at"), read_result.get("image_rel"),
-                    inspection_id, inspection_name,
+                    inspection_id, inspection_name, normalize_inspection(read_result.get("route_id"), None)[0],
                 ),
             )
             return cursor.lastrowid
@@ -353,7 +357,7 @@ class Storage:
                    reading_id, status, input_method, confidence, failure_stage, failure_code,
                    failure_detail, pipeline_version, log_path, overlay_path,
                    device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel,
-                   inspection_id, inspection_name
+                   inspection_id, inspection_name, route_id
             FROM meter_readings
             ORDER BY id DESC
             """
@@ -393,6 +397,7 @@ class Storage:
                     image_rel=row[23],
                     inspection_id=row[24],
                     inspection_name=row[25],
+                    route_id=row[26],
                 )
             )
         return results

@@ -192,7 +192,7 @@ class TestSidecarDeviceMetadata(unittest.TestCase):
             "local_id": None, "captured_at": None, "device_name": None,
             "operator_value": None, "operator_note": None, "scale_min": None,
             "scale_max": None, "device_id": None, "device_id_source": None,
-            "device_id_issue": None, "inspection_id": None, "inspection_name": None,
+            "device_id_issue": None, "inspection_id": None, "inspection_name": None, "route_id": None,
         })
         metadata = self.load_metadata({"device_id": "P-101", "device_id_source": "manual"})
         self.assertEqual(metadata.to_dict()["device_id"], "P-101")

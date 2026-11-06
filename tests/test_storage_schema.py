@@ -76,7 +76,7 @@ class TestStorageSchema(unittest.TestCase):
                 self.assertEqual(columns[column][2:5], ("TEXT", 0, None))
             rows = conn.execute("SELECT * FROM meter_readings").fetchall()
             self.assertEqual([row[:18] for row in rows], old_rows)
-            self.assertEqual(rows[0][18:], (None,) * 8)
+            self.assertEqual(rows[0][18:], (None,) * 9)
             devices = {row[1]: row for row in conn.execute("PRAGMA table_info(devices)")}
             self.assertEqual(set(devices), {
                 "device_id", "device_name", "unit", "min_value", "max_value",
@@ -137,7 +137,7 @@ class TestStorageSchema(unittest.TestCase):
             storage = Storage(":memory:")
         self.addCleanup(storage._conn.close)
         mkdir.assert_not_called()
-        self.assertEqual(len(storage._conn.execute("PRAGMA table_info(meter_readings)").fetchall()), 26)
+        self.assertEqual(len(storage._conn.execute("PRAGMA table_info(meter_readings)").fetchall()), 27)
 
     def test_backup_from_different_schema_is_not_reused(self):
         self.make_old_db()

@@ -121,7 +121,7 @@ class InspectionFilterTest(unittest.TestCase):
             export_to_jsonl(selected, json_path)
             with csv_path.open(encoding='utf-8-sig', newline='') as stream:
                 reader = csv.DictReader(stream)
-                self.assertEqual(reader.fieldnames[-2:], ['inspection_id', 'inspection_name'])
+                self.assertEqual(reader.fieldnames[-3:], ['inspection_id', 'inspection_name', 'route_id'])
                 csv_rows = list(reader)
             json_rows = [json.loads(line) for line in json_path.read_text(encoding='utf-8').splitlines()]
             self.assertEqual(len(csv_rows), len(selected))

@@ -184,7 +184,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab1, tab2, tab3 = st.tabs(["読み取り", "記録", "点検結果"])
+tab1, tab2, tab3, tab4 = st.tabs(["読み取り", "記録", "点検結果", "点検ルート"])
 
 with tab1:
     st.header("画像から読み取る")
@@ -271,6 +271,10 @@ with tab2:
     inspections = inspection_options(history)
     inspection_labels = {None: "すべて", "": "点検なし(旧データ)"}
     inspection_labels.update({key: f"{name}（{count}件）" for key, name, count in inspections})
+    from manager.routes import get_manifest, get_route, inspection_status, route_progress, arrived_manifest_devices
+    with manager.storage.connection() as conn:
+        for inspection_id, inspection_name in conn.execute('SELECT inspection_id, inspection_name FROM inspections ORDER BY started_at DESC'):
+            inspection_labels.setdefault(inspection_id, f"{inspection_name or inspection_id}（写真の受信待ち）")
     selected_inspection = st.selectbox("点検（巡回）", options=list(inspection_labels),
                                      format_func=inspection_labels.get)
 
@@ -284,6 +288,19 @@ with tab2:
     st.caption(f"絞り込み結果 {len(filtered_history)}件 / 全{len(history)}件")
     if selected_inspection:
         inspection_rows = filter_readings(history, inspection_id=selected_inspection)
+        from manager.receiver import get_default_incoming_dir
+        incoming_dir = getattr(_receiver_info.get('server'), 'incoming_dir', get_default_incoming_dir())
+        status = inspection_status(manager.storage, selected_inspection, incoming_dir)
+        st.subheader(f"点検の受信状態: {status['state']}")
+        if status['missing_photos']:
+            st.warning(f"{len(status['missing_photos'])}枚未着: " + '、'.join(status['missing_photos']))
+        manifest = get_manifest(manager.storage, selected_inspection)
+        route_id = (manifest or {}).get('route_id') or next((r.route_id for r in inspection_rows if r.route_id), None)
+        route = get_route(manager.storage, route_id) if route_id else None
+        if route:
+            st.subheader('ルートの撮影状況（実際に届いた写真を優先）')
+            arrived = arrived_manifest_devices(manager.storage, manifest, inspection_rows, incoming_dir)
+            st.dataframe(pd.DataFrame(route_progress(route, [*inspection_rows, *arrived], manifest)), use_container_width=True, hide_index=True)
         devices_table = inspection_devices(inspection_rows)
         st.subheader("この点検のメーター一覧")
         st.caption("選択した点検全体の一覧（機器名・日付の絞り込み前）")
@@ -425,3 +442,7 @@ with tab3:
             if _paths:
                 st.success("保存しました:\n\n" + "\n\n".join(_paths.values()))
 
+
+with tab4:
+    from manager.routes_ui import render_routes
+    render_routes(manager.storage)
