@@ -12,6 +12,26 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class RoomInspectionStoreTest {
+    @Test fun createCopiesRouteSnapshot() = runTest {
+        val route = requireNotNull(jp.sotuken.metercapture.route.parseRouteJson(jp.sotuken.metercapture.route.PC_ROUTE_JSON))
+        val inspection = store.create(NewInspection("点検", "", "", route), now)
+        assertEquals(route.routeId, inspection.routeId)
+        assertEquals(route.name, inspection.routeName)
+        assertEquals(route, jp.sotuken.metercapture.route.parseRouteJson(requireNotNull(inspection.routeSnapshot)))
+        val id = store.addPhoto(inspection.inspectionId, temp.newFile("route.jpg"), CaptureMeta("計器", null, null))
+        assertEquals(route.routeId, queue.findById(id)?.routeId)
+    }
+    @Test fun laterRouteUpdateDoesNotChangeInspection() = runTest {
+        val file = File(temp.root, "routes.json")
+        val repository = jp.sotuken.metercapture.route.RouteRepository(file)
+        val route = requireNotNull(jp.sotuken.metercapture.route.parseRouteJson(jp.sotuken.metercapture.route.PC_ROUTE_JSON))
+        repository.save(route, "qr", now)
+        val inspection = store.create(NewInspection("点検", "", "", repository.load().single().route), now)
+        repository.save(route.copy(name = "更新"), "wifi", now.plusSeconds(1))
+        repository.delete(route.routeId)
+        assertEquals(inspection.routeSnapshot, dao.findById(inspection.inspectionId)?.routeSnapshot)
+        assertEquals(route.name, dao.findById(inspection.inspectionId)?.routeName)
+    }
     @get:Rule val temp = TemporaryFolder()
     private val queue = FakeQueueDao()
     private val dao = FakeInspectionDao(queue)
