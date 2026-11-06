@@ -33,6 +33,8 @@ def save_route(storage, name, devices, route_id=None):
     for device in devices:
         validate_device_id(device['id'])
         checked.append(dict(id=device['id'], name=validate_device_name(device['name'])))
+    if not 1 <= len(checked) <= 200:
+        raise ValueError('ルートの機器は1〜200件で登録してください（0件では保存できません）')
     if len({d['id'] for d in checked}) != len(checked):
         raise ValueError('同じ機器IDを複数登録できません')
     with storage.connection() as conn:
@@ -77,7 +79,7 @@ def validate_manifest(inspection_id, data):
     if data.get('route_id') is not None:
         validate_id(data['route_id'])
     for key in ('operator', 'place'):
-        if not isinstance(data.get(key), str) or len(data[key]) > 256 or any(ord(c) < 32 for c in data[key]):
+        if key not in data or (data[key] is not None and (not isinstance(data[key], str) or len(data[key]) > 256 or any(ord(c) < 32 for c in data[key]))):
             raise ValueError(key + 'が不正です')
     for key in ('started_at', 'completed_at'):
         if normalize_captured_at(data.get(key)) is None:
@@ -97,7 +99,7 @@ def validate_manifest(inspection_id, data):
         if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,255}', name) or name in ('.', '..') or name in names:
             raise ValueError('写真名が不正または重複しています')
         names.add(name)
-        if not isinstance(photo.get('sha256'), str) or not re.fullmatch('[0-9a-fA-F]{64}', photo['sha256']):
+        if 'sha256' not in photo or (photo['sha256'] is not None and (not isinstance(photo['sha256'], str) or not re.fullmatch('[0-9a-fA-F]{64}', photo['sha256']))):
             raise ValueError('sha256が不正です')
         if photo.get('device_id') is not None:
             validate_device_id(photo['device_id'])
@@ -152,7 +154,7 @@ def inspection_status(storage, inspection_id, incoming_dir=None):
     if manifest is None:
         return dict(state='受信中', matched=0, missing_photos=[])
     hashes = received_hashes(storage, incoming_dir)
-    missing = [p['file_name'] for p in manifest['photos'] if p['sha256'].lower() not in hashes]
+    missing = [p['file_name'] for p in manifest['photos'] if p.get('sha256') is None or p['sha256'].lower() not in hashes]
     return dict(state='不足あり' if missing else '完了', matched=len(manifest['photos']) - len(missing), missing_photos=missing)
 
 
@@ -161,7 +163,7 @@ def arrived_manifest_devices(storage, manifest, readings, incoming_dir=None):
     hashes = received_hashes(storage, incoming_dir)
     recorded = {r.image_sha256.lower() for r in readings if r.image_sha256}
     return [dict(device_id=p.get('device_id')) for p in (manifest or {}).get('photos', [])
-            if p['sha256'].lower() in hashes and p['sha256'].lower() not in recorded]
+            if p.get('sha256') is not None and p['sha256'].lower() in hashes and p['sha256'].lower() not in recorded]
 
 
 def route_progress(route, readings, manifest=None):

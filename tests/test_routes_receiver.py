@@ -60,6 +60,15 @@ class RoutesReceiverTest(unittest.TestCase):
         self.assertEqual(self.request('POST', path, json.dumps(manifest).encode())[1]['matched'], 0)
         self.assertEqual(get_manifest(self.storage, 'I-1')['photos'], [])
 
+    def test_manifest_nulls_over_http(self):
+        manifest = dict(fixtures.RoutesManifestTest.manifest(self),
+                        operator=None, place=None, route_id=None)
+        manifest['photos'][0]['sha256'] = None
+        self.assertEqual(self.request('POST', '/inspections/I-1/manifest',
+                                      json.dumps(manifest).encode()),
+                         (200, dict(ok=True, matched=0, missing_photos=['a.jpg'])))
+        self.assertEqual(get_manifest(self.storage, 'I-1'), manifest)
+
     def test_manifest_size_and_deadline(self):
         path = '/inspections/I-1/manifest'
         self.assertEqual(self.request('POST', path, b'', headers={'Content-Length': str(MAX_BODY_SIZE + 1)})[0], 413)

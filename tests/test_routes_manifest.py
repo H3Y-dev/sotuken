@@ -7,7 +7,7 @@ from unittest.mock import patch
 from manager.storage import Storage
 from manager.routes import (save_route, get_route, list_routes, delete_route,
                             route_qr_payload, save_manifest, inspection_status,
-                            route_progress)
+                            route_progress, get_manifest, arrived_manifest_devices)
 
 
 class RoutesManifestTest(unittest.TestCase):
@@ -52,6 +52,51 @@ class RoutesManifestTest(unittest.TestCase):
         for field, value in [('v', True), ('inspection_id', 'other'), ('photos', [{}]), ('missing', [12])]:
             with self.subTest(field=field), self.assertRaises(ValueError):
                 save_manifest(self.storage, 'I-1', dict(self.manifest(), **{field: value}))
+
+    def test_manifest_nulls_are_saved_and_photo_stays_missing(self):
+        manifest = dict(self.manifest(), operator=None, place=None, route_id=None)
+        manifest['photos'][0].update(sha256=None, device_id=None, device_id_source=None)
+        self.storage.save_reading('a.jpg', '計器', {}, image_sha256='a' * 64)
+        self.assertEqual(save_manifest(self.storage, 'I-1', manifest),
+                         dict(ok=True, matched=0, missing_photos=['a.jpg']))
+        self.assertEqual(get_manifest(self.storage, 'I-1'), manifest)
+        with self.storage.connection() as conn:
+            row = conn.execute('SELECT operator, place, route_id FROM inspections').fetchone()
+        self.assertEqual(tuple(row), (None, None, None))
+        self.assertEqual(inspection_status(self.storage, 'I-1'),
+                         dict(state='不足あり', matched=0, missing_photos=['a.jpg']))
+        self.assertEqual(arrived_manifest_devices(self.storage, manifest, []), [])
+
+    def test_route_device_count_limits(self):
+        devices = [dict(id=f'D-{i}', name='計器') for i in range(201)]
+        for count in (1, 200):
+            with self.subTest(count=count):
+                route = save_route(self.storage, '巡回', devices[:count], 'R-limit')
+                self.assertEqual(len(route['devices']), count)
+                self.assertEqual(list_routes(self.storage)['routes'][0]['count'], count)
+        for count in (0, 201):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                save_route(self.storage, '巡回', devices[:count], 'R-limit')
+        self.assertEqual(len(get_route(self.storage, 'R-limit')['devices']), 200)
+
+    def test_nullable_fields_still_reject_invalid_values_and_missing_keys(self):
+        for field in ('operator', 'place'):
+            for value in (123, 'x' * 257, 'bad\nvalue'):
+                with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                    save_manifest(self.storage, 'I-1', dict(self.manifest(), **{field: value}))
+            manifest = self.manifest()
+            del manifest[field]
+            with self.subTest(missing=field), self.assertRaises(ValueError):
+                save_manifest(self.storage, 'I-1', manifest)
+        for value in (123, '', 'a' * 63, 'g' * 64):
+            manifest = self.manifest()
+            manifest['photos'][0]['sha256'] = value
+            with self.subTest(sha256=value), self.assertRaises(ValueError):
+                save_manifest(self.storage, 'I-1', manifest)
+        manifest = self.manifest()
+        del manifest['photos'][0]['sha256']
+        with self.assertRaises(ValueError):
+            save_manifest(self.storage, 'I-1', manifest)
 
     def test_progress_uses_photos_over_claims(self):
         route = dict(devices=[dict(id='A', name='A計'), dict(id='B', name='B計')])
