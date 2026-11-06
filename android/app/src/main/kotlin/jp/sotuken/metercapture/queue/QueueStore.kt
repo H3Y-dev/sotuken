@@ -90,6 +90,8 @@ class RoomQueueStore(
                 sentAt = null,
                 sentVia = null,
                 receiverId = receiverIdProvider()?.takeIf { it.isNotBlank() },
+                deviceId = meta.deviceId,
+                deviceIdSource = meta.deviceIdSource,
             ),
         )
         return localId
