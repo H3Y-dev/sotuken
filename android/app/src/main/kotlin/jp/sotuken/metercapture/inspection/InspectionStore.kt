@@ -22,6 +22,7 @@ interface InspectionStore {
     suspend fun complete(inspectionId: String, now: Instant = Instant.now()): InspectionSummary
     suspend fun deletePhoto(inspectionId: String, localId: String): DeleteResult
     suspend fun delete(inspectionId: String): Boolean
+    suspend fun retryUndelivered(inspectionId: String)
 }
 
 class RoomInspectionStore(
@@ -82,6 +83,21 @@ class RoomInspectionStore(
         }
         inspectionDao.delete(inspection)
         true
+    }
+
+    override suspend fun retryUndelivered(inspectionId: String) = mutationMutex.withLock {
+        queueSendMutex.withLock {
+            runInTransaction {
+                val inspection = checkNotNull(inspectionDao.findById(inspectionId))
+                val next = nextInspectionState(inspection.state, InspectionEvent.RetryUndelivered)
+                val missing = parseMissingFileNames(inspection.pcMissingFileNames).toSet()
+                for (photo in inspectionDao.findPhotos(inspectionId)) {
+                    if (photo.sendState == SendState.FAILED) queueStore.retry(photo.localId)
+                    else if (photo.sendState == SendState.SENT && jp.sotuken.metercapture.queue.sender.SenderPayloads.buildImageFileName(photo) in missing) inspectionDao.requeueSent(photo.localId)
+                }
+                inspectionDao.update(inspection.copy(state = next, manifestError = null))
+            }
+        }
     }
 
     private suspend fun requireInProgress(id: String): Inspection = checkNotNull(inspectionDao.findById(id)).also {

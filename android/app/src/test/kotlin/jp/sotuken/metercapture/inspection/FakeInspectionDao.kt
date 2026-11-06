@@ -16,6 +16,10 @@ class FakeInspectionDao(private val queue: FakeQueueDao) : InspectionDao {
     override suspend fun resetState(from: InspectionState, to: InspectionState) { items.value = items.value.map { if (it.state == from) it.copy(state = to) else it } }
     override fun observePhotos(id: String) = queue.observeAll().map { all -> all.filter { it.inspectionId == id }.sortedBy { it.capturedAt } }
     override suspend fun findPhotos(id: String) = observePhotos(id).first()
+    override suspend fun requeueSent(localId: String) {
+        val photo = queue.findById(localId) ?: return
+        if (photo.sendState == SendState.SENT) queue.update(photo.copy(sendState = SendState.PENDING, sentAt = null, sentVia = null, lastError = null))
+    }
     override fun observePhotoCounts() = queue.observeAll().map { all -> all.filter { it.inspectionId != null }.groupBy { it.inspectionId!! }.map { (id, photos) ->
         InspectionPhotoCount(id, photos.size, photos.mapNotNull { it.deviceId ?: it.deviceName?.trim()?.takeIf { name -> name.isNotEmpty() }?.let { name -> "name:$name" } }.distinct().size, photos.count { it.sendState == SendState.SENT && it.sentVia == QueueItem.VIA_HTTP })
     } }

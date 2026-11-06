@@ -4,7 +4,10 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.io.File
-import jp.sotuken.metercapture.inspection.isPhotoSendable
+import jp.sotuken.metercapture.inspection.InspectionSendCoordinator
+import jp.sotuken.metercapture.queue.sender.SenderPayloads
+import jp.sotuken.metercapture.settings.pickReachableUrl
+import java.time.Instant
 import jp.sotuken.metercapture.queue.sender.HttpSender
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.Dispatchers
@@ -42,24 +45,22 @@ class QueueSendWorker(
             "outbox",
         )
 
-        val httpSenderProvider = {
-            if (settings.isConfigured()) {
-                val url = settings.url!!
-                val token = settings.token!!
-                HttpSender(url, token)
-            } else {
-                null
-            }
+        val reach = pickReachableUrl(if (settings.isConfigured()) settings.candidateUrls else emptyList()) {
+            HttpSender.health(it, settings.token!!)
         }
-
+        val sender = reach.url?.let { HttpSender(it, settings.token!!) }
+        val coordinator = InspectionSendCoordinator(
+            inspectionDao,
+            manifestPoster = sender?.let { http -> { id, json -> http.postManifest(id, json) } },
+            sha256Of = { item -> runCatching { SenderPayloads.computeSha256Hex(File(item.imagePath)) }.getOrNull() },
+            now = { Instant.now() },
+        )
+        coordinator.beforeRoute(reachable = sender != null)
+        val httpSenderProvider = { sender }
         val healthChecker: suspend () -> kotlin.Result<Unit> = {
-            if (settings.isConfigured()) {
-                HttpSender.health(settings.url!!, settings.token!!)
-            } else {
-                kotlin.Result.failure(IllegalStateException("送信先未設定"))
-            }
+            if (sender != null) kotlin.Result.success(Unit)
+            else kotlin.Result.failure(reach.error ?: IllegalStateException("送信先未設定"))
         }
-
         val router = SendRouter(
             queueDao = queueDao,
             queueStore = queueStore,
@@ -67,12 +68,11 @@ class QueueSendWorker(
             httpSenderProvider = httpSenderProvider,
             healthChecker = healthChecker,
             currentReceiverId = settings.receiverId,
-            isSendable = { item ->
-                isPhotoSendable(item, item.inspectionId?.let { inspectionDao.findById(it)?.state })
-            },
+            isSendable = coordinator::isSendable,
         )
 
         router.route()
+        coordinator.afterRoute(currentReceiverId = settings.receiverId)
         return Result.success()
     }
 

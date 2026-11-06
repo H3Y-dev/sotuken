@@ -12,6 +12,28 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class RoomInspectionStoreTest {
+    @Test fun retryUndeliveredRequeuesFailedAndPcMissing() = runTest {
+        val item = store.create(NewInspection("点検", "", ""), now)
+        val failed = store.addPhoto(item.inspectionId, temp.newFile("failed.jpg"), CaptureMeta(null, null, null))
+        val missing = store.addPhoto(item.inspectionId, temp.newFile("missing.jpg"), CaptureMeta(null, null, null))
+        val delivered = store.addPhoto(item.inspectionId, temp.newFile("delivered.jpg"), CaptureMeta(null, null, null))
+        queue.update(queue.findById(failed)!!.copy(sendState = SendState.FAILED))
+        for (id in listOf(missing, delivered)) queue.update(queue.findById(id)!!.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_HTTP, sentAt = now.toString()))
+        val fileName = jp.sotuken.metercapture.queue.sender.SenderPayloads.buildImageFileName(queue.findById(missing)!!)
+        dao.update(item.copy(state = InspectionState.SENT_INCOMPLETE, pcMissingFileNames = "[\"$fileName\"]", manifestError = "old"))
+        store.retryUndelivered(item.inspectionId)
+        assertEquals(SendState.PENDING, queue.findById(failed)!!.sendState)
+        assertEquals(SendState.PENDING, queue.findById(missing)!!.sendState)
+        assertNull(queue.findById(missing)!!.sentAt); assertNull(queue.findById(missing)!!.sentVia)
+        assertEquals(SendState.SENT, queue.findById(delivered)!!.sendState)
+        assertEquals(InspectionState.WAITING, dao.findById(item.inspectionId)!!.state)
+        assertNull(dao.findById(item.inspectionId)!!.manifestError)
+    }
+    @Test fun retryUndeliveredFromSentThrows() = runTest {
+        val item = store.create(NewInspection("点検", "", ""), now)
+        dao.update(item.copy(state = InspectionState.SENT))
+        assertTrue(runCatching { store.retryUndelivered(item.inspectionId) }.exceptionOrNull() is IllegalStateException)
+    }
     @Test fun createCopiesRouteSnapshot() = runTest {
         val route = requireNotNull(jp.sotuken.metercapture.route.parseRouteJson(jp.sotuken.metercapture.route.PC_ROUTE_JSON))
         val inspection = store.create(NewInspection("点検", "", "", route), now)

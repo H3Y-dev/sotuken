@@ -9,6 +9,31 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ReceiverSettingsTest {
+    @Test fun sendTargetListsPrimaryThenCandidates() {
+        val values = mutableMapOf<String, Any>(ReceiverSettings.KEY_URL to "http://10.0.0.1:8765", ReceiverSettings.KEY_TOKEN to "token",
+            ReceiverSettings.KEY_ALT_URLS to "[\"http://192.168.1.2:8765\",\"http://10.0.0.1:8765\",\"http://8.8.8.8:80\"]")
+        val prefs = Proxy.newProxyInstance(SharedPreferences::class.java.classLoader, arrayOf(SharedPreferences::class.java)) { _, method, _ ->
+            check(method.name == "getAll"); values.toMap()
+        } as SharedPreferences
+        assertEquals(listOf("http://10.0.0.1:8765", "http://192.168.1.2:8765"), ReceiverSettings(prefs).sendTarget().candidateUrls)
+    }
+    @Test fun manualSaveClearsCandidates() {
+        val values = mutableMapOf(ReceiverSettings.KEY_ALT_URLS to "[\"http://10.0.0.1:8765\"]")
+        lateinit var editor: SharedPreferences.Editor
+        editor = Proxy.newProxyInstance(SharedPreferences.Editor::class.java.classLoader, arrayOf(SharedPreferences.Editor::class.java)) { _, method, args ->
+            when (method.name) {
+                "putString" -> { values[args!![0] as String] = args[1] as String; editor }
+                "remove" -> { values.remove(args!![0]); editor }
+                "apply" -> null
+                else -> error(method.name)
+            }
+        } as SharedPreferences.Editor
+        val prefs = Proxy.newProxyInstance(SharedPreferences::class.java.classLoader, arrayOf(SharedPreferences::class.java)) { _, method, _ ->
+            check(method.name == "edit"); editor
+        } as SharedPreferences
+        ReceiverSettings(prefs).save("http://192.168.0.2:8765", "token")
+        assertFalse(values.containsKey(ReceiverSettings.KEY_ALT_URLS))
+    }
 
     @Test
     fun sendTargetKeepsUrlTokenAndIdFromOneSettingsSnapshot() {

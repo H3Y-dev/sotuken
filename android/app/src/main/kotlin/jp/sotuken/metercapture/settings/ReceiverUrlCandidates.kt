@@ -2,6 +2,9 @@ package jp.sotuken.metercapture.settings
 
 import kotlinx.coroutines.CancellationException
 
+fun mergeCandidateUrls(currentUrl: String?, currentAlts: List<String>, newUrl: String, sameReceiver: Boolean): List<String> =
+    if (!sameReceiver) emptyList() else (listOfNotNull(currentUrl) + currentAlts).filter { it != newUrl }.distinct().take(3)
+
 data class Reachability(val url: String?, val error: Throwable?)
 
 suspend fun pickReachableUrl(candidates: List<String>, health: suspend (String) -> Result<Unit>): Reachability {

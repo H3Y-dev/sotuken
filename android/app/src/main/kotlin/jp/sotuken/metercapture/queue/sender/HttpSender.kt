@@ -6,6 +6,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.inspection.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -63,7 +64,7 @@ class HttpSender(
                 } else {
                     val errorBody = readResponseText(connection)
                     val message = "Upload failed with HTTP $responseCode: $errorBody"
-                    throw if (responseCode == 400 || responseCode == 413) {
+                    throw if (responseCode == 400 || responseCode == 409 || responseCode == 413) {
                         PermanentSendException(message)
                     } else {
                         TemporarySendException(message)
@@ -72,6 +73,45 @@ class HttpSender(
             } finally {
                 connection.disconnect()
             }
+        }
+    }
+
+    suspend fun postManifest(inspectionId: String, json: String): Result<ManifestReply> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!INSPECTION_ID_PATTERN.matches(inspectionId)) throw PermanentSendException("点検IDが正しくありません")
+            val bytes = json.toByteArray(Charsets.UTF_8)
+            val connection = (buildUrl(baseUrl, "/inspections/$inspectionId/manifest").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = connectTimeoutMs
+                readTimeout = readTimeoutMs
+                doOutput = true
+                instanceFollowRedirects = false
+                setRequestProperty("X-Sotuken-Token", token)
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setFixedLengthStreamingMode(bytes.size)
+            }
+            try {
+                connection.outputStream.use { it.write(bytes) }
+                when (val code = connection.responseCode) {
+                    200 -> {
+                        val body = connection.inputStream.use { input ->
+                            val output = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                if (output.size() + count > 65_536) throw TemporarySendException("写真の一覧の応答が大きすぎます")
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        }
+                        parseManifestReply(body.toString(Charsets.UTF_8)) ?: throw TemporarySendException("写真の一覧の応答が正しくありません")
+                    }
+                    400, 409, 413 -> throw PermanentSendException("Manifest failed with HTTP $code")
+                    404 -> throw TemporarySendException("PCが点検の一覧の受信に未対応です。PCのアプリを更新してください")
+                    else -> throw TemporarySendException("Manifest failed with HTTP $code")
+                }
+            } finally { connection.disconnect() }
         }
     }
 
