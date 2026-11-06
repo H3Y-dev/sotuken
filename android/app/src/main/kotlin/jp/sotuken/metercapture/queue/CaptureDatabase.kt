@@ -9,7 +9,7 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [QueueItem::class], version = 2, exportSchema = false)
+@Database(entities = [QueueItem::class], version = 4, exportSchema = false)
 @TypeConverters(SendStateConverter::class)
 abstract class CaptureDatabase : RoomDatabase() {
     abstract fun queueItemDao(): QueueDao
@@ -21,9 +21,22 @@ abstract class CaptureDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE queue_items ADD COLUMN receiverId TEXT")
+            }
+        }
+
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE queue_items ADD COLUMN deviceId TEXT")
+                db.execSQL("ALTER TABLE queue_items ADD COLUMN deviceIdSource TEXT")
+            }
+        }
+
         fun create(context: Context): CaptureDatabase =
             Room.databaseBuilder(context, CaptureDatabase::class.java, "meter-capture.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

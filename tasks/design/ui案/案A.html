@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>案A｜点検フロー画面案</title>
+<style>
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#e9edee;color:#18252b;font-family:"Yu Gothic UI",Meiryo,sans-serif;line-height:1.55}a{color:inherit;text-underline-offset:4px}button,input{font:inherit}button,a,input{touch-action:manipulation}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #005fcc;outline-offset:4px}main{max-width:820px;margin:auto;padding:40px 24px 80px}.intro{border-top:8px solid var(--accent);padding-top:20px;margin-bottom:40px}.intro h1{font-size:32px;line-height:1.25;margin:0 0 20px}.intro p{margin:9px 0}.intro nav{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:24px}.spec{margin:0 0 50px}.caption{max-width:390px;margin:0 auto 12px}.caption h2{font-size:18px;margin:0 0 4px}.caption p{font-size:14px;margin:0;color:#46555c}.phone{width:100%;max-width:390px;min-height:760px;margin:auto;background:var(--surface);border:1px solid #9aa9af;border-radius:28px;overflow:clip;box-shadow:0 8px 24px #18252b12}.system{padding:14px 22px 10px;display:flex;justify-content:space-between;font-size:12px;font-weight:700}.top{padding:12px 20px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}.top strong{font-size:24px;line-height:1.3}.top a{font-size:14px}.connection{position:sticky;top:0;z-index:2;margin:0 16px;padding:10px 12px;background:var(--tint);border-left:4px solid var(--accent);font-size:14px;font-weight:700;line-height:1.45}.connection small{display:block;font-size:12px;font-weight:400}.connection.off{background:#fff0d3;border-color:#815600;color:#513800}.body{padding:22px 20px}.body h2{font-size:24px;line-height:1.35;margin:0 0 10px}.body h3{font-size:17px;margin:22px 0 10px}.body p{margin:8px 0 16px}.muted,.meta{color:#48565e;font-size:14px}.eyebrow{font-size:13px;font-weight:700;color:#48565e;letter-spacing:.03em;margin-bottom:8px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.row>div{min-width:0}.card strong{display:block;font-size:17px}.badge{display:inline-block;white-space:nowrap;font-size:12px;line-height:1.4;padding:5px 9px;border:1px solid #87979c;border-radius:6px;background:#f2f5f5;font-weight:700}.good{color:#185331;background:#e8f4ec;border-color:#7c9d86}.warn{color:#674300;background:#fff1ce;border-color:#b88b30}.bad{color:#8c2124;background:#ffeded;border-color:#bb7376}.action{display:flex;width:100%;align-items:center;justify-content:center;min-height:54px;border-radius:12px;padding:13px 14px;background:var(--accent);border:2px solid var(--accent);color:white;font-weight:700;text-decoration:none;margin-top:14px;text-align:center;cursor:pointer}.secondary{color:var(--accent);background:transparent}.quiet{background:transparent;color:#263c48;border-color:#89999f}.danger{color:#8c2124;background:#fff;border-color:#b96d6d}.actions{display:flex;gap:10px}.actions .action{flex:1;font-size:14px;min-width:0}.field{display:block;margin:18px 0;font-size:14px;font-weight:700}.field input{display:block;width:100%;min-height:54px;margin:7px 0 0;padding:12px;border:1px solid #73868f;background:white;color:#18252b;border-radius:8px}.field small{display:block;font-weight:400;color:#48565e;margin-top:5px}.preview{height:220px;display:flex;align-items:center;justify-content:center;background:#d5d9db;color:#40494e;border:1px solid #8c969b;border-radius:10px;position:relative;margin:16px 0;text-align:center}.preview:before{content:"";position:absolute;inset:24px;border:2px solid #707c82;border-radius:5px}.preview span{background:#d5d9db;padding:8px;z-index:1;font-size:14px}.thumb{width:76px;height:86px;background:#d5d9db;border:1px solid #8c969b;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#40494e;border-radius:6px}.photo{display:flex;align-items:center;gap:12px}.photo strong{font-size:16px}.photo .meta{font-size:13px;line-height:1.7}.notice{background:#fff1ce;color:#513800;border-left:4px solid #8b6200;padding:12px;margin:16px 0;font-size:14px}.note{border-left:3px solid var(--accent);padding:0 0 0 12px;font-size:14px}.count{font-size:44px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}.count small{font-size:16px;font-weight:500}.stats{display:flex;justify-content:space-between;gap:12px;margin:22px 0}.stats>div{flex:1}.stats .meta{display:block;margin-top:8px}progress{appearance:none;width:100%;height:12px;display:block;margin:14px 0;border:0;border-radius:6px;background:#d8e0e1;overflow:hidden}progress::-webkit-progress-bar{background:#d8e0e1}progress::-webkit-progress-value{background:var(--accent)}progress::-moz-progress-bar{background:var(--accent)}.tabs{display:flex;border-bottom:1px solid var(--line);margin:0 0 18px}.tabs a{flex:1;text-align:center;padding:10px 3px;text-decoration:none;font-size:14px}.tabs .active{border-bottom:3px solid var(--accent);font-weight:700;color:var(--accent)}.bottom{display:flex;justify-content:space-around;border-top:1px solid var(--line);padding:16px 10px;margin-top:20px;background:var(--card);font-size:14px}.bottom a{text-decoration:none}.bottom .selected{font-weight:700;color:var(--accent)}.check{border-bottom:1px solid var(--line);padding:14px 0}.check strong{font-size:16px}.tick{font-size:21px;font-weight:800;color:var(--accent);margin-right:8px}.steps{padding-left:24px}.steps li{margin:18px 0;padding-left:3px}.success{border-top:5px solid #25613d}.device-id{font-family:Consolas,monospace;font-size:15px;font-weight:700}.review-note{margin:20px 0 0;font-size:13px;color:#48565e;border-top:1px dashed #94a3aa;padding-top:12px}.a{--accent:#185342;--tint:#e1eee7;--surface:#fcfdf8;--card:#fff;--line:#b5c3ba}.a .action{min-height:68px;font-size:18px;border-radius:8px}.a .top strong{font-size:26px}.a .body h2{font-size:27px}.a .card{border-radius:8px}.a .actions .action{min-height:58px;font-size:16px}.a .camera-action{min-height:88px;font-size:25px}.a .count{font-size:52px}.b{--accent:#174a73;--tint:#e4eef7;--surface:#fff;--card:#f7fafc;--line:#b9c8d3}.b .top{border-top:4px solid #174a73}.b .card{border-radius:6px}.b .check.current{border-left:4px solid #174a73;background:#e4eef7;padding-left:12px}.b .count{font-family:Consolas,monospace}.c{--accent:#3d5c91;--tint:#e8edf9;--surface:#fbf9ff;--card:#f0eef5;--line:#c5c4cf}.c .action{border-radius:28px;min-height:50px}.c .card{border:0;border-radius:18px}.c .connection{border-radius:10px;border-left:0}.c .badge{border-radius:8px}.c .top strong{font-size:22px}.c .count{font-size:36px}@media(max-width:460px){main{padding:24px 10px 60px}.intro{margin:0 8px 32px}.intro h1{font-size:27px}.caption{padding:0 8px}.phone{border-radius:20px}.body{padding:20px 18px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:white}.intro nav{display:none}.phone{box-shadow:none}.spec{break-inside:avoid}.intro{break-after:page}}
+</style>
+</head>
+<body class="a">
+<main>
+<header class="intro">
+<div class="eyebrow">Android メーター読み取り ／ 点検フロー</div>
+<h1>案A　手袋でも、次の操作に迷わない。</h1>
+<p>狙い：大きなボタンと、1画面1つの主操作。</p>
+<p>長所：片手で進めやすい。短所：一覧の見渡しにはスクロールが増える。</p>
+<p>実装の重さ：中。撮影と確認を分ける画面構成を追加。</p>
+<p class="review-note">画面比較用の静的モックです。ボタンは関連する画面例へ移動します。撮影・保存・送信は動作しません。表示値は架空のサンプルです。</p>
+<nav aria-label="画面例">
+<a href="#home">一覧</a>
+<a href="#create">作成</a>
+<a href="#capture">撮影</a>
+<a href="#history">履歴</a>
+<a href="#confirm">完了</a>
+<a href="#sending">送信</a>
+<a href="#offline">接続なし</a>
+<a href="README.md">3案の比較</a>
+</nav>
+</header>
+<section class="spec" id="home">
+<div class="caption">
+<h2>01　点検の一覧</h2>
+<p>接続の種類とPCへの到達状況を全画面に表示。</p>
+</div>
+<article class="phone" aria-label="点検">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>点検</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<div class="eyebrow">11月6日 ／ 工場内の巡回点検</div>
+<h2>今日の点検</h2>
+<a class="action " href="#create">新しい点検を作る</a>
+<h3>作業中</h3>
+<div class="card">
+<span class="badge">作業中</span>
+<strong>11/06 朝の点検</strong>
+<p class="meta">大久保 ・ 第1工場<br>写真3枚 ・ 2機器</p>
+<a class="action secondary" href="#capture">点検を続ける</a>
+</div>
+<h3>送信待ち</h3>
+<div class="card">
+<span class="badge warn">送信待ち</span>
+<strong>11/05 夕方の点検</strong>
+<p class="meta">写真6枚 ・ 接続確認後に自動送信</p>
+<a href="#waiting">状態を見る</a>
+</div>
+<h3>送信済み</h3>
+<div class="card">
+<span class="badge good">送信済み</span>
+<strong>11/05 朝の点検</strong>
+<p class="meta">写真8枚 ・ すべてPCへ到着</p>
+<a href="#sent">送信結果を見る</a>
+</div>
+<p class="muted">
+<a href="#offline">接続を確認する</a>　／　<a href="#receiver">送信先の設定</a>
+</p>
+</div>
+</article>
+</section>
+<section class="spec" id="create">
+<div class="caption">
+<h2>02　点検の作成</h2>
+<p>点検名・担当者・場所だけを入力。必須項目は未確定。</p>
+</div>
+<article class="phone" aria-label="点検を作る">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>点検を作る</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>新しい点検</h2>
+<p class="muted">名前はそのままでも始められます。</p>
+<label class="field">点検名<input value="11/06 朝の点検">
+<small>空欄なら日付から自動で付けます。</small>
+</label>
+<label class="field">担当者<input value="大久保" autocomplete="name">
+</label>
+<label class="field">場所<input value="第1工場">
+</label>
+<a class="action " href="#capture">点検を始める</a>
+<a class="action quiet" href="#home">戻る</a>
+</div>
+</article>
+</section>
+<section class="spec" id="capture">
+<div class="caption">
+<h2>03　点検中の撮影</h2>
+<p>写真と機器情報をセットで保存。案Bは未撮影の機器を案内。</p>
+</div>
+<article class="phone" aria-label="メーターを撮る">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>メーターを撮る</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<div class="eyebrow">11/06 朝の点検 ・ 作業中</div>
+<a class="action secondary" href="#qr">機器QRを読む</a>
+<div class="card">
+<span class="eyebrow">撮影する機器</span>
+<strong>冷却水温度計</strong>
+<span class="device-id">A-103</span>
+<div>
+<a href="#manual">機器名・IDを手入力する</a>
+</div>
+</div>
+<div class="preview" role="img" aria-label="カメラ映像の代用">
+<span>メーターを枠に入れる</span>
+</div>
+<a class="action camera-action" href="#saved">撮影する</a>
+<p class="muted">この点検：写真3枚 ・ 2機器</p>
+<a class="action secondary" href="#history">この点検の履歴を見る</a>
+<a class="action quiet" href="#confirm">点検完了へ</a>
+</div>
+</article>
+</section>
+<section class="spec" id="qr">
+<div class="caption">
+<h2>03a　機器QRの読み取り</h2>
+<p>機器QRと、PC登録用の送信先QRを区別。</p>
+</div>
+<article class="phone" aria-label="機器QRを読む">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>機器QRを読む</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>機器ラベルを読む</h2>
+<p>メーターに貼られた機器QRを枠に入れてください。</p>
+<div class="preview" role="img" aria-label="機器QR読み取り画面の代用">
+<span>機器QR</span>
+</div>
+<div class="card">
+<strong>読み取り後の表示例</strong>
+<p>冷却水温度計<br>
+<span class="device-id">A-103</span>
+</p>
+</div>
+<a class="action " href="#capture">この機器を使う</a>
+<a class="action secondary" href="#manual">手入力する</a>
+</div>
+</article>
+</section>
+<section class="spec" id="manual">
+<div class="caption">
+<h2>03b　手入力</h2>
+<p>QRが読めない場合も同じ撮影フローを使う。</p>
+</div>
+<article class="phone" aria-label="機器名・ID">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>機器名・ID</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>機器の情報</h2>
+<label class="field">機器名<input value="冷却水温度計">
+</label>
+<label class="field">機器ID<input value="A-103">
+</label>
+<p class="muted">撮影する機器のラベルと確認してください。</p>
+<a class="action " href="#capture">この機器を使う</a>
+<a class="action quiet" href="#capture">戻る</a>
+</div>
+</article>
+</section>
+<section class="spec" id="saved">
+<div class="caption">
+<h2>03c　撮影直後</h2>
+<p>この画面だけ撮影後の例（4枚・3機器）。以降は撮影前の3枚・2機器の例。</p>
+</div>
+<article class="phone" aria-label="撮影できました">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>撮影できました</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<span class="badge good">保存しました</span>
+<h2>冷却水温度計</h2>
+<p>
+<span class="device-id">A-103</span> ・ 11/06 09:41</p>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="冷却水温度計の写真の代用">写真</div>
+<div>
+<strong>冷却水温度計</strong>
+<div class="meta">
+<span class="device-id">A-103</span>
+<br>11/06 09:41 撮影</div>
+</div>
+</div>
+</div>
+<p class="note">この写真と機器の情報を一緒に保存しました。</p>
+<div class="stats">
+<div>
+<span class="count">4<small> 枚</small>
+</span>
+<span class="meta">この点検の写真</span>
+</div>
+<div>
+<span class="count">3<small> 機器</small>
+</span>
+<span class="meta">撮影済み</span>
+</div>
+</div>
+<a class="action " href="#capture">次の機器を撮る</a>
+<a class="action secondary" href="#history">履歴を確認する</a>
+<a class="action quiet" href="#confirm">点検完了へ</a>
+</div>
+</article>
+</section>
+<section class="spec" id="history">
+<div class="caption">
+<h2>04　点検中の履歴</h2>
+<p>1枚ごとに写真・機器名・ID・撮影時刻を表示。総数と注意は同じデータから算出。</p>
+</div>
+<article class="phone" aria-label="この点検の履歴">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>この点検の履歴</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<div class="eyebrow">11/06 朝の点検 ・ 作業中</div>
+<h2>撮ったメーター</h2>
+<div class="stats">
+<div>
+<span class="count">3<small> 枚</small>
+</span>
+<span class="meta">写真</span>
+</div>
+<div>
+<span class="count">2<small> / 3機器</small>
+</span>
+<span class="meta">対象一覧がある場合</span>
+</div>
+</div>
+<div class="notice">対象一覧あり：冷却水温度計 A-103 が未撮影です。<br>
+<a href="#capture">この機器を撮る</a>
+</div>
+<h3>写真と機器の記録</h3>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="ボイラー圧力計の写真の代用">写真</div>
+<div>
+<strong>ボイラー圧力計</strong>
+<div class="meta">
+<span class="device-id">A-101</span>
+<br>11/06 09:32 撮影</div>
+</div>
+</div>
+<div class="actions">
+<a class="action secondary" href="#retake-boiler">撮り直す</a>
+<a class="action danger" href="#delete-first">削除</a>
+</div>
+</div>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="ボイラー圧力計の写真の代用">写真 2</div>
+<div>
+<strong>ボイラー圧力計</strong>
+<div class="meta">
+<span class="device-id">A-101</span>
+<br>11/06 09:33 撮影</div>
+</div>
+</div>
+<div class="actions">
+<a class="action secondary" href="#retake-boiler">撮り直す</a>
+<a class="action danger" href="#delete">削除</a>
+</div>
+</div>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="空気圧力計の写真の代用">写真</div>
+<div>
+<strong>空気圧力計</strong>
+<div class="meta">
+<span class="device-id">A-102</span>
+<br>11/06 09:36 撮影</div>
+</div>
+</div>
+<div class="actions">
+<a class="action secondary" href="#retake-air">撮り直す</a>
+<a class="action danger" href="#delete-air">削除</a>
+</div>
+</div>
+<div class="notice">A-101は2枚あります。撮り直しの写真か確認してください。</div>
+<div class="card">
+<strong>対象一覧がない場合</strong>
+<p class="meta">写真3枚・撮影済み2機器と表示します。未撮影の機器は判定できません。</p>
+</div>
+<a class="action " href="#capture">撮影へ戻る</a>
+<a class="action secondary" href="#confirm">点検完了へ</a>
+</div>
+</article>
+</section>
+<section class="spec" id="retake-boiler">
+<div class="caption">
+<h2>04a　撮り直し：A-101</h2>
+<p>選んだ機器名・IDを引き継ぐ。元の写真を置換するか追加するかは未確定。</p>
+</div>
+<article class="phone" aria-label="撮り直し">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>撮り直し</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>この機器を撮り直す</h2>
+<div class="card">
+<strong>ボイラー圧力計</strong>
+<span class="device-id">A-101</span>
+</div>
+<div class="preview" role="img" aria-label="撮り直しのカメラ映像の代用">
+<span>メーターを枠に入れる</span>
+</div>
+<button class="action" type="button" disabled>撮影する（表示例）</button>
+<a class="action secondary" href="#history">履歴に戻る</a>
+</div>
+</article>
+</section>
+<section class="spec" id="retake-air">
+<div class="caption">
+<h2>04a　撮り直し：A-102</h2>
+<p>選んだ機器名・IDを引き継ぐ。元の写真を置換するか追加するかは未確定。</p>
+</div>
+<article class="phone" aria-label="撮り直し">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>撮り直し</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>この機器を撮り直す</h2>
+<div class="card">
+<strong>空気圧力計</strong>
+<span class="device-id">A-102</span>
+</div>
+<div class="preview" role="img" aria-label="撮り直しのカメラ映像の代用">
+<span>メーターを枠に入れる</span>
+</div>
+<button class="action" type="button" disabled>撮影する（表示例）</button>
+<a class="action secondary" href="#history">履歴に戻る</a>
+</div>
+</article>
+</section>
+<section class="spec" id="delete">
+<div class="caption">
+<h2>04b　削除の確認：A-101 09:33</h2>
+<p>選んだ写真と時刻を確認してから削除する。</p>
+</div>
+<article class="phone" aria-label="写真の削除">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>写真の削除</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>この写真を削除しますか？</h2>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="ボイラー圧力計の写真の代用">写真 2</div>
+<div>
+<strong>ボイラー圧力計</strong>
+<div class="meta">
+<span class="device-id">A-101</span>
+<br>11/06 09:33 撮影</div>
+</div>
+</div>
+</div>
+<p>この写真と紐づく機器の情報を、この点検の履歴から削除します。</p>
+<a class="action secondary" href="#history">戻る</a>
+<button class="action danger" type="button" disabled>削除する（表示例）</button>
+<p class="muted">静的モックのため削除は実行できません。</p>
+</div>
+</article>
+</section>
+<section class="spec" id="delete-first">
+<div class="caption">
+<h2>04b　削除の確認：A-101 09:32</h2>
+<p>選んだ写真と時刻を確認してから削除する。</p>
+</div>
+<article class="phone" aria-label="写真の削除">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>写真の削除</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>この写真を削除しますか？</h2>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="ボイラー圧力計の写真の代用">写真</div>
+<div>
+<strong>ボイラー圧力計</strong>
+<div class="meta">
+<span class="device-id">A-101</span>
+<br>11/06 09:32 撮影</div>
+</div>
+</div>
+</div>
+<p>この写真と紐づく機器の情報を、この点検の履歴から削除します。</p>
+<a class="action secondary" href="#history">戻る</a>
+<button class="action danger" type="button" disabled>削除する（表示例）</button>
+<p class="muted">静的モックのため削除は実行できません。</p>
+</div>
+</article>
+</section>
+<section class="spec" id="delete-air">
+<div class="caption">
+<h2>04b　削除の確認：A-102 09:36</h2>
+<p>選んだ写真と時刻を確認してから削除する。</p>
+</div>
+<article class="phone" aria-label="写真の削除">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>写真の削除</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>この写真を削除しますか？</h2>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="空気圧力計の写真の代用">写真</div>
+<div>
+<strong>空気圧力計</strong>
+<div class="meta">
+<span class="device-id">A-102</span>
+<br>11/06 09:36 撮影</div>
+</div>
+</div>
+</div>
+<p>この写真と紐づく機器の情報を、この点検の履歴から削除します。</p>
+<a class="action secondary" href="#history">戻る</a>
+<button class="action danger" type="button" disabled>削除する（表示例）</button>
+<p class="muted">静的モックのため削除は実行できません。</p>
+</div>
+</article>
+</section>
+<section class="spec" id="confirm">
+<div class="caption">
+<h2>05　点検完了の確認</h2>
+<p>注意を残して完了できる仮案。未撮影時の完了可否は運用で決定。</p>
+</div>
+<article class="phone" aria-label="点検完了の確認">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>点検完了の確認</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<div class="eyebrow">11/06 朝の点検</div>
+<h2>点検を完了しますか？</h2>
+<div class="stats">
+<div>
+<span class="count">3<small> 枚</small>
+</span>
+<span class="meta">写真</span>
+</div>
+<div>
+<span class="count">2<small> 機器</small>
+</span>
+<span class="meta">撮影済み</span>
+</div>
+</div>
+<div class="notice">
+<strong>確認してください</strong>
+<p>未撮影：冷却水温度計 A-103<br>重複：ボイラー圧力計 A-101 が2枚</p>
+</div>
+<p class="muted">対象一覧がない場合は「未撮影は確認できません」と表示します。</p>
+<p>完了すると送信待ちになります。PCに届く接続が確認できたら、自動で送信します。</p>
+<a class="action secondary" href="#history">履歴に戻って確認する</a>
+<a class="action " href="#waiting">確認して点検を完了する</a>
+</div>
+</article>
+</section>
+<section class="spec" id="waiting">
+<div class="caption">
+<h2>05a　完了後の送信待ち</h2>
+<p>Wi-Fiに接続できたことと、PCへ届くことを区別。</p>
+</div>
+<article class="phone" aria-label="送信待ち">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>送信待ち</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection off">Wi-Fi 接続中<small>PCに届きません ・ 送信を待っています</small>
+</div>
+<div class="body">
+<span class="badge warn">送信待ち</span>
+<h2>点検を完了しました</h2>
+<div class="card">
+<strong>11/06 朝の点検</strong>
+<p class="meta">大久保 ・ 第1工場<br>写真3枚 ・ 2機器</p>
+</div>
+<p>写真は端末に保存されています。PCに届く接続が確認できたら、自動で送信します。</p>
+<p class="notice">Wi-Fiには接続していますが、PCに届きません。PCの受信アプリと接続を確認してください。</p>
+<a class="action secondary" href="#offline">接続の案内を見る</a>
+<a class="action quiet" href="#home">点検の一覧へ</a>
+<p class="review-note">比較用：<a href="#sending">接続確認後の送信中</a>
+</p>
+</div>
+</article>
+</section>
+<section class="spec" id="sending">
+<div class="caption">
+<h2>06　送信中</h2>
+<p>USBテザリングでも同じ送信。枚数の後に写真一覧の到着確認を行う。</p>
+</div>
+<article class="phone" aria-label="点検を送信中">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>点検を送信中</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">USBテザリング 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<span class="badge">送信中</span>
+<h2>PCへ送っています</h2>
+<div class="card">
+<strong>11/06 朝の点検</strong>
+<p class="meta">写真3枚 ・ 2機器</p>
+<span class="count">2<small> / 3枚</small>
+</span>
+<progress value="2" max="3" aria-label="写真3枚中2枚を送信済み">
+</progress>
+</div>
+<p>写真を1枚ずつ送っています。すべて届いたら、写真の一覧をPCへ送ります。</p>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="空気圧力計の写真の代用">写真</div>
+<div>
+<strong>空気圧力計</strong>
+<div class="meta">
+<span class="device-id">A-102</span>
+<br>11/06 09:36 撮影</div>
+</div>
+</div>
+</div>
+<p class="muted">この写真を送信中です。接続したままお待ちください。</p>
+<a class="action secondary" href="#home">点検の一覧へ</a>
+<p class="review-note">状態の比較：<a href="#sent">送信済み</a> ／ <a href="#failed">一部失敗</a>
+</p>
+</div>
+</article>
+</section>
+<section class="spec" id="sent">
+<div class="caption">
+<h2>06a　送信済み</h2>
+<p>写真と写真一覧の両方が届いた状態を完了として表示。</p>
+</div>
+<article class="phone" aria-label="送信結果">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>送信結果</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<span class="badge good">送信済み</span>
+<h2>すべてPCに届きました</h2>
+<div class="card success">
+<strong>11/06 朝の点検</strong>
+<p>写真3枚 ・ 2機器</p>
+<p class="meta">写真 3 / 3枚 到着<br>写真の一覧 到着<br>送信先：点検PC ・ 09:48</p>
+</div>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="ボイラー圧力計の写真の代用">写真</div>
+<div>
+<strong>ボイラー圧力計</strong>
+<div class="meta">
+<span class="device-id">A-101</span>
+<br>11/06 09:32 撮影</div>
+</div>
+</div>
+</div>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="ボイラー圧力計の写真の代用">写真 2</div>
+<div>
+<strong>ボイラー圧力計</strong>
+<div class="meta">
+<span class="device-id">A-101</span>
+<br>11/06 09:33 撮影</div>
+</div>
+</div>
+</div>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="空気圧力計の写真の代用">写真</div>
+<div>
+<strong>空気圧力計</strong>
+<div class="meta">
+<span class="device-id">A-102</span>
+<br>11/06 09:36 撮影</div>
+</div>
+</div>
+</div>
+<a class="action " href="#home">点検の一覧へ</a>
+</div>
+</article>
+</section>
+<section class="spec" id="failed">
+<div class="caption">
+<h2>06b　一部失敗・再送</h2>
+<p>写真の失敗と、最後に送る一覧の失敗を区別。下の枠は別の失敗例。</p>
+</div>
+<article class="phone" aria-label="送信結果">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>送信結果</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<span class="badge bad">送信済み（一部失敗あり）</span>
+<h2>1枚が届いていません</h2>
+<div class="card">
+<strong>11/06 朝の点検</strong>
+<p>写真2 / 3枚 到着</p>
+<p class="meta">写真の一覧：未送信<br>残りの写真が届いたら送ります。</p>
+</div>
+<div class="card">
+<div class="photo">
+<div class="thumb" role="img" aria-label="空気圧力計の写真の代用">写真</div>
+<div>
+<strong>空気圧力計</strong>
+<div class="meta">
+<span class="device-id">A-102</span>
+<br>11/06 09:36 撮影</div>
+<span class="badge bad">送信失敗</span>
+</div>
+</div>
+</div>
+<p class="notice">PCへの接続を確認して、この写真を送り直してください。届いた2枚は送り直しません。</p>
+<a class="action " href="#sending">失敗した1枚だけ再送</a>
+<a class="action secondary" href="#home">点検の一覧へ</a>
+<div class="card">
+<strong>写真の一覧だけが届かない場合</strong>
+<p class="meta">写真3枚は到着済みです。写真を送り直さず、写真の一覧だけ再送します。</p>
+<a class="action secondary" href="#sending">写真の一覧だけ再送</a>
+</div>
+</div>
+</article>
+</section>
+<section class="spec" id="offline">
+<div class="caption">
+<h2>07　接続がないとき</h2>
+<p>接続操作はスマホの設定で行う。アプリ内に架空のWi-Fi切り替えは置かない。</p>
+</div>
+<article class="phone" aria-label="接続の案内">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>接続の案内</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection off">未接続<small>PCに届きません ・ 写真は端末に保存</small>
+</div>
+<div class="body">
+<h2>PCにつながりません</h2>
+<p>Wi-Fiが使えないときは、USBテザリングで送れます。</p>
+<ol class="steps">
+<li>スマホとPCをUSBケーブルでつなぐ。</li>
+<li>スマホの「設定」でUSBテザリングをオンにする。</li>
+<li>PCの受信アプリを開く。接続表示が「PCに届きます」になるまで待つ。</li>
+</ol>
+<p class="muted">設定項目の場所はスマホによって異なります。</p>
+<div class="card">
+<strong>接続できたときの表示</strong>
+<p>USBテザリング 接続中<br>PCに届きます</p>
+</div>
+<p class="note">送信待ちの点検は自動で送信します。つながるまで写真は端末に残ります。</p>
+<a class="action " href="#home">点検の一覧へ</a>
+<a class="action secondary" href="#receiver">送信先の設定を見る</a>
+</div>
+</article>
+</section>
+<section class="spec" id="receiver">
+<div class="caption">
+<h2>補足　既存の送信先設定</h2>
+<p>既存のPC登録機能への導線。QRの実読取は行わない。</p>
+</div>
+<article class="phone" aria-label="送信先の設定">
+<div class="system">
+<span>9:41</span>
+<span>電池 86%</span>
+</div>
+<header class="top">
+<strong>送信先の設定</strong>
+<a href="#home">点検一覧</a>
+</header>
+<div class="connection ">Wi-Fi 接続中<small>PCに届きます ・ 送信先：点検PC</small>
+</div>
+<div class="body">
+<h2>送信先のPC</h2>
+<div class="card">
+<strong>点検PC</strong>
+<p class="meta">登録済みの送信先</p>
+</div>
+<p>PCの「スマホを登録」に表示されたQRを読みます。</p>
+<button class="action secondary" type="button" disabled>送信先QRを読む（表示例）</button>
+<p class="muted">機器ラベルのQRとは別です。URLと合言葉の手入力は現行の設定を使います。</p>
+<a class="action quiet" href="#offline">接続の案内に戻る</a>
+</div>
+</article>
+</section>
+<footer>
+<a href="#home">先頭の画面へ</a>　<a href="案A.html">案A</a>　<a href="案B.html">案B</a>　<a href="案C.html">案C</a>
+</footer>
+</main>
+</body>
+</html>

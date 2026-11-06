@@ -11,6 +11,25 @@ import org.junit.Test
 class ReceiverSettingsTest {
 
     @Test
+    fun sendTargetKeepsUrlTokenAndIdFromOneSettingsSnapshot() {
+        val values = mutableMapOf<String, Any>(ReceiverSettings.KEY_URL to "http://192.168.1.2:8765",
+            ReceiverSettings.KEY_TOKEN to "old-token", ReceiverSettings.KEY_RECEIVER_ID to "old-pc")
+        val prefs = Proxy.newProxyInstance(SharedPreferences::class.java.classLoader,
+            arrayOf(SharedPreferences::class.java)) { _, method, _ ->
+            check(method.name == "getAll")
+            values.toMap()
+        } as SharedPreferences
+        val target = ReceiverSettings(prefs).sendTarget()
+        values[ReceiverSettings.KEY_URL] = "http://192.168.1.3:8765"
+        values[ReceiverSettings.KEY_TOKEN] = "new-token"
+        values[ReceiverSettings.KEY_RECEIVER_ID] = "new-pc"
+        assertEquals("http://192.168.1.2:8765", target.url)
+        assertEquals("old-token", target.token)
+        assertEquals("old-pc", target.receiverId)
+        assertTrue(target.isConfigured())
+    }
+
+    @Test
     fun saveRejectsNonPrivateHostsBeforeWritingPreferences() {
         val prefs = Proxy.newProxyInstance(
             SharedPreferences::class.java.classLoader,

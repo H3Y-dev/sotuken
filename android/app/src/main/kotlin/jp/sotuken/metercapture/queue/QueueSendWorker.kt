@@ -8,7 +8,6 @@ import jp.sotuken.metercapture.queue.sender.HttpSender
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -19,7 +18,7 @@ class QueueSendWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         // 即時作業と定期作業は別の一意名なので、キューの復旧・送信を直列にする。
-        sendMutex.withLock {
+        queueSendMutex.withLock {
             try {
                 sendQueue()
             } catch (e: CancellationException) {
@@ -35,7 +34,7 @@ class QueueSendWorker(
         try {
             val queueDao = database.queueItemDao()
             val queueStore = RoomQueueStore(queueDao)
-            val settings = ReceiverSettings(applicationContext)
+            val settings = ReceiverSettings(applicationContext).sendTarget()
 
             val outboxDir = File(
                 requireNotNull(applicationContext.getExternalFilesDir(null)) { "External files directory unavailable" },
@@ -44,8 +43,8 @@ class QueueSendWorker(
 
             val httpSenderProvider = {
                 if (settings.isConfigured()) {
-                    val url = settings.getUrl()!!
-                    val token = settings.getToken()!!
+                    val url = settings.url!!
+                    val token = settings.token!!
                     HttpSender(url, token)
                 } else {
                     null
@@ -54,7 +53,7 @@ class QueueSendWorker(
 
             val healthChecker: suspend () -> kotlin.Result<Unit> = {
                 if (settings.isConfigured()) {
-                    HttpSender.health(settings.getUrl()!!, settings.getToken()!!)
+                    HttpSender.health(settings.url!!, settings.token!!)
                 } else {
                     kotlin.Result.failure(IllegalStateException("送信先未設定"))
                 }
@@ -66,6 +65,7 @@ class QueueSendWorker(
                 outboxDir = outboxDir,
                 httpSenderProvider = httpSenderProvider,
                 healthChecker = healthChecker,
+                currentReceiverId = settings.receiverId,
             )
 
             router.route()
@@ -75,7 +75,4 @@ class QueueSendWorker(
         }
     }
 
-    companion object {
-        private val sendMutex = Mutex()
-    }
 }

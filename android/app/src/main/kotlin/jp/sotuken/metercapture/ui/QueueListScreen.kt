@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,8 +45,12 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.queue.DeleteResult
 import jp.sotuken.metercapture.queue.SendState
+import jp.sotuken.metercapture.queue.isHeldFor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val THUMBNAIL_MAX_SIDE_PX = 256
@@ -57,7 +63,7 @@ private val DISPLAY_FORMAT: DateTimeFormatter =
 private class LoadedImage(val bitmap: Bitmap?)
 
 /**
- * キューの履歴画面。QueueStore.observeQueue() の結果を読んで表示するだけで、キューには書き込まない。
+ * キューの履歴画面。操作はコールバックを通じてQueueStoreへ渡す。
  * 送信済みの項目も一覧に残し、新しい順に並べる。
  */
 @Composable
@@ -66,8 +72,12 @@ internal fun QueueListScreen(
     onClose: () -> Unit,
     onRetry: (String) -> Unit = {},
     onSendNow: () -> Unit = {},
+    onReassignReceiver: (String) -> Unit = {},
+    currentReceiverId: String? = null,
+    onDelete: suspend (String) -> DeleteResult = { DeleteResult.NOT_FOUND },
 ) {
     var selected by remember { mutableStateOf<QueueItem?>(null) }
+    var deleteTarget by remember { mutableStateOf<QueueItem?>(null) }
     // 撮影日時の文字列ではなく、時刻として解釈した値で新しい順に並べる。
     val sorted = remember(items) {
         items.sortedByDescending { parseInstantOrNull(it.capturedAt) ?: Instant.EPOCH }
@@ -128,7 +138,10 @@ internal fun QueueListScreen(
                             QueueListRow(
                                 item = item,
                                 onClick = { selected = item },
+                                currentReceiverId = currentReceiverId,
                                 onRetry = { onRetry(item.localId) },
+                                onReassignReceiver = { onReassignReceiver(item.localId) },
+                                onDelete = { deleteTarget = item },
                             )
                         }
                     }
@@ -138,8 +151,9 @@ internal fun QueueListScreen(
     }
 
     selected?.let { item ->
-        FullImageDialog(item = item, onDismiss = { selected = null })
+        FullImageDialog(item = item, onDismiss = { selected = null }, currentReceiverId = currentReceiverId)
     }
+    DeleteConfirmDialog(deleteTarget, currentReceiverId, { deleteTarget = null }, onDelete)
 }
 
 @Composable
@@ -147,6 +161,9 @@ private fun QueueListRow(
     item: QueueItem,
     onClick: () -> Unit,
     onRetry: () -> Unit = {},
+    onReassignReceiver: () -> Unit = {},
+    currentReceiverId: String? = null,
+    onDelete: () -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -173,7 +190,7 @@ private fun QueueListRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = sendStatusLabel(item),
+                    text = sendStatusLabel(item, currentReceiverId),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = stateColor(item.sendState),
@@ -186,13 +203,67 @@ private fun QueueListRow(
                         maxLines = 2,
                     )
                 }
-                if (canRetry(item)) {
+                HeldReceiverAction(item, currentReceiverId, onReassignReceiver)
+                TextButton(onClick = onDelete, enabled = canDelete(item)) {
+                    Text("削除")
+                }
+                if (canRetry(item, currentReceiverId)) {
                     TextButton(onClick = onRetry) {
                         Text("再送")
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DeleteConfirmDialog(
+    item: QueueItem?,
+    currentReceiverId: String?,
+    onDismiss: () -> Unit,
+    onDelete: suspend (String) -> DeleteResult,
+) {
+    val scope = rememberCoroutineScope()
+    var deleting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    if (item != null) {
+        AlertDialog(
+            onDismissRequest = { if (!deleting) onDismiss() },
+            title = { Text("写真の削除") },
+            text = { Text(deleteConfirmationText(item, currentReceiverId)) },
+            confirmButton = {
+                TextButton(enabled = !deleting, onClick = {
+                    deleting = true
+                    scope.launch {
+                        try {
+                            error = when (onDelete(item.localId)) {
+                                DeleteResult.DELETED -> null
+                                DeleteResult.SENDING -> "送信中のため削除できません"
+                                DeleteResult.NOT_FOUND -> "写真は既に削除されています"
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            error = "削除に失敗しました: ${failure.message ?: failure}"
+                        } finally {
+                            deleting = false
+                            onDismiss()
+                        }
+                    }
+                }) { Text("削除する") }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleting, onClick = onDismiss) { Text("キャンセル") }
+            },
+        )
+    }
+    error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { error = null },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { error = null }) { Text("閉じる") } },
+        )
     }
 }
 
@@ -233,6 +304,7 @@ private fun Thumbnail(
 private fun FullImageDialog(
     item: QueueItem,
     onDismiss: () -> Unit,
+    currentReceiverId: String?,
 ) {
     val loaded by produceState<LoadedImage?>(initialValue = null, item.imagePath) {
         value = LoadedImage(
@@ -278,7 +350,7 @@ private fun FullImageDialog(
                         color = Color.White,
                     )
                     Text(
-                        text = "${sendStatusLabel(item)}（タップで閉じる）",
+                        text = "${sendStatusLabel(item, currentReceiverId)}（タップで閉じる）",
                         color = Color.White,
                     )
                 }
@@ -351,4 +423,28 @@ private fun exifRotationDegrees(path: String): Int = try {
     }
 } catch (_: Exception) {
     0
+}
+
+@Composable
+private fun HeldReceiverAction(item: QueueItem, currentReceiverId: String?, onConfirm: () -> Unit) {
+    var confirming by remember(item.localId) { mutableStateOf(false) }
+    if (!item.isHeldFor(currentReceiverId)) return
+    TextButton(onClick = { confirming = true }) {
+        Text("今のPCへ送り直す")
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("送信先を変更しますか？") },
+            text = { Text("この写真の送信先を現在設定されているPCに変更して送り直します。") },
+            confirmButton = {
+                TextButton(onClick = { confirming = false; onConfirm() }) {
+                    Text("送り直す")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("キャンセル") }
+            },
+        )
+    }
 }

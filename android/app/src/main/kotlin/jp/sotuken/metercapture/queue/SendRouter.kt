@@ -18,6 +18,7 @@ class SendRouter(
     private val httpSenderProvider: () -> Sender?,
     private val healthChecker: suspend () -> Result<Unit>,
     private val folderSender: Sender = FolderSender(outboxDir),
+    private val currentReceiverId: String? = null,
 ) {
 
     private fun reasonOf(e: Throwable?): String =
@@ -44,7 +45,9 @@ class SendRouter(
 
         // 今回HTTPに失敗して送信箱へ回した項目を、その場でもう一度送らない。
         val sentFolderItems = if (isHttpReachable) {
-            queueDao.findByState(SendState.SENT).filter { it.sentVia == QueueItem.VIA_FOLDER }
+            queueDao.findByState(SendState.SENT).filter {
+                it.sentVia == QueueItem.VIA_FOLDER && !it.isHeldFor(currentReceiverId)
+            }
         } else {
             emptyList()
         }
@@ -53,6 +56,7 @@ class SendRouter(
         val pendingItems = queueDao.findByState(SendState.PENDING)
 
         for (item in pendingItems) {
+            if (item.isHeldFor(currentReceiverId)) continue
             queueStore.markSending(item.localId)
             var sentViaHttp = false
             var note = fallbackReason
