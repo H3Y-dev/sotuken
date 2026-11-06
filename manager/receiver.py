@@ -235,28 +235,43 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
         # 要求行には任意のクエリや秘密が含まれ得るため記録しない。
         sys.stderr.write(f"[受信口] {self.address_string()} - HTTP要求\n")
 
-    def _drain_rfile(self) -> None:
-        """WinError 10054 (TCP RST) 防止のため、ソケットバッファに残っている未読データを安全に読み捨てる。"""
+    def _read_body_chunk(self, size: int) -> bytes:
+        chunk = self.rfile.read1(size)
+        self._body_bytes_read = getattr(self, "_body_bytes_read", 0) + len(chunk)
+        return chunk
+
+    def _drain_request_body(self) -> None:
+        """応答後の未読本文を最大1MB・1秒だけ読み捨て、TCP RSTを防ぐ。"""
         try:
-            sock = getattr(self, "connection", None) or getattr(self, "request", None)
-            if sock and hasattr(sock, "setblocking"):
-                sock.setblocking(False)
+            lengths = self.headers.get_all("Content-Length", [])
+            if len(lengths) != 1 or self.headers.get("Transfer-Encoding"):
+                return
+            remaining = int(lengths[0]) - getattr(self, "_body_bytes_read", 0)
+            if not 0 < remaining <= 1024 * 1024:
+                return
+            deadline = time.monotonic() + 1.0
+            while remaining > 0:
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    break
+                self.connection.settimeout(timeout)
                 try:
-                    while True:
-                        data = sock.recv(65536)
-                        if not data:
-                            break
-                except Exception:
-                    pass
-                finally:
-                    sock.setblocking(True)
-        except Exception:
+                    chunk = self.rfile.read1(min(65536, remaining))
+                except OSError:
+                    # 本文のタイムアウト後はBufferedReaderを再利用できない。
+                    timeout = deadline - time.monotonic()
+                    if timeout <= 0:
+                        break
+                    self.connection.settimeout(timeout)
+                    chunk = self.connection.recv(min(65536, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except (ValueError, OSError):
             pass
 
     def _send_json(self, status_code: int, data: Dict[str, Any],
                    extra_headers: Optional[Dict[str, str]] = None) -> None:
-        if status_code >= 400:
-            self._drain_rfile()
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -266,6 +281,14 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
+        if status_code >= 400:
+            self.close_connection = True
+            self.wfile.flush()
+            try:
+                self.connection.shutdown(socket.SHUT_WR)
+            except OSError:
+                return
+            self._drain_request_body()
 
     def _check_ip_allowed(self) -> bool:
         check_fn = getattr(self.server, "check_client_ip", is_private_client_ip)
@@ -328,7 +351,7 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
                 if remaining <= 0:
                     raise TimeoutError
                 self.connection.settimeout(remaining)
-                chunk = self.rfile.read1(size - len(body))
+                chunk = self._read_body_chunk(size - len(body))
                 if not chunk:
                     raise ValueError
                 body.extend(chunk)
@@ -365,7 +388,7 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
                 if remaining <= 0:
                     raise TimeoutError
                 self.connection.settimeout(remaining)
-                chunk = self.rfile.read1(min(65536, size - len(body)))
+                chunk = self._read_body_chunk(min(65536, size - len(body)))
                 if not chunk:
                     raise ValueError('本文が不足しています')
                 body.extend(chunk)
@@ -498,7 +521,7 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
                     if remaining <= 0:
                         raise TimeoutError
                     self.connection.settimeout(remaining)
-                    chunk = self.rfile.read1(min(65536, content_length - len(body_buffer)))
+                    chunk = self._read_body_chunk(min(65536, content_length - len(body_buffer)))
                     if not chunk:
                         break
                     body_buffer.extend(chunk)
