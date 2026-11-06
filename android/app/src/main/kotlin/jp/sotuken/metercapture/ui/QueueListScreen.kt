@@ -268,7 +268,7 @@ private fun DeleteConfirmDialog(
 }
 
 @Composable
-private fun Thumbnail(
+internal fun Thumbnail(
     imagePath: String,
     modifier: Modifier = Modifier,
 ) {
@@ -301,7 +301,7 @@ private fun Thumbnail(
 }
 
 @Composable
-private fun FullImageDialog(
+internal fun FullImageDialog(
     item: QueueItem,
     onDismiss: () -> Unit,
     currentReceiverId: String?,

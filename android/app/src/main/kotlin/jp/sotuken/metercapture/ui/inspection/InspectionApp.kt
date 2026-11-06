@@ -12,6 +12,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.ZonedDateTime
 import jp.sotuken.metercapture.inspection.*
 import jp.sotuken.metercapture.queue.*
+import jp.sotuken.metercapture.route.parseRouteJson
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import jp.sotuken.metercapture.ui.*
 import kotlinx.coroutines.CancellationException
@@ -44,6 +45,22 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
     var operator by rememberSaveable { mutableStateOf("") }
     var place by rememberSaveable { mutableStateOf("") }
     var placeholder by rememberSaveable { mutableStateOf("") }
+    var pendingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingName by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingSource by rememberSaveable { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var operationError by remember { mutableStateOf<String?>(null) }
+    var selectedPhoto by remember { mutableStateOf<QueueItem?>(null) }
+    var deleteInspection by remember { mutableStateOf<Inspection?>(null) }
+    fun capture(id: String, target: CaptureTarget? = null) {
+        pendingId = target?.deviceId
+        pendingName = target?.deviceName
+        pendingSource = target?.source
+        stack = listOf(AppScreen.Home.encode(), AppScreen.Capture(id).encode())
+    }
+    fun history(id: String) {
+        stack = listOf(AppScreen.Home.encode(), AppScreen.Capture(id).encode(), AppScreen.History(id).encode())
+    }
 
     LaunchedEffect(screen, inspections) {
         val id = screen.inspectionIdOrNull() ?: return@LaunchedEffect
@@ -105,21 +122,101 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
                     )
                     is AppScreen.Capture -> {
                         val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
-                        if (inspection != null) InspectionPlaceholderScreen(inspection, error) {
-                            scope.launch {
-                                try {
-                                    val deleted = withContext(Dispatchers.IO) { inspectionStore.delete(inspection.inspectionId) }
-                                    if (deleted) { error = null; home() } else error = "送信中の写真があるため削除できません"
-                                } catch (e: CancellationException) { throw e
-                                } catch (e: Exception) { error = "点検の削除に失敗しました: ${e.message}" }
+                        if (inspection != null) {
+                            TextButton(onClick = { deleteInspection = inspection }, enabled = !busy) { Text("この点検を削除する") }
+                            val pendingTarget = if (pendingId == null && pendingName == null) null else CaptureTarget(pendingId, pendingName, pendingSource)
+                            InspectionCaptureScreen(
+                                inspection, photos.filter { it.inspectionId == inspection.inspectionId }, health, pendingTarget,
+                                onSaved = { file, meta -> withContext(Dispatchers.IO) { inspectionStore.addPhoto(inspection.inspectionId, file, meta) }; Unit },
+                                onHistory = { history(inspection.inspectionId) }, onComplete = { open(AppScreen.Complete(inspection.inspectionId)) }, onHome = { home() },
+                            )
+                            LaunchedEffect(pendingTarget) {
+                                if (pendingTarget != null) { pendingId = null; pendingName = null; pendingSource = null }
                             }
                         }
+                    }
+                    is AppScreen.History -> {
+                        val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
+                        if (inspection != null) InspectionHistoryScreen(
+                            buildHistoryUiState(inspection, inspection.routeSnapshot?.let { parseRouteJson(it)?.devices }, photos.filter { it.inspectionId == inspection.inspectionId }),
+                            onPhotoClick = { selectedPhoto = it },
+                            onRetake = { capture(inspection.inspectionId, targetFromPhoto(it)) },
+                            onShootDevice = { capture(inspection.inspectionId, targetFromRoute(it)) },
+                            onDelete = { photo ->
+                                if (!busy) {
+                                    busy = true
+                                    scope.launch {
+                                        try {
+                                            operationError = when (withContext(Dispatchers.IO) { inspectionStore.deletePhoto(inspection.inspectionId, photo.localId) }) {
+                                                DeleteResult.DELETED -> null
+                                                DeleteResult.SENDING -> "送信中のため削除できません"
+                                                DeleteResult.NOT_FOUND -> "写真は既に削除されています"
+                                            }
+                                        } catch (e: CancellationException) { throw e
+                                        } catch (e: Exception) { operationError = "削除に失敗しました: ${e.message}"
+                                        } finally { busy = false }
+                                    }
+                                }
+                            },
+                            onBackToCapture = { capture(inspection.inspectionId) }, onComplete = { open(AppScreen.Complete(inspection.inspectionId)) }, onHome = { home() },
+                        )
+                    }
+                    is AppScreen.Complete -> {
+                        val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
+                        if (inspection != null) {
+                            val summary = summarizeInspection(photos.filter { it.inspectionId == inspection.inspectionId }, inspection.routeSnapshot?.let { parseRouteJson(it)?.devices })
+                            val state = buildCompleteUiState(inspection, summary)
+                            InspectionCompleteScreen(
+                                if (busy) state.copy(canComplete = false, completeLabel = "処理中...") else state,
+                                onBackToHistory = { if (!busy) history(inspection.inspectionId) },
+                                onComplete = {
+                                    if (!busy) {
+                                        busy = true
+                                        scope.launch {
+                                            try {
+                                                withContext(Dispatchers.IO) { inspectionStore.complete(inspection.inspectionId) }
+                                                stack = listOf(AppScreen.Home.encode(), AppScreen.SendStatus(inspection.inspectionId).encode())
+                                                QueueSendScheduler.enqueueSend(context)
+                                            } catch (e: CancellationException) { throw e
+                                            } catch (e: Exception) { operationError = "点検の完了に失敗しました: ${e.message}"
+                                            } finally { busy = false }
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    is AppScreen.SendStatus -> {
+                        val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
+                        if (inspection != null) InspectionSendStatusPlaceholder(inspection, photos.filter { it.inspectionId == inspection.inspectionId }, { selectedPhoto = it }, { home() })
                     }
                     else -> Text("この画面は次の更新で入ります", Modifier.padding(16.dp))
                 }
             }
         }
         if (showSettings) ReceiverSettingsDialog(settings, { showSettings = false }, health::onSettingsChanged, { showPairing = true })
+        deleteInspection?.let { inspection -> AlertDialog(
+            onDismissRequest = { if (!busy) deleteInspection = null },
+            title = { Text("この点検を削除しますか") },
+            text = { Text("この点検と、点検に含まれる写真を削除します。") },
+            confirmButton = { TextButton(enabled = !busy, onClick = {
+                busy = true
+                scope.launch {
+                    try {
+                        if (withContext(Dispatchers.IO) { inspectionStore.delete(inspection.inspectionId) }) home()
+                        else operationError = "送信中の写真があるため削除できません"
+                    } catch (e: CancellationException) { throw e
+                    } catch (e: Exception) { operationError = "点検の削除に失敗しました: ${e.message}"
+                    } finally { busy = false; deleteInspection = null }
+                }
+            }) { Text("削除する") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = { deleteInspection = null }) { Text("キャンセル") } },
+        ) }
+        selectedPhoto?.let { FullImageDialog(it, { selectedPhoto = null }, settings.getReceiverId()) }
+        operationError?.let { message -> AlertDialog(
+            onDismissRequest = { operationError = null }, text = { Text(message) },
+            confirmButton = { TextButton(onClick = { operationError = null }) { Text("閉じる") } },
+        ) }
         if (showPairing) PairingScreen(pendingCount = countUndelivered(photos), onClose = { showPairing = false; health.onSettingsChanged() })
         if (showStatus) AlertDialog(
             onDismissRequest = { showStatus = false }, title = { Text("接続の状態") },
@@ -133,14 +230,26 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore) {
 }
 
 @Composable
-private fun InspectionPlaceholderScreen(inspection: Inspection, error: String?, onDelete: () -> Unit) {
-    var confirming by remember { mutableStateOf(false) }
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(inspection.name, style = MaterialTheme.typography.titleLarge)
-        Text(inspectionStateLabel(inspection.state))
-        Text("この点検で撮影する画面は次の更新で入ります")
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (inspection.state == InspectionState.IN_PROGRESS) OutlinedButton(onClick = { confirming = true }) { Text("この点検を削除する") }
+private fun InspectionSendStatusPlaceholder(inspection: Inspection, photos: List<QueueItem>, onPhotoClick: (QueueItem) -> Unit, onHome: () -> Unit) {
+    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("送信待ち", style = MaterialTheme.typography.headlineSmall)
+            Text(inspection.name)
+            Text("写真${photos.size}枚")
+        }
+        items(photos.size, key = { photos[it].localId }) { index ->
+            val photo = photos[index]
+            OutlinedCard(onClick = { onPhotoClick(photo) }, modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Thumbnail(photo.imagePath, Modifier.size(76.dp))
+                    Column {
+                        Text(photo.deviceName ?: "機器名なし")
+                        Text(photo.deviceId ?: "機器IDなし")
+                        Text("${formatInspectionCaptureTime(photo.capturedAt)} 撮影")
+                    }
+                }
+            }
+        }
+        item { Button(onClick = onHome, modifier = Modifier.fillMaxWidth()) { Text("点検の一覧へ") } }
     }
-    if (confirming) AlertDialog(onDismissRequest = { confirming = false }, title = { Text("この点検を削除しますか") }, text = { Text("この点検と、点検に含まれる写真を削除します。") }, confirmButton = { TextButton(onClick = { confirming = false; onDelete() }) { Text("削除する") } }, dismissButton = { TextButton(onClick = { confirming = false }) { Text("キャンセル") } })
 }
