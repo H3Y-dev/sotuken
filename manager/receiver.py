@@ -183,6 +183,8 @@ def validate_sidecar_metadata(data: Dict[str, Any]) -> Optional[str]:
     if "inspection_id" in data or "inspection_name" in data:
         data["inspection_id"], data["inspection_name"] = normalize_inspection(
             data.get("inspection_id"), data.get("inspection_name"))
+    if "route_id" in data:
+        data["route_id"] = normalize_inspection(data.get("route_id"), None)[0]
     for key, limit in SIDECAR_STRING_LIMITS.items():
         value = data.get(key)
         if value is None:
@@ -285,6 +287,16 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
         if not self._check_ip_allowed():
             return
 
+        if self.path == "/routes" or self.path.startswith("/routes/"):
+            if not self._check_token():
+                return
+            from manager.storage import Storage
+            from manager.routes import list_routes, get_route
+            storage = Storage(self.server.db_path)
+            result = list_routes(storage) if self.path == "/routes" else get_route(storage, self.path[len('/routes/'):])
+            self._send_json(200 if result is not None else 404, result or {"error": "ルートがありません"})
+            return
+
         if self.path == "/health":
             if self.server.token and not self._check_token():
                 return
@@ -335,8 +347,48 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             return
         self._send_json(200, result)
 
+    def _manifest(self, inspection_id):
+        self.close_connection = True
+        try:
+            if self.headers.get('Transfer-Encoding') or len(self.headers.get_all('Content-Length', [])) != 1:
+                raise ValueError('Content-Lengthが必要です')
+            size = int(self.headers.get('Content-Length', ''))
+            if size > MAX_BODY_SIZE:
+                self._send_json(413, {'error': 'manifestが大きすぎます'})
+                return
+            if size <= 0 or self.headers.get_content_type() != 'application/json':
+                raise ValueError('JSONが必要です')
+            deadline = time.monotonic() + self.server.upload_timeout
+            body = bytearray()
+            while len(body) < size:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError
+                self.connection.settimeout(remaining)
+                chunk = self.rfile.read1(min(65536, size - len(body)))
+                if not chunk:
+                    raise ValueError('本文が不足しています')
+                body.extend(chunk)
+            data = json.loads(body.decode('utf-8'))
+            from manager.storage import Storage
+            from manager.routes import save_manifest
+            result = save_manifest(Storage(self.server.db_path), inspection_id, data, self.server.incoming_dir)
+        except (ValueError, UnicodeError, RecursionError):
+            self._send_json(400, {'error': 'manifestのJSONが不正です'})
+            return
+        except (TimeoutError, OSError):
+            self._send_json(408, {'error': 'manifestの読み取りがタイムアウトしました'})
+            return
+        self._send_json(200, result)
+
     def do_POST(self) -> None:
         if not self._check_ip_allowed():
+            return
+
+        match = re.fullmatch(r"/inspections/([A-Za-z0-9._-]{1,64})/manifest", self.path)
+        if match:
+            if self._check_token():
+                self._manifest(match.group(1))
             return
 
         if self.path == "/pair":
@@ -540,6 +592,7 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         receiver_id: Optional[str] = None,
         max_concurrent_uploads: int = MAX_CONCURRENT_UPLOADS,
         upload_timeout: float = UPLOAD_TIMEOUT,
+        db_path: str = "manager.db",
     ):
         self.pair_lock = threading.Lock()
         self._invitation = None
@@ -547,6 +600,7 @@ class ReceiverServer(http.server.ThreadingHTTPServer):
         self.upload_lock = threading.Lock()
         self.upload_slots = threading.BoundedSemaphore(max_concurrent_uploads)
         self.upload_timeout = upload_timeout
+        self.db_path = os.path.abspath(db_path)
         self.token = token
         self.receiver_id = receiver_id or str(uuid.uuid4())
         self.pc_name = "".join(c for c in socket.gethostname() if c.isprintable())[:64] or "PC"
@@ -754,6 +808,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=None, help="待ち受けポート番号（デフォルト: pc_config.json または 8765）")
     parser.add_argument("--incoming", type=str, default=None, help="保存先ディレクトリ（デフォルト: incoming/）")
     parser.add_argument("--config", type=str, default=None, help="設定ファイルパス（デフォルト: manager/pc_config.json）")
+    parser.add_argument("--db", default="manager.db", help="画面と共有するSQLite DBのパス")
     args = parser.parse_args()
 
     config = load_or_create_pc_config(args.config)
@@ -769,7 +824,7 @@ def main() -> None:
     print("[受信口] 停止するには Ctrl+C を押してください。")
 
     server = ReceiverServer(("0.0.0.0", port), token=token, incoming_dir=incoming_dir,
-                            receiver_id=config["receiver_id"])
+                            receiver_id=config["receiver_id"], db_path=args.db)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

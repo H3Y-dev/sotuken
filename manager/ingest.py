@@ -112,9 +112,9 @@ def apply_sidecar(storage: Storage, image_sha256: str, sidecar: Optional[Sidecar
                 "device_id_issue = ?, device_name = ?, input_method = ?, "
                 "captured_at = COALESCE(?, captured_at), "
                 "inspection_name = CASE WHEN inspection_id IS NULL THEN ? ELSE inspection_name END, "
-                "inspection_id = COALESCE(inspection_id, ?) WHERE id = ?",
+                "inspection_id = COALESCE(inspection_id, ?), route_id = COALESCE(route_id, ?) WHERE id = ?",
                 (device_id, source, issue, name or UNKNOWN_DEVICE, judge_input_method(value, truth["operator_value"]),
-                 sidecar.captured_at, inspection_name, inspection_id, row_id),
+                 sidecar.captured_at, inspection_name, inspection_id, sidecar.route_id, row_id),
             )
     if register:
         _register_device(storage, incoming_id, sidecar.device_name, incoming_source)
@@ -172,6 +172,7 @@ def ingest_result(
     _register_device(storage, device_id, registration_name, device_id_source)
 
     save_data = {k: v for k, v in result.items() if k != "ticks"}
+    save_data["route_id"] = getattr(sidecar, "route_id", None)
     save_data["inspection_id"] = getattr(sidecar, "inspection_id", None)
     save_data["inspection_name"] = getattr(sidecar, "inspection_name", None)
     save_data["pipeline_version"] = _pipeline_version(result)

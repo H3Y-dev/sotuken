@@ -107,7 +107,7 @@ def export_to_csv(readings, output_path):
         # ヘッダー行（確定スキーマに対応）
         writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path",
                          "device_id", "device_id_source", "device_id_issue", "pipeline_version", "received_at", "image_rel",
-                         "inspection_id", "inspection_name"])
+                         "inspection_id", "inspection_name", "route_id"])
         for r in readings:
             writer.writerow([
                 _field(r, "reading_id", "id"),
@@ -119,7 +119,7 @@ def export_to_csv(readings, output_path):
                 _field(r, "image_path"),
                 *[_field(r, field) for field in ("device_id", "device_id_source", "device_id_issue",
                                                "pipeline_version", "received_at", "image_rel",
-                                               "inspection_id", "inspection_name")],
+                                               "inspection_id", "inspection_name", "route_id")],
             ])
 
 
@@ -129,7 +129,7 @@ def export_to_jsonl(readings, output_path):
         "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
         "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
         "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
-        "device_id", "device_id_source", "device_id_issue", "image_rel", "inspection_id", "inspection_name",
+        "device_id", "device_id_source", "device_id_issue", "image_rel", "inspection_id", "inspection_name", "route_id",
     ]
     aliases = {"reading_id": ("id",), "status": ("stage",)}
     with open(output_path, "w", encoding="utf-8") as f:

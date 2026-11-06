@@ -48,9 +48,9 @@ class TestExportToCsv(unittest.TestCase):
             lines = [line.strip() for line in f.readlines()]
 
         self.assertEqual(len(lines), 3)
-        self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path,device_id,device_id_source,device_id_issue,pipeline_version,received_at,image_rel,inspection_id,inspection_name")
-        self.assertEqual(lines[1], "1,2026-08-20 10:00:00,meter1,10.5,ok,,a.jpg,,,,,,,,")
-        self.assertEqual(lines[2], "2,2026-08-20 11:00:00,meter2,20.0,failed,needle,b.jpg,,,,,,,,")
+        self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path,device_id,device_id_source,device_id_issue,pipeline_version,received_at,image_rel,inspection_id,inspection_name,route_id")
+        self.assertEqual(lines[1], "1,2026-08-20 10:00:00,meter1,10.5,ok,,a.jpg,,,,,,,,,")
+        self.assertEqual(lines[2], "2,2026-08-20 11:00:00,meter2,20.0,failed,needle,b.jpg,,,,,,,,,")
 
     def test_empty_list_writes_header_only(self):
         with tempfile.TemporaryDirectory() as d:
@@ -59,7 +59,7 @@ class TestExportToCsv(unittest.TestCase):
             with open(path, "r", encoding="utf-8-sig") as f:
                 lines = [line.strip() for line in f.readlines()]
             self.assertEqual(len(lines), 1)
-            self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path,device_id,device_id_source,device_id_issue,pipeline_version,received_at,image_rel,inspection_id,inspection_name")
+            self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path,device_id,device_id_source,device_id_issue,pipeline_version,received_at,image_rel,inspection_id,inspection_name,route_id")
 
     def test_filter_by_device_name(self):
         readings = [
@@ -198,7 +198,7 @@ class TestExportToJsonl(unittest.TestCase):
             "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
             "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
             "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
-            "device_id", "device_id_source", "device_id_issue", "image_rel", "inspection_id", "inspection_name",
+            "device_id", "device_id_source", "device_id_issue", "image_rel", "inspection_id", "inspection_name", "route_id",
         ]
         readings = [
             {

@@ -27,6 +27,7 @@ class SidecarMetadata:
     device_id_issue: Optional[Literal["id_invalid"]] = None
     inspection_id: Optional[str] = None
     inspection_name: Optional[str] = None
+    route_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -141,6 +142,7 @@ def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
 
     inspection_id, inspection_name = normalize_inspection(data.get("inspection_id"), data.get("inspection_name"))
     return SidecarMetadata(
+        route_id=normalize_inspection(data.get("route_id"), None)[0],
         inspection_id=inspection_id,
         inspection_name=inspection_name,
         local_id=local_id,
