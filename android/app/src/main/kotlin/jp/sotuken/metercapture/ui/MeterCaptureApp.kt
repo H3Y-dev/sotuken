@@ -44,6 +44,11 @@ import jp.sotuken.metercapture.settings.DeviceIdSettings
 import jp.sotuken.metercapture.settings.PrivateIpv4Validator
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.LaunchedEffect
+import jp.sotuken.metercapture.queue.sender.HttpSender
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
@@ -63,14 +68,46 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     val deviceIdSettings = remember { DeviceIdSettings(context) }
     var heldDevice by remember { mutableStateOf<HeldDevice?>(deviceIdSettings.get()) }
     var deviceQrScanning by remember { mutableStateOf(false) }
-	var showHistoryScreen by remember { mutableStateOf(false) }
-	val deviceNameCandidates = remember(queueItems) { buildDeviceNameCandidates(queueItems) }
+    var showHistoryScreen by remember { mutableStateOf(false) }
+    val deviceNameCandidates = remember(queueItems) { buildDeviceNameCandidates(queueItems) }
     // 入力済みの機器名は撮影のたびに残す。まだ触っていなければ、直前に撮った機器名を初期値にする。
     var deviceNameEdited by rememberSaveable { mutableStateOf<String?>(heldDevice?.name) }
     val deviceNameInput = deviceNameEdited ?: deviceNameCandidates.firstOrNull().orEmpty()
     var operatorValueInput by rememberSaveable { mutableStateOf("") }
 
     val coroutineScope = rememberCoroutineScope()
+    // 接続状況バー用の状態（SK-09）
+    val receiverSettings = remember { ReceiverSettings(context) }
+    var settingsVersion by remember { mutableStateOf(0) }
+    val configured = remember(settingsVersion) { receiverSettings.isConfigured() }
+    var healthOk by remember { mutableStateOf<Boolean?>(null) }
+    var healthReason by remember { mutableStateOf("") }
+    var healthInFlight by remember { mutableStateOf(false) }
+    var healthGeneration by remember { mutableStateOf(0) }
+    var isResumed by remember { mutableStateOf(false) }
+    var showStatusDialog by remember { mutableStateOf(false) }
+
+    fun checkHealth(force: Boolean = false) {
+        val url = receiverSettings.getUrl()
+        val token = receiverSettings.getToken()
+        if (!receiverSettings.isConfigured() || url.isNullOrBlank() || token.isNullOrBlank()) {
+            healthOk = null
+            return
+        }
+        if (healthInFlight && !force) return
+        healthInFlight = true
+        healthGeneration += 1
+        val generation = healthGeneration
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) { HttpSender.health(url, token) }
+            if (generation == healthGeneration) {
+                healthOk = result.isSuccess
+                healthReason = classifyHealthFailure(result.exceptionOrNull())
+                healthInFlight = false
+            }
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -80,108 +117,145 @@ fun MeterCaptureApp(queueStore: QueueStore) {
         hasCameraPermission =
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
+        isResumed = true
+        checkHealth()
     }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { isResumed = false }
+    LaunchedEffect(isResumed) {
+        if (isResumed) {
+            while (true) {
+                delay(15_000)
+                checkHealth()
+            }
+        }
+    }
+
+    val barState = connectionBarState(configured, healthOk)
+    val undelivered = countUndelivered(queueItems)
+    val lastSentText = formatHHmm(latestHttpSentAt(queueItems))
+    val barText = connectionBarText(barState, undelivered, lastSentText, healthReason)
+    val lastFailure = queueItems
+        .filter { !it.lastError.isNullOrBlank() }
+        .maxByOrNull { it.capturedAt }
+        ?.lastError
 
     MaterialTheme {
         Scaffold { innerPadding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(innerPadding),
             ) {
-                Text(text = "メーター撮影", style = MaterialTheme.typography.headlineMedium)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(text = "キュー: ${queueItems.size}件")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { showHistoryScreen = true }) {
-                            Text("履歴")
+                ConnectionBar(
+                    state = barState,
+                    text = barText,
+                    onClick = {
+                        if (barState == ConnectionBarState.NOT_CONFIGURED) {
+                            showSettingsDialog = true
+                        } else {
+                            showStatusDialog = true
                         }
-                        OutlinedButton(onClick = { showSettingsDialog = true }) {
-                            Text("送信先の設定")
-                        }
-                    }
-                }
-
-                DeviceQrSection(
-                    held = heldDevice,
-                    onScanningChange = { deviceQrScanning = it },
-                    onUse = { qr ->
-                        val device = HeldDevice(qr.id, qr.name)
-                        deviceIdSettings.save(device)
-                        heldDevice = device
-                        deviceNameEdited = qr.name
-                    },
-                    onClear = {
-                        deviceIdSettings.clear()
-                        heldDevice = null
                     },
                 )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(text = "メーター撮影", style = MaterialTheme.typography.headlineMedium)
 
-                if (hasCameraPermission && !showPairingScreen && !deviceQrScanning) {
-                	CaptureMetaForm(
-                        deviceName = deviceNameInput,
-                        onDeviceNameChange = {
-                            deviceNameEdited = it
-                            val kept = heldDeviceAfterNameEdit(heldDevice, it)
-                            if (kept == null && heldDevice != null) deviceIdSettings.clear()
-                            heldDevice = kept
-                        },
-                        operatorValue = operatorValueInput,
-                        onOperatorValueChange = { operatorValueInput = it },
-                        deviceNameCandidates = deviceNameCandidates,
-                    )
-                    CameraCapturePanel(
-                        onSaved = { image ->
-                            coroutineScope.launch {
-                                try {
-                                    queueStore.enqueue(
-                                        imageFile = image.file,
-                                        meta = CaptureMeta(
-                                            deviceName = normalizeDeviceName(deviceNameInput),
-                                            operatorValue = parseOperatorValue(operatorValueInput),
-                                            operatorNote = null,
-                                            deviceId = deviceIdForCapture(heldDevice, deviceNameInput),
-                                            deviceIdSource = deviceIdSourceForCapture(heldDevice, deviceNameInput),
-                                        ),
-                                    )
-                                    try {
-                                        QueueSendScheduler.enqueueSend(context)
-                                    } catch (_: Exception) {
-                                    }
-                                    capturedImage = image
-                                    operatorValueInput = ""
-                                    errorMessage = null
-                                } catch (error: Exception) {
-                                    capturedImage = null
-                                    errorMessage = "キューへの追加に失敗しました: ${error.message ?: error}"
-                                }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = "キュー: ${queueItems.size}件")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { showHistoryScreen = true }) {
+                                Text("履歴")
                             }
+                            OutlinedButton(onClick = { showSettingsDialog = true }) {
+                                Text("送信先の設定")
+                            }
+                        }
+                    }
+
+                    DeviceQrSection(
+                        held = heldDevice,
+                        onScanningChange = { deviceQrScanning = it },
+                        onUse = { qr ->
+                            val device = HeldDevice(qr.id, qr.name)
+                            deviceIdSettings.save(device)
+                            heldDevice = device
+                            deviceNameEdited = qr.name
                         },
-                        onError = {
-                            capturedImage = null
-                            errorMessage = it
+                        onClear = {
+                            deviceIdSettings.clear()
+                            heldDevice = null
                         },
                     )
-                } else {
-                    Text("カメラの使用を許可してください")
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                        Text("許可")
+
+                    if (hasCameraPermission && !showPairingScreen && !deviceQrScanning) {
+                        CaptureMetaForm(
+                            deviceName = deviceNameInput,
+                            onDeviceNameChange = {
+                                deviceNameEdited = it
+                                val kept = heldDeviceAfterNameEdit(heldDevice, it)
+                                if (kept == null && heldDevice != null) deviceIdSettings.clear()
+                                heldDevice = kept
+                            },
+                            operatorValue = operatorValueInput,
+                            onOperatorValueChange = { operatorValueInput = it },
+                            deviceNameCandidates = deviceNameCandidates,
+                        )
+                        CameraCapturePanel(
+                            onSaved = { image ->
+                                coroutineScope.launch {
+                                    try {
+                                        queueStore.enqueue(
+                                            imageFile = image.file,
+                                            meta = CaptureMeta(
+                                                deviceName = normalizeDeviceName(deviceNameInput),
+                                                operatorValue = parseOperatorValue(operatorValueInput),
+                                                operatorNote = null,
+                                                deviceId = deviceIdForCapture(heldDevice, deviceNameInput),
+                                                deviceIdSource = deviceIdSourceForCapture(heldDevice, deviceNameInput),
+                                            ),
+                                        )
+                                        try {
+                                            QueueSendScheduler.enqueueSend(context)
+                                        } catch (_: Exception) {
+                                        }
+                                        capturedImage = image
+                                        operatorValueInput = ""
+                                        errorMessage = null
+                                        checkHealth()
+                                    } catch (error: Exception) {
+                                        capturedImage = null
+                                        errorMessage = "キューへの追加に失敗しました: ${error.message ?: error}"
+                                    }
+                                }
+                            },
+                            onError = {
+                                capturedImage = null
+                                errorMessage = it
+                            },
+                        )
+                    } else {
+                        Text("カメラの使用を許可してください")
+                        Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                            Text("許可")
+                        }
                     }
-                }
 
-                capturedImage?.let { Text("キューに追加しました: ${it.file.name}") }
-                errorMessage?.let {
-                    Text(text = it, color = MaterialTheme.colorScheme.error)
-                }
+                    capturedImage?.let { Text("キューに追加しました: ${it.file.name}") }
+                    errorMessage?.let {
+                        Text(text = it, color = MaterialTheme.colorScheme.error)
+                    }
 
-                // TODO(SKくん): ガイド枠・キュー一覧・入力フォームを実装する。Sprint 3
+                    // TODO(SKくん): ガイド枠・キュー一覧・入力フォームを実装する。Sprint 3
+                }
             }
         }
         if (showHistoryScreen) {
@@ -217,18 +291,22 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 },
             )
         }
-        
+
         if (showPairingScreen) {
             PairingScreen(
                 pendingCount = queueItems.count {
                     it.sendState != jp.sotuken.metercapture.queue.SendState.SENT ||
                         it.sentVia != jp.sotuken.metercapture.queue.QueueItem.VIA_HTTP
                 },
-                onClose = { showPairingScreen = false },
+                onClose = {
+                    showPairingScreen = false
+                    settingsVersion += 1
+                    healthOk = null
+                    checkHealth(force = true)
+                },
             )
         }
         if (showSettingsDialog) {
-            val receiverSettings = remember { ReceiverSettings(context) }
             var urlInput by remember { mutableStateOf(receiverSettings.getUrl() ?: "") }
             var tokenInput by remember { mutableStateOf(receiverSettings.getToken() ?: "") }
             var validationError by remember { mutableStateOf<String?>(null) }
@@ -283,6 +361,9 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                         validationError = "合言葉を入力してください"
                                     } else {
                                         receiverSettings.save(urlInput, tokenInput)
+                                        settingsVersion += 1
+                                        healthOk = null
+                                        checkHealth(force = true)
                                         try {
                                             QueueSendScheduler.enqueueSend(context)
                                         } catch (_: Exception) {
@@ -299,6 +380,26 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 dismissButton = {
                     TextButton(onClick = { showSettingsDialog = false }) {
                         Text("キャンセル")
+                    }
+                },
+            )
+        }
+        if (showStatusDialog) {
+            AlertDialog(
+                onDismissRequest = { showStatusDialog = false },
+                title = { Text("接続の詳細") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("接続の結果: ${connectionResultLabel(barState, healthReason)}")
+                        Text("PCのURL: ${receiverSettings.getUrl() ?: "未設定"}")
+                        Text("最終送信: $lastSentText")
+                        Text("未着: ${undelivered}件")
+                        Text("直近の失敗の理由: ${lastFailure ?: "なし"}")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showStatusDialog = false }) {
+                        Text("閉じる")
                     }
                 },
             )
