@@ -19,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,15 +37,14 @@ import jp.sotuken.metercapture.capture.CapturedImage
 import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueSendScheduler
 import jp.sotuken.metercapture.queue.QueueStore
+import jp.sotuken.metercapture.queue.sender.HttpSender
 import jp.sotuken.metercapture.settings.PrivateIpv4Validator
 import jp.sotuken.metercapture.settings.ReceiverSettings
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.LaunchedEffect
-import jp.sotuken.metercapture.queue.sender.HttpSender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
 fun MeterCaptureApp(queueStore: QueueStore) {
@@ -59,6 +59,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     var capturedImage by remember { mutableStateOf<CapturedImage?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showPairingScreen by remember { mutableStateOf(false) }
     var showHistoryScreen by remember { mutableStateOf(false) }
     val deviceNameCandidates = remember(queueItems) { buildDeviceNameCandidates(queueItems) }
     // 入力済みの機器名は撮影のたびに残す。まだ触っていなければ、直前に撮った機器名を初期値にする。
@@ -67,6 +68,8 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     var operatorValueInput by rememberSaveable { mutableStateOf("") }
 
     val coroutineScope = rememberCoroutineScope()
+
+    // 接続状況バー用の状態（SK-09）
     val receiverSettings = remember { ReceiverSettings(context) }
     var settingsVersion by remember { mutableStateOf(0) }
     val configured = remember(settingsVersion) { receiverSettings.isConfigured() }
@@ -97,7 +100,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
             }
         }
     }
-    
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -128,7 +131,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
         .filter { !it.lastError.isNullOrBlank() }
         .maxByOrNull { it.capturedAt }
         ?.lastError
-        
+
     MaterialTheme {
         Scaffold { innerPadding ->
             Column(
@@ -171,7 +174,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                         }
                     }
 
-                    if (hasCameraPermission) {
+                    if (hasCameraPermission && !showPairingScreen) {
                         CaptureMetaForm(
                             deviceName = deviceNameInput,
                             onDeviceNameChange = { deviceNameEdited = it },
@@ -227,11 +230,42 @@ fun MeterCaptureApp(queueStore: QueueStore) {
             }
         }
         if (showHistoryScreen) {
-            QueueListScreen(items = queueItems, onClose = { showHistoryScreen = false })
+            QueueListScreen(
+                items = queueItems,
+                onClose = { showHistoryScreen = false },
+                onRetry = { localId ->
+                    coroutineScope.launch {
+                        try {
+                            queueStore.retry(localId)
+                            QueueSendScheduler.enqueueSend(context)
+                        } catch (_: Exception) {
+                        }
+                    }
+                },
+                onSendNow = {
+                    try {
+                        QueueSendScheduler.enqueueSend(context)
+                    } catch (_: Exception) {
+                    }
+                },
+            )
         }
-        
+
+        if (showPairingScreen) {
+            PairingScreen(
+                pendingCount = queueItems.count {
+                    it.sendState != jp.sotuken.metercapture.queue.SendState.SENT ||
+                        it.sentVia != jp.sotuken.metercapture.queue.QueueItem.VIA_HTTP
+                },
+                onClose = {
+                    showPairingScreen = false
+                    settingsVersion += 1
+                    healthOk = null
+                    checkHealth(force = true)
+                },
+            )
+        }
         if (showSettingsDialog) {
-            val receiverSettings = remember { ReceiverSettings(context) }
             var urlInput by remember { mutableStateOf(receiverSettings.getUrl() ?: "") }
             var tokenInput by remember { mutableStateOf(receiverSettings.getToken() ?: "") }
             var validationError by remember { mutableStateOf<String?>(null) }
@@ -241,6 +275,10 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 title = { Text("送信先の設定") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            showSettingsDialog = false
+                            showPairingScreen = true
+                        }) { Text("QRで登録") }
                         OutlinedTextField(
                             value = urlInput,
                             onValueChange = {
@@ -282,6 +320,13 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                         validationError = "合言葉を入力してください"
                                     } else {
                                         receiverSettings.save(urlInput, tokenInput)
+                                        settingsVersion += 1
+                                        healthOk = null
+                                        checkHealth(force = true)
+                                        try {
+                                            QueueSendScheduler.enqueueSend(context)
+                                        } catch (_: Exception) {
+                                        }
                                         showSettingsDialog = false
                                     }
                                 }
@@ -294,6 +339,26 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 dismissButton = {
                     TextButton(onClick = { showSettingsDialog = false }) {
                         Text("キャンセル")
+                    }
+                },
+            )
+        }
+        if (showStatusDialog) {
+            AlertDialog(
+                onDismissRequest = { showStatusDialog = false },
+                title = { Text("接続の詳細") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("接続の結果: ${connectionResultLabel(barState, healthReason)}")
+                        Text("PCのURL: ${receiverSettings.getUrl() ?: "未設定"}")
+                        Text("最終送信: $lastSentText")
+                        Text("未着: ${undelivered}件")
+                        Text("直近の失敗の理由: ${lastFailure ?: "なし"}")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showStatusDialog = false }) {
+                        Text("閉じる")
                     }
                 },
             )

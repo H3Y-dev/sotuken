@@ -6,6 +6,7 @@ import java.io.File
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.util.Base64
 import kotlin.concurrent.thread
 import jp.sotuken.metercapture.queue.QueueItem
@@ -31,6 +32,8 @@ class HttpSenderTest {
     @Volatile private var lastReceivedBody: ByteArray? = null
 
     private val validToken = "test-secret-token"
+    @Volatile private var uploadStatus: String = "200 OK"
+    @Volatile private var loseUploadResponse = false
 
     @Before
     fun setUp() {
@@ -63,9 +66,11 @@ class HttpSenderTest {
                             lastReceivedSha256 = headers["x-image-sha256"]
                             lastReceivedBody = body
                         }
-                        val status = if (headers["x-sotuken-token"] == validToken) "200 OK" else "401 Unauthorized"
+                        val status = if (headers["x-sotuken-token"] == validToken) uploadStatus else "401 Unauthorized"
                         val response = """{"ok":true}""".toByteArray(Charsets.UTF_8)
-                        socket.getOutputStream().apply {
+                        if (loseUploadResponse && requestLine.startsWith("POST /upload ")) {
+                            Thread.sleep(300)
+                        } else socket.getOutputStream().apply {
                             write(("HTTP/1.1 $status\r\nContent-Type: application/json\r\n" +
                                 "Content-Length: ${response.size}\r\nConnection: close\r\n\r\n").toByteArray(Charsets.US_ASCII))
                             write(response)
@@ -101,21 +106,21 @@ class HttpSenderTest {
     }
 
     @Test
-    fun healthCheckReturnsSuccessWhenTokenMatches() {
+    fun healthCheckReturnsSuccessWhenTokenMatches() = runTest {
         val result = HttpSender.health("http://127.0.0.1:$serverPort", validToken)
         assertTrue(result.isSuccess)
         assertEquals("GET /health HTTP/1.1", lastRequestLine)
     }
 
     @Test
-    fun healthCheckReturnsFailureWhenTokenMismatches() {
+    fun healthCheckReturnsFailureWhenTokenMismatches() = runTest {
         val result = HttpSender.health("http://127.0.0.1:$serverPort", "wrong-token")
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.message?.contains("401") == true)
     }
 
     @Test
-    fun healthCheckReturnsFailureWhenConnectionRefused() {
+    fun healthCheckReturnsFailureWhenConnectionRefused() = runTest {
         val unusedPort = findUnusedPort()
         val result = HttpSender.health("http://127.0.0.1:$unusedPort", validToken)
         assertTrue(result.isFailure)
@@ -248,5 +253,44 @@ class HttpSenderTest {
         val port = socket.localPort
         socket.close()
         return port
+    }
+
+    @Test
+    fun uploadClassifiesHttpResponses() = runTest {
+        val image = File.createTempFile("http-status-", ".jpg").apply { writeText("image") }
+        try {
+            val item = QueueItem("status", image.path, "2026-11-06T00:00:00Z", null,
+                null, null, SendState.SENDING, 0, null, null)
+            val sender = HttpSender("http://127.0.0.1:$serverPort", validToken)
+            for (code in listOf(200, 201, 204, 400, 413, 401, 403, 404, 503)) {
+                uploadStatus = "$code Test"
+                val result = sender.send(item)
+                if (code in 200..299) {
+                    assertTrue("HTTP $code", result.isSuccess)
+                } else {
+                    assertEquals("HTTP $code", code == 400 || code == 413,
+                        result.exceptionOrNull() is PermanentSendException)
+                    assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("HTTP $code"))
+                }
+            }
+        } finally {
+            image.delete()
+        }
+    }
+
+    @Test
+    fun uploadSavedButResponseLostReturnsTemporaryIoFailure() = runTest {
+        val image = File.createTempFile("http-timeout-", ".jpg").apply { writeText("saved-image") }
+        try {
+            loseUploadResponse = true
+            val item = QueueItem("timeout", image.path, "2026-11-06T00:00:00Z", null,
+                null, null, SendState.SENDING, 0, null, null)
+            val result = HttpSender("http://127.0.0.1:$serverPort", validToken,
+                readTimeoutMs = 100).send(item)
+            assertTrue(result.exceptionOrNull() is SocketTimeoutException)
+            assertEquals("saved-image", lastReceivedBody?.toString(Charsets.UTF_8))
+        } finally {
+            image.delete()
+        }
     }
 }

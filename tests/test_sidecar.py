@@ -129,5 +129,106 @@ class TestSidecar(unittest.TestCase):
         self.assertEqual(metadata.operator_value, 200.0)
 
 
+class TestSidecarDeviceMetadata(unittest.TestCase):
+    def load_metadata(self, data):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "meter.json")
+            with open(path, "w", encoding="utf-8") as stream:
+                json.dump(data, stream)
+            metadata = load_sidecar(path)
+        self.assertIsNotNone(metadata)
+        return metadata
+
+    def test_valid_device_ids_are_trimmed_and_preserved(self):
+        for device_id in (" A-z_0.9 ", "a", "A" * 32):
+            with self.subTest(device_id=device_id):
+                metadata = self.load_metadata({"device_id": device_id})
+                self.assertEqual(metadata.device_id, device_id.strip())
+                self.assertIsNone(metadata.device_id_issue)
+
+    def test_invalid_device_ids_have_issue(self):
+        for device_id in ("圧力計", "A B", "a" * 33, "A/B", "A!", 123, False, [], {}):
+            with self.subTest(device_id=device_id):
+                metadata = self.load_metadata({"device_id": device_id})
+                self.assertIsNone(metadata.device_id)
+                self.assertEqual(metadata.device_id_issue, "id_invalid")
+
+    def test_missing_device_ids_have_no_issue(self):
+        for data in ({}, {"device_id": None}, {"device_id": ""}, {"device_id": "  "}):
+            with self.subTest(data=data):
+                metadata = self.load_metadata(data)
+                self.assertIsNone(metadata.device_id)
+                self.assertIsNone(metadata.device_id_issue)
+
+    def test_unknown_device_id_is_missing(self):
+        for device_id in ("unknown", "UNKNOWN", " UnKnOwN "):
+            with self.subTest(device_id=device_id):
+                metadata = self.load_metadata({"device_id": device_id})
+                self.assertIsNone(metadata.device_id)
+                self.assertIsNone(metadata.device_id_issue)
+
+    def test_device_id_source_is_validated(self):
+        for source in ("qr", "manual", None, "QR", "other", "", 123, [], {}):
+            with self.subTest(source=source):
+                metadata = self.load_metadata({"device_id": "P-101", "device_id_source": source})
+                self.assertEqual(metadata.device_id_source, source if source in ("qr", "manual") else None)
+
+    def test_device_id_source_requires_device_id(self):
+        for device_id in (None, "", "unknown", "不正"):
+            with self.subTest(device_id=device_id):
+                metadata = self.load_metadata({"device_id": device_id, "device_id_source": "qr"})
+                self.assertIsNone(metadata.device_id_source)
+
+    def test_legacy_json_still_loads(self):
+        metadata = self.load_metadata({"device_name": "P-101", "operator_value": 2.5})
+        self.assertEqual(metadata.device_name, "P-101")
+        self.assertEqual(metadata.operator_value, 2.5)
+        self.assertIsNone(metadata.device_id)
+        self.assertIsNone(metadata.device_id_source)
+        self.assertIsNone(metadata.device_id_issue)
+
+    def test_to_dict_includes_new_optional_fields(self):
+        self.assertEqual(SidecarMetadata().to_dict(), {
+            "local_id": None, "captured_at": None, "device_name": None,
+            "operator_value": None, "operator_note": None, "scale_min": None,
+            "scale_max": None, "device_id": None, "device_id_source": None,
+            "device_id_issue": None,
+        })
+        metadata = self.load_metadata({"device_id": "P-101", "device_id_source": "manual"})
+        self.assertEqual(metadata.to_dict()["device_id"], "P-101")
+        self.assertEqual(metadata.to_dict()["device_id_source"], "manual")
+        self.assertEqual(self.load_metadata({"device_id": "!"}).to_dict()["device_id_issue"], "id_invalid")
+
+    def test_normalize_captured_at(self):
+        from manager.sidecar import normalize_captured_at
+
+        cases = (
+            ("2026-10-30T09:12:00+09:00", "2026-10-30T00:12:00Z"),
+            ("2026-10-30T00:12:00Z", "2026-10-30T00:12:00Z"),
+            ("2026-10-30T00:12:00+00:00", "2026-10-30T00:12:00Z"),
+            ("2026-10-30T09:12:00.999999+09:00", "2026-10-30T00:12:00Z"),
+            ("2026-10-30T00:12:00.123Z", "2026-10-30T00:12:00Z"),
+            ("2026-10-30T00:12:00-05:00", "2026-10-30T05:12:00Z"),
+            ("2026-10-30T00:12:00+09:00", "2026-10-29T15:12:00Z"),
+            ("2026-10-30T09:12:00", "2026-10-30T09:12:00"),
+            ("2026-10-30T09:12:00.123", "2026-10-30T09:12:00.123"),
+            ("not-a-date", None), ("2026-02-30T00:00:00Z", None),
+            ("0001-01-01T00:00:00+09:00", None),
+            ("", None), (None, None), (123, None), ([], None),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(normalize_captured_at(text), expected)
+
+    def test_load_sidecar_normalizes_captured_at(self):
+        for text, expected in (
+            ("2026-10-30T09:12:00+09:00", "2026-10-30T00:12:00Z"),
+            ("2026-10-30T09:12:00", "2026-10-30T09:12:00"),
+            ("not-a-date", None), (None, None), (123, None),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(self.load_metadata({"captured_at": text}).captured_at, expected)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,13 +1,16 @@
+import csv
 import json
 import os
 import tempfile
 import unittest
 from datetime import date
+from types import SimpleNamespace
 from manager.export import (
     export_to_csv,
     export_to_jsonl,
     filter_readings,
     group_by_device,
+    latest_per_device,
     readings_to_series,
 )
 from manager.storage import MeterReading
@@ -45,9 +48,9 @@ class TestExportToCsv(unittest.TestCase):
             lines = [line.strip() for line in f.readlines()]
 
         self.assertEqual(len(lines), 3)
-        self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path")
-        self.assertEqual(lines[1], "1,2026-08-20 10:00:00,meter1,10.5,ok,,a.jpg")
-        self.assertEqual(lines[2], "2,2026-08-20 11:00:00,meter2,20.0,failed,needle,b.jpg")
+        self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path,device_id,device_id_source,device_id_issue,pipeline_version,received_at,image_rel")
+        self.assertEqual(lines[1], "1,2026-08-20 10:00:00,meter1,10.5,ok,,a.jpg,,,,,,")
+        self.assertEqual(lines[2], "2,2026-08-20 11:00:00,meter2,20.0,failed,needle,b.jpg,,,,,,")
 
     def test_empty_list_writes_header_only(self):
         with tempfile.TemporaryDirectory() as d:
@@ -56,7 +59,7 @@ class TestExportToCsv(unittest.TestCase):
             with open(path, "r", encoding="utf-8-sig") as f:
                 lines = [line.strip() for line in f.readlines()]
             self.assertEqual(len(lines), 1)
-            self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path")
+            self.assertEqual(lines[0], "reading_id,captured_at,device_name,value,status,failure_stage,image_path,device_id,device_id_source,device_id_issue,pipeline_version,received_at,image_rel")
 
     def test_filter_by_device_name(self):
         readings = [
@@ -116,6 +119,26 @@ class TestExportToCsv(unittest.TestCase):
 
 
 class TestFilterReadings(unittest.TestCase):
+    def test_coalesced_dates(self):
+        rows = [SimpleNamespace(id=i, device_name="meter", captured_at=c, received_at=r,
+                                timestamp="2026-08-23T00:00:00") for i, c, r in [
+            (1, "2026-08-21T01:00:00Z", "2026-08-22T00:00:00"),
+            (2, None, "2026-08-21T02:00:00"),
+            (3, None, None),
+        ]]
+        self.assertEqual([r.id for r in filter_readings(rows, date_from=date(2026, 8, 21),
+                                                      date_to=date(2026, 8, 21))], [1, 2])
+
+    def test_latest_coalesces_dates_and_breaks_ties_by_id(self):
+        rows = [dict(id=i, device_name=name, captured_at=c, received_at=r, timestamp=t,
+                     status="ok") for i, name, c, r, t in [
+            (1, "a", "2026-08-21T01:00:00Z", None, "2026-08-24T00:00:00"),
+            (2, "a", None, "2026-08-22T01:00:00", "2026-08-23T00:00:00"),
+            (3, "a", None, None, "2026-08-22T01:00:00"),
+            (4, "b", "2026-08-22T01:00:00+00:00", None, "2026-08-20T00:00:00"),
+        ]]
+        self.assertEqual([r["id"] for r in latest_per_device(rows)], [4, 3])
+
     def setUp(self):
         self.readings = [
             MeterReading("meter1", 10.0, "ok", "a.jpg", id=1, timestamp="2026-08-20 23:59:59"),
@@ -166,7 +189,7 @@ class TestExportToJsonl(unittest.TestCase):
         with open(self.test_file, "r", encoding="utf-8") as f:
             record = json.loads(f.readline())
         self.assertEqual(record["reading_id"], 7)
-        self.assertEqual(record["captured_at"], "2026-10-09 10:41:31")
+        self.assertIsNone(record["captured_at"])
         self.assertEqual(record["status"], "ok")
         self.assertIsNone(record["unit"])
 
@@ -175,6 +198,7 @@ class TestExportToJsonl(unittest.TestCase):
             "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
             "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
             "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
+            "device_id", "device_id_source", "device_id_issue", "image_rel",
         ]
         readings = [
             {
@@ -234,12 +258,33 @@ class TestExportToJsonl(unittest.TestCase):
             # 各フィールドが元のレコードと一致することを確認
             self.assertEqual(list(record.keys()), schema_fields)
             for field in schema_fields:
-                self.assertEqual(record[field], readings[idx][field])
+                self.assertEqual(record[field], readings[idx].get(field))
 
         # ensure_ascii=False で日本語がそのまま含まれていることを確認
         full_content = "".join(lines)
         self.assertIn("meter_圧力計1号", full_content)
         self.assertIn("針が検出できませんでした", full_content)
+
+
+class TestB6MetadataExport(unittest.TestCase):
+    def test_exports_preserve_capture_null_and_new_metadata(self):
+        row = dict(reading_id="r1", captured_at=None, timestamp="2026-08-23T01:00:00",
+                   device_id="A-101", device_id_source="pc_qr", device_id_issue="name_mismatch",
+                   pipeline_version="v2", received_at="2026-08-22T01:00:00", image_rel="images/a.jpg")
+        with tempfile.TemporaryDirectory() as directory:
+            csv_path = os.path.join(directory, "out.csv")
+            json_path = os.path.join(directory, "out.jsonl")
+            export_to_csv([row], csv_path)
+            export_to_jsonl([row], json_path)
+            with open(csv_path, encoding="utf-8-sig", newline="") as stream:
+                csv_row = next(csv.DictReader(stream))
+            with open(json_path, encoding="utf-8") as stream:
+                json_row = json.loads(stream.readline())
+        self.assertEqual(csv_row["captured_at"], "")
+        self.assertIsNone(json_row["captured_at"])
+        for field in ("device_id", "device_id_source", "device_id_issue", "pipeline_version", "received_at", "image_rel"):
+            self.assertEqual(csv_row[field], row[field])
+            self.assertEqual(json_row[field], row[field])
 
 
 if __name__ == "__main__":

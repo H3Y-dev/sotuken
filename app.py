@@ -7,11 +7,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pandas as pd
 import streamlit as st
 from image_cache import get_thumbnail_path
-from manager.export import export_to_csv, export_to_jsonl, filter_readings, group_by_device, readings_to_series
+from manager.export import (export_to_csv, export_to_jsonl, filter_readings,
+                            group_by_device, readings_to_series,
+                            latest_per_device, export_inspection_csv)
+from manager.inspection_ui import (default_inspection_id, device_choices, missing_devices,
+                                   preview_inspection, save_inspection)
 from manager.manager import MeterManager
 
 from manager.pipeline_caller import execute_pipeline
-from manager.receiver import init_receiver_for_app
+from manager.receiver import init_receiver_for_app, pairing_qr_png
 
 
 def read_meter(image_path, use_vlm=False):
@@ -106,13 +110,33 @@ def _load_style():
 _load_style()
 
 
-@st.cache_resource
-def _start_receiver():
-    """スマホからの無線受信口（manager/receiver.py）をバックグラウンドスレッドで1回だけ起動する。"""
-    return init_receiver_for_app()
+@st.fragment(run_every="1s")
+def _show_pairing(server):
+    current_url = init_receiver_for_app()["url"]
+    if st.button("スマホを登録"):
+        server.start_pairing(current_url)
+    if st.button("登録を中止"):
+        server.cancel_pairing()
+    status = server.pairing_status()
+    if status is None:
+        st.caption("登録済み・期限切れ・中止後は、QRを作り直してください。")
+        return
+    if status["payload"]["url"] != current_url:
+        server.cancel_pairing()
+        st.warning("PCのURLが変わりました。QRを作り直してください。")
+        return
+    payload = server.pairing_payload()
+    if payload is not None:
+        st.image(pairing_qr_png(payload), caption="スマホの送信先QR読取で登録してください")
+        st.caption(f"残り {status['remaining']} 秒")
+        st.text(status["payload"]["url"])
+        st.caption("交換に失敗した場合や応答が届かない場合は、QRを作り直してください。")
 
 
-_receiver_info = _start_receiver()
+try:
+    _receiver_info = init_receiver_for_app()
+except (ValueError, OSError) as exc:
+    _receiver_info = {"running": False, "error": str(exc)}
 
 with st.sidebar:
     st.header("スマホの送信先")
@@ -121,11 +145,16 @@ with st.sidebar:
             st.info("別プロセスで起動済みです")
         st.caption("同じWi-Fiに接続したスマホアプリの送信先設定に入力してください。")
         st.markdown(f"**送信先URL**:\n`{_receiver_info['url']}`")
-        st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
+        with st.expander("手入力用の合言葉を表示"):
+            st.code(_receiver_info['token'])
+        if _receiver_info.get("server") is not None:
+            _show_pairing(_receiver_info["server"])
+        else:
+            st.caption("QR登録は受信口を起動した画面で行ってください。別プロセスを停止してこの画面を再読み込みすると利用できます。")
     else:
         st.error(f"受信口が起動していません: {_receiver_info.get('error')}")
-        st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
-        st.markdown(f"**合言葉 (Token)**:\n`{_receiver_info['token']}`")
+        if _receiver_info.get("url"):
+            st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
 
 @st.cache_data
 def _get_cached_history(db_path: str, mtime: float):
@@ -154,7 +183,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab1, tab2 = st.tabs(["読み取り", "記録"])
+tab1, tab2, tab3 = st.tabs(["読み取り", "記録", "点検結果"])
 
 with tab1:
     st.header("画像から読み取る")
@@ -237,19 +266,58 @@ with tab2:
     with filter_date_to:
         selected_date_to = st.date_input("終了日", value=default_date_to)
 
+    filtered_history = filter_readings(
+        history,
+        device_name=selected_history_device,
+        date_from=selected_date_from,
+        date_to=selected_date_to,
+    )
+    latest_rows = latest_per_device(filtered_history)
+    st.header("各メーターの最新の読み取り")
+    if latest_rows:
+        latest_table = pd.DataFrame([
+            {"メーター名": row["display_name"],
+             "読み取り値": "-" if row["value"] is None else str(row["value"]),
+             "時刻": datetime.fromisoformat(row["timestamp"]).strftime("%Y-%m-%d %H:%M"),
+             "状態": row["status_label"]}
+            for row in latest_rows[:50]
+        ])
+        status_colors = {"正常": "color: #24643B", "要確認": "color: #805500",
+                         "失敗": "color: #B42318"}
+        st.dataframe(latest_table.style.applymap(status_colors.get, subset=["状態"]),
+                     use_container_width=True, hide_index=True)
+        if len(latest_rows) > 50:
+            st.caption(f"ほか{len(latest_rows) - 50}件は全履歴で確認できます")
+    else:
+        st.info("表示できる記録がありません。")
+
+    review_count = sum(row["status_label"] == "要確認" for row in latest_rows)
+    failed_count = sum(row["status_label"] == "失敗" for row in latest_rows)
+    unnamed_count = sum(row["display_name"] == "名前なし" for row in latest_rows)
+    st.caption(f"要確認 {review_count}件・失敗 {failed_count}件・名前なし {unnamed_count}件")
+    if st.button("点検の結果を書き出す"):
+        try:
+            st.session_state["inspection_csv_path"] = export_inspection_csv(latest_rows)
+        except Exception as exc:
+            st.session_state.pop("inspection_csv_path", None)
+            st.error(f"点検の結果を書き出せませんでした: {exc}")
+    inspection_path = st.session_state.get("inspection_csv_path")
+    if inspection_path:
+        st.success(f"保存しました: {inspection_path}")
+        if os.name == "nt" and st.button("フォルダを開く"):
+            try:
+                os.startfile(os.path.dirname(inspection_path))
+            except OSError:
+                pass
+
     if history:
-        filtered_history = filter_readings(
-            history,
-            device_name=selected_history_device,
-            date_from=selected_date_from,
-            date_to=selected_date_to,
-        )
         filtered_ids = {reading.id for reading in filtered_history}
         history_data = manager.format_history_for_ui(history)
         filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
 
-        st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
-        _render_history_table(filtered_history_data)
+        with st.expander("全履歴", expanded=False):
+            st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
+            _render_history_table(filtered_history_data)
 
         if st.button("CSVを書き出す"):
             csv_path = "readings_export.csv"
@@ -273,8 +341,9 @@ with tab2:
                     mime="application/x-ndjson",
                 )
     else:
-        st.caption("0件 / 全0件")
-        st.info("履歴データが存在しません。")
+        with st.expander("全履歴", expanded=False):
+            st.caption("0件 / 全0件")
+            st.info("履歴データが存在しません。")
 
     st.header("機器別の推移")
     grouped_readings = group_by_device(history)
@@ -300,3 +369,41 @@ with tab2:
                 color="#2B4A6F",
                 height=280,
             )
+
+with tab3:
+    st.header("点検結果")
+    _choices = device_choices(manager.storage)
+    if not _choices:
+        st.info("機器が登録されていません。")
+    else:
+        _today = date.today()
+        _insp_id = st.text_input("点検ID", value=default_inspection_id(), key="insp_id")
+        _col_from, _col_to = st.columns(2)
+        _insp_from = _col_from.date_input("開始日", value=_today, key="insp_from")
+        _insp_to = _col_to.date_input("終了日", value=_today, key="insp_to")
+        _insp_devices = st.multiselect("対象機器", list(_choices), default=list(_choices),
+                                       format_func=_choices.get, key="insp_devices")
+        _insp_result = None
+        try:
+            _insp_result, _insp_table = preview_inspection(
+                manager.storage, _insp_id, _insp_from, _insp_to, _insp_devices)
+        except ValueError as exc:
+            st.error(f"点検結果を作れません: {exc}")
+        if _insp_result is not None:
+            if _insp_table:
+                st.dataframe(pd.DataFrame(_insp_table), use_container_width=True, hide_index=True)
+            else:
+                st.info("期間内に対象機器の記録がありません。")
+            _missing = missing_devices(_insp_result)
+            if _missing:
+                st.warning("期間内に撮影が無い機器: " + "、".join(_missing))
+            if st.button("書き出す", type="primary", key="insp_export"):
+                try:
+                    st.session_state["insp_paths"] = save_inspection(_insp_result)
+                except Exception as exc:
+                    st.session_state.pop("insp_paths", None)
+                    st.error(f"点検結果を書き出せませんでした: {exc}")
+            _paths = st.session_state.get("insp_paths")
+            if _paths:
+                st.success("保存しました:\n\n" + "\n\n".join(_paths.values()))
+

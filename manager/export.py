@@ -1,6 +1,18 @@
 import csv  # CSVファイルを読み書きするための標準ライブラリを呼び出す
 import json
-from datetime import datetime, time
+import os
+import tempfile
+from datetime import datetime, time, timezone
+from pathlib import Path
+
+from manager.ingest import UNKNOWN_DEVICE
+
+
+def write_report_csv(rows, columns, stream):
+    """Write only the report's public columns to an already opened stream."""
+    writer = csv.DictWriter(stream, fieldnames=columns, extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(rows)
 
 
 def filter_readings(readings, device_name=None, date_from=None, date_to=None):
@@ -13,7 +25,7 @@ def filter_readings(readings, device_name=None, date_from=None, date_to=None):
         if device_name not in (None, "すべて") and reading.device_name != device_name:
             continue
 
-        timestamp = datetime.fromisoformat(reading.timestamp)
+        timestamp = _reading_time(reading)
         if start and timestamp < start:
             continue
         if end and timestamp > end:
@@ -40,21 +52,31 @@ def _field(reading, *names, **kwargs):
     return default
 
 
+def _reading_time(reading):
+    timestamp = datetime.fromisoformat(_field(reading, "captured_at", "received_at", "timestamp"))
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+    return timestamp
+
+
 def export_to_csv(readings, output_path):
     """記録リストをCSVファイルへ出力する。"""
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         # ヘッダー行（確定スキーマに対応）
-        writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path"])
+        writer.writerow(["reading_id", "captured_at", "device_name", "value", "status", "failure_stage", "image_path",
+                         "device_id", "device_id_source", "device_id_issue", "pipeline_version", "received_at", "image_rel"])
         for r in readings:
             writer.writerow([
                 _field(r, "reading_id", "id"),
-                _field(r, "captured_at", "timestamp"),
+                _field(r, "captured_at"),
                 _field(r, "device_name"),
                 _field(r, "value"),
                 _field(r, "status", "stage"),
                 _field(r, "failure_stage"),
                 _field(r, "image_path"),
+                *[_field(r, field) for field in ("device_id", "device_id_source", "device_id_issue",
+                                               "pipeline_version", "received_at", "image_rel")],
             ])
 
 
@@ -64,10 +86,9 @@ def export_to_jsonl(readings, output_path):
         "reading_id", "local_id", "captured_at", "received_at", "processed_at", "device_name",
         "value", "unit", "status", "input_method", "confidence", "image_path", "image_sha256",
         "failure_stage", "failure_code", "failure_detail", "pipeline_version", "log_path", "overlay_path",
+        "device_id", "device_id_source", "device_id_issue", "image_rel",
     ]
-    # DB層(MeterReading)は名前が違う項目がある。CSVと同じく旧名からも値を取る
-    # （これが無いと app.py から書き出した JSONL は撮影日時が全件 null になっていた）
-    aliases = {"reading_id": ("id",), "captured_at": ("timestamp",), "status": ("stage",)}
+    aliases = {"reading_id": ("id",), "status": ("stage",)}
     with open(output_path, "w", encoding="utf-8") as f:
         for r in readings:
             row_dict = {field: _field(r, field, *aliases.get(field, ())) for field in fields}
@@ -91,3 +112,102 @@ def readings_to_series(readings):
         if r.value is not None:
             series[_field(r, "captured_at", "timestamp")] = r.value
     return series
+
+
+def latest_per_device(readings) -> list[dict]:
+    """名前のある機器は最新1件、名前のない記録は各1件を採用する。"""
+    named = {}
+    unnamed = []
+    labels = {"ok": "正常", "low_confidence": "要確認", "failed": "失敗"}
+
+    def recency(row):
+        return _reading_time(row), row.get("id") or 0
+
+    for reading in readings:
+        row = dict(reading) if isinstance(reading, dict) else vars(reading).copy()
+        name = (row.get("device_name") or "").strip()
+        is_unnamed = not name or name == UNKNOWN_DEVICE
+        row["display_name"] = "名前なし" if is_unnamed else name
+        label = labels.get(row.get("status"), "要確認")
+        row["status_label"] = "要確認" if is_unnamed and label != "失敗" else label
+        if is_unnamed:
+            unnamed.append(row)
+        elif name not in named or recency(row) > recency(named[name]):
+            named[name] = row
+
+    rows = list(named.values()) + unnamed
+    rows.sort(key=recency, reverse=True)
+    priority = {"失敗": 0, "要確認": 1, "正常": 2}
+    rows.sort(key=lambda row: priority[row["status_label"]])
+    return rows
+
+
+def _documents_dir() -> Path:
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        from uuid import UUID
+
+        folder_id = (ctypes.c_byte * 16).from_buffer_copy(
+            UUID("FDD39AD0-238F-46AF-ADB4-6C85480369C7").bytes_le)
+        path = ctypes.c_wchar_p()
+        try:
+            get_folder = ctypes.windll.shell32.SHGetKnownFolderPath
+            get_folder.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.HANDLE,
+                                   ctypes.POINTER(ctypes.c_wchar_p)]
+            get_folder.restype = ctypes.c_long
+            if get_folder(ctypes.byref(folder_id), 0, None, ctypes.byref(path)) == 0 and path.value:
+                return Path(path.value)
+        except (AttributeError, OSError):
+            pass
+        finally:
+            if path:
+                free = ctypes.windll.ole32.CoTaskMemFree
+                free.argtypes = [ctypes.c_void_p]
+                free.restype = None
+                free(ctypes.cast(path, ctypes.c_void_p))
+    return Path.home() / "Documents"
+
+
+def export_inspection_csv(rows, out_dir=None, now=None) -> str:
+    """採用値を点検CSVへ保存する。同名ファイルは上書きしない。"""
+    directory = Path(out_dir) if out_dir is not None else _documents_dir() / "メーター点検"
+    directory.mkdir(parents=True, exist_ok=True)
+    stem = (now or datetime.now()).strftime("点検_%Y%m%d_%H%M%S")
+    destination = None
+    temporary = None
+
+    def safe_cell(value):
+        if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+            return "'" + value
+        return value
+
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8-sig", newline="",
+                                         dir=directory, suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            writer = csv.writer(stream, lineterminator="\r\n")
+            writer.writerow(["メーター名称", "読み取り値", "状態", "取込時刻", "画像参照"])
+            for row in rows:
+                writer.writerow([safe_cell(row["display_name"]), safe_cell(row.get("value")),
+                                 safe_cell(row["status_label"]), safe_cell(row.get("timestamp")),
+                                 safe_cell(row.get("image_path"))])
+        suffix = 1
+        while True:
+            candidate = directory / f"{stem}{'_' + str(suffix) if suffix > 1 else ''}.csv"
+            try:
+                # 同時に書き出されても、他のCSVを置き換えないよう保存名を予約する。
+                with candidate.open("x"):
+                    pass
+                destination = candidate
+                break
+            except FileExistsError:
+                suffix += 1
+        os.replace(temporary, destination)
+        return str(destination)
+    except Exception:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        if destination is not None:
+            destination.unlink(missing_ok=True)
+        raise

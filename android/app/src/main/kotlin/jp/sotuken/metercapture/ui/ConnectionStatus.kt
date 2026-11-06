@@ -81,17 +81,7 @@ fun connectionBarText(
     ConnectionBarState.UNREACHABLE -> "○ PCに届かない（送信箱に保存中）　未着 ${undelivered}件　$reason"
 }
 
-/** 履歴画面に出す理由。SENTかつ送信箱経由かつlastErrorありのときだけ返す。 */
-fun folderReasonLabel(item: QueueItem): String? {
-    if (item.sendState != SendState.SENT || item.sentVia != QueueItem.VIA_FOLDER) return null
-    val error = item.lastError?.takeIf { it.isNotBlank() } ?: return null
-    val reason = if (error.startsWith("送信先未設定")) {
-        "送信先が未設定です"
-    } else {
-        classifyFailureMessage(error)
-    }
-    return "PCに届かず、送信箱に保存: $reason"
-}
+
 fun connectionResultLabel(state: ConnectionBarState, reason: String): String = when (state) {
     ConnectionBarState.NOT_CONFIGURED -> "未設定"
     ConnectionBarState.CHECKING -> "確認中"

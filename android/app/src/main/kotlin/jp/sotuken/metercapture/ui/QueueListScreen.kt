@@ -64,6 +64,8 @@ private class LoadedImage(val bitmap: Bitmap?)
 internal fun QueueListScreen(
     items: List<QueueItem>,
     onClose: () -> Unit,
+    onRetry: (String) -> Unit = {},
+    onSendNow: () -> Unit = {},
 ) {
     var selected by remember { mutableStateOf<QueueItem?>(null) }
     // 撮影日時の文字列ではなく、時刻として解釈した値で新しい順に並べる。
@@ -100,12 +102,34 @@ internal fun QueueListScreen(
                     }
                 }
 
+                undeliveredSummary(items)?.let { summary ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = onSendNow) {
+                            Text("今すぐ送る")
+                        }
+                    }
+                }
+
                 if (sorted.isEmpty()) {
                     Text("履歴はまだありません")
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(sorted, key = { it.localId }) { item ->
-                            QueueListRow(item = item, onClick = { selected = item })
+                            QueueListRow(
+                                item = item,
+                                onClick = { selected = item },
+                                onRetry = { onRetry(item.localId) },
+                            )
                         }
                     }
                 }
@@ -122,6 +146,7 @@ internal fun QueueListScreen(
 private fun QueueListRow(
     item: QueueItem,
     onClick: () -> Unit,
+    onRetry: () -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -148,27 +173,23 @@ private fun QueueListRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = stateLabel(item.sendState),
+                    text = sendStatusLabel(item),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = stateColor(item.sendState),
                 )
-                if (item.sendState == SendState.FAILED && !item.lastError.isNullOrBlank()) {
+                errorTextFor(item)?.let { errorText ->
                     Text(
-                        text = item.lastError,
+                        text = errorText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         maxLines = 2,
                     )
                 }
-                
-                folderReasonLabel(item)?.let { reason ->
-                    Text(
-                        text = reason,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                    )
+                if (canRetry(item)) {
+                    TextButton(onClick = onRetry) {
+                        Text("再送")
+                    }
                 }
             }
         }
@@ -257,7 +278,7 @@ private fun FullImageDialog(
                         color = Color.White,
                     )
                     Text(
-                        text = "${stateLabel(item.sendState)}（タップで閉じる）",
+                        text = "${sendStatusLabel(item)}（タップで閉じる）",
                         color = Color.White,
                     )
                 }

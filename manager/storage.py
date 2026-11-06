@@ -2,7 +2,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -49,6 +49,12 @@ class MeterReading:
     pipeline_version: Optional[str] = None
     log_path: Optional[str] = None
     overlay_path: Optional[str] = None
+    device_id: Optional[str] = None
+    device_id_source: Optional[str] = None
+    device_id_issue: Optional[str] = None
+    captured_at: Optional[str] = None
+    received_at: Optional[str] = None
+    image_rel: Optional[str] = None
 
 
 class Storage:
@@ -72,6 +78,17 @@ class Storage:
         if self._conn:
             return self._conn
         return sqlite3.connect(self.db_path)
+
+    @contextmanager
+    def connection(self):
+        """Commit or roll back a transaction, keeping in-memory databases open."""
+        conn = self._get_connection()
+        try:
+            with conn:
+                yield conn
+        finally:
+            if conn is not self._conn:
+                conn.close()
 
     def _init_db_with_conn(self, conn: sqlite3.Connection) -> None:
         cursor = conn.cursor()
@@ -243,8 +260,9 @@ class Storage:
             INSERT INTO meter_readings 
             (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
              reading_id, status, input_method, confidence, failure_stage, failure_code,
-             failure_detail, pipeline_version, log_path, overlay_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             failure_detail, pipeline_version, log_path, overlay_path,
+             device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 now_str, device_name, value, stage, image_path, raw_data_json, image_sha256,
@@ -253,6 +271,9 @@ class Storage:
                 read_result.get("failure_code"), read_result.get("failure_detail"),
                 read_result.get("pipeline_version"), read_result.get("log_path"),
                 read_result.get("overlay_path"),
+                read_result.get("device_id"), read_result.get("device_id_source"),
+                read_result.get("device_id_issue"), read_result.get("captured_at"),
+                read_result.get("received_at"), read_result.get("image_rel"),
             ),
         )
         conn.commit()
@@ -307,7 +328,8 @@ class Storage:
             f"""
             SELECT id, timestamp, device_name, value, stage, image_path, {raw_column}, image_sha256,
                    reading_id, status, input_method, confidence, failure_stage, failure_code,
-                   failure_detail, pipeline_version, log_path, overlay_path
+                   failure_detail, pipeline_version, log_path, overlay_path,
+                   device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel
             FROM meter_readings
             ORDER BY id DESC
             """
@@ -339,6 +361,12 @@ class Storage:
                     pipeline_version=row[15],
                     log_path=row[16],
                     overlay_path=row[17],
+                    device_id=row[18],
+                    device_id_source=row[19],
+                    device_id_issue=row[20],
+                    captured_at=row[21],
+                    received_at=row[22],
+                    image_rel=row[23],
                 )
             )
         return results

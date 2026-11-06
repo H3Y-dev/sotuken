@@ -13,11 +13,14 @@ VLMは値の意味理解は得意だが精密な位置推定は苦手なため�
 import math
 import re
 import threading
+from statistics import median
 
 import cv2
+import numpy as np
 
 import tick_detect
 import vlm_scale_value
+from primary_scale import split_number_bands, needs_primary_recheck
 
 _engine = None
 _load_lock = threading.Lock()
@@ -133,6 +136,52 @@ def _split_merged_number_boxes(candidates):
     return split_candidates
 
 
+def _mask_qr_for_ocr(img):
+    """読み取れたQRを囲む白い四角板だけを、周囲の色で埋める。"""
+    if not isinstance(img, np.ndarray) or img.ndim not in (2, 3) or not img.size:
+        return img
+    from manager.qr_decode import _get_wechat_detector
+
+    detector = _get_wechat_detector()
+    if detector is None or min(img.shape[:2]) < 64:
+        return img
+    try:
+        texts, boxes = detector.detectAndDecode(img)
+    except cv2.error:
+        return img
+    if not texts:
+        return img
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    # shortcut: 背景から分離した白板だけ対象, 同色背景の救済が必要なら局所OCRへ切り替える。
+    _, white = cv2.threshold(gray, 245, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    masked = img
+    for text, box in zip(texts, boxes):
+        if not text:
+            continue
+        qr_area = abs(cv2.contourArea(box))
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if not 1.5 * qr_area < area < 5 * qr_area:
+                continue
+            polygon = cv2.approxPolyDP(contour, cv2.arcLength(contour, True) * .02, True)
+            if len(polygon) != 4 or not cv2.isContourConvex(polygon):
+                continue
+            if not all(cv2.pointPolygonTest(polygon, tuple(map(float, point)), False) > 0
+                       for point in box):
+                continue
+            mask = np.zeros(gray.shape, np.uint8)
+            cv2.fillConvexPoly(mask, polygon, 255)
+            ring = cv2.dilate(mask, np.ones((11, 11), np.uint8)) - mask
+            if not np.any(ring):
+                continue
+            if masked is img:
+                masked = img.copy()
+            masked[mask != 0] = np.median(img[ring != 0], axis=0)
+            break
+    return masked
+
+
 def read_scale_numbers(img):
     """
     盤面上の数字をOCRで検出する。
@@ -178,6 +227,28 @@ def read_scale_numbers(img):
             'y': candidate['y'],
             'score': candidate['score'],
         })
+    return numbers
+
+
+def _read_scale_numbers_tiled(img):
+    """全体OCRで落ちた小さい数字を、重なる4区画の拡大OCRで読み直す。"""
+    h, w = img.shape[:2]
+    numbers = []
+    for y0, y1 in ((0, (h * 3 + 4) // 5), (h * 2 // 5, h)):
+        for x0, x1 in ((0, (w * 3 + 4) // 5), (w * 2 // 5, w)):
+            crop = cv2.resize(img[y0:y1, x0:x1], None, fx=2, fy=2,
+                              interpolation=cv2.INTER_CUBIC)
+            for number in read_scale_numbers(crop):
+                number = dict(number, x=x0 + number['x'] / 2,
+                              y=y0 + number['y'] / 2)
+                duplicate = next((old for old in numbers
+                                  if old['value'] == number['value'] and
+                                  math.hypot(old['x'] - number['x'],
+                                             old['y'] - number['y']) <= min(h, w) * 0.015), None)
+                if duplicate is None:
+                    numbers.append(number)
+                elif number['score'] > duplicate['score']:
+                    duplicate.update(number)
     return numbers
 
 
@@ -668,7 +739,7 @@ def _make_occlusion_check(img, use_vlm=True):
 
 
 def _resolve_scale_position(img, numbers, ticks, center, bound, value,
-                             is_zero=False, occlusion_check=None):
+                             is_zero=False, occlusion_check=None, exclude_point=None):
     """
     target_valueに対応する目盛り位置を特定する。
     OCRで直接読めていればそれを、読めていなければ等間隔性からの推定
@@ -687,14 +758,28 @@ def _resolve_scale_position(img, numbers, ticks, center, bound, value,
     （呼び出しは重いので必要になるまで遅延評価する）。Noneの場合は
     この判定なしで、通常通りの安全側の挙動（確認できなければ採用しない）になる。
 
+    exclude_point: 反対端の位置。同じ目盛りを両端へ使わないよう半目盛り以内を除く。
+
     戻り値: (座標 or None, 視覚的な裏取りなしに「重なり」を理由として採用したか)
     """
+    def available(pt):
+        if pt is None or exclude_point is None:
+            return pt is not None
+        angles = sorted({t['angle'] % (2 * math.pi) for t in ticks})
+        gaps = [(b - a) % (2 * math.pi)
+                for a, b in zip(angles, angles[1:] + angles[:1])]
+        half_tick = median(gaps) / 2 if len(gaps) >= 3 else 0
+        angle = math.atan2(pt[1] - center[1], pt[0] - center[0])
+        excluded = math.atan2(exclude_point[1] - center[1], exclude_point[0] - center[0])
+        difference = abs((angle - excluded + math.pi) % (2 * math.pi) - math.pi)
+        return difference > max(half_tick, 1e-6)
+
     pt = locate_value_on_ticks(numbers, ticks, center, value)
-    if pt is not None:
+    if available(pt):
         return pt, False
 
     pt = locate_value_by_extrapolation(bound, ticks, value)
-    if pt is not None:
+    if available(pt):
         if _verify_label_near_position(img, pt, value):
             return pt, False
         if is_zero and occlusion_check is not None and occlusion_check():
@@ -705,7 +790,7 @@ def _resolve_scale_position(img, numbers, ticks, center, bound, value,
         predicted_angle = _predict_angle_for_value(bound, value)
         if predicted_angle is not None:
             synth = _synthesize_tick_point(ticks, center, predicted_angle)
-            if (synth is not None and
+            if (available(synth) and
                     _verify_label_near_position_multi(img, synth, value)):
                 return synth, False
     return None, False
@@ -763,7 +848,7 @@ _PLAUSIBLE_FULLSCALE_MANTISSAS = (1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0,
                                   6.0, 7.5, 8.0)
 
 
-def is_plausible_fullscale(value, rel_tol=0.005):
+def is_plausible_fullscale(value, rel_tol=0.005, *, extra_mantissas=()):
     """
     フルスケールとしてありえる値か（標準数かどうか）を判定する。
 
@@ -780,10 +865,31 @@ def is_plausible_fullscale(value, rel_tol=0.005):
         return False
     exponent = math.floor(math.log10(abs(value)))
     mantissa = abs(value) / (10.0 ** exponent)
-    for m in _PLAUSIBLE_FULLSCALE_MANTISSAS:
+    for m in _PLAUSIBLE_FULLSCALE_MANTISSAS + extra_mantissas:
         if abs(mantissa - m) <= rel_tol * m:
             return True
     return False
+
+
+def _is_consistent_recovery(numbers, result, center, max_angle_deg=12.0):
+    """救済候補の全採用点が、既存の数字・目盛り格子と整合するか確かめる。"""
+    # 圧力計の一般的な1-1.6-2.5-4-6系列も救済時だけ許す。
+    # https://www.takashimakeiki.co.jp/en/memori/
+    if not is_plausible_fullscale(result['max_value'], extra_mantissas=(1.6,)):
+        return False
+    ticks = result['ticks']
+    grid = build_tick_grid(numbers, ticks, center, max_angle_deg=max_angle_deg)
+    if grid is None or len({value for _angle, value in result['calibration']}) < 3:
+        return False
+    order = _arc_order(ticks)
+    slots = _tick_slots(ticks, order)
+    slot_of = dict(zip(order, slots))
+    for angle, value in result['calibration']:
+        index = min(range(len(ticks)), key=lambda i: abs(
+            (ticks[i]['angle'] - angle + math.pi) % (2 * math.pi) - math.pi))
+        if abs(slot_of[index] - (grid['slope'] * value + grid['intercept'])) > _SLOT_TOLERANCE:
+            return False
+    return True
 
 
 def determine_min_max(bound_pairs, min_points=3, n_ocr_unique=None, ticks=None):
@@ -966,9 +1072,11 @@ def locate_value_on_ticks(numbers, ticks, center, target_value, max_angle_deg=15
     return (int(round(fallback_number['x'])), int(round(fallback_number['y'])))
 
 
-def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_points_out=None):
+def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_points_out=None,
+                  numbers=None):
     """1つの（前処理済み）画像に対してOCR＋目盛り対応付けを1回実行する。"""
-    numbers = read_scale_numbers(img)
+    if numbers is None:
+        numbers = read_scale_numbers(img)
     # 長さではなく、数字の位置から主目盛りを決め直してから対応付ける
     ticks = refine_major_ticks_from_numbers(
         numbers, ticks, center, max_angle_deg=max_angle_deg)
@@ -1076,8 +1184,90 @@ def _publish_scale_diagnostics(diagnostics, diagnostics_out, result=None):
         result['diagnostics'] = diagnostics
 
 
+def _recheck_primary_scale(img, numbers, ticks, center, max_angle_deg, min_points,
+                           expanded_numbers=None):
+    """内側の数字列だけを読んだ疑いがある場合、拡大OCRで外側列を確かめる。"""
+    if not ticks:
+        return None, None, None
+    radius = median(math.hypot(t['centroid'][0] - center[0],
+                               t['centroid'][1] - center[1]) for t in ticks)
+    bands = split_number_bands(numbers, center, radius)
+    if not needs_primary_recheck(bands, radius):
+        return None, None, None
+    diagnostics = {'status': 'retained', 'tick_radius': radius,
+                   'original_bands': [dict(radius=b['radius'], values=[n['value'] for n in b['numbers']])
+                                      for b in bands]}
+    merged = list(numbers)
+    try:
+        if expanded_numbers is None:
+            expanded_numbers = _read_scale_numbers_tiled(img)
+        for number in expanded_numbers:
+            if not any(old['value'] == number['value'] and
+                       math.hypot(old['x'] - number['x'], old['y'] - number['y']) < radius * .04
+                       for old in merged):
+                merged.append(number)
+    except Exception:
+        diagnostics['ocr_failed'] = True
+        return diagnostics, None, None
+    expanded = split_number_bands(merged, center, radius)
+    supported = [b for b in expanded if b['supported']]
+    diagnostics['expanded_bands'] = [dict(radius=b['radius'], values=[n['value'] for n in b['numbers']])
+                                     for b in expanded]
+    if not supported:
+        return diagnostics, None, None
+    primary = supported[-1]
+    original_columns = [b for b in bands if len({n['value'] for n in b['numbers']}) >= 2]
+    # 半径の小ささだけでは一重盤面を否定できない。別の列を確認できた場合だけ選び直す。
+    if len(original_columns) < 2 and primary['radius'] < max(
+            b['radius'] for b in original_columns) + radius * .12:
+        return diagnostics, None, None
+    primary_numbers = primary['numbers']
+    attempts = []
+    diagnostics['candidate_values'] = [n['value'] for n in primary_numbers]
+    try:
+        result = _run_ocr_tick(img, ticks, center, max_angle_deg, min_points,
+                               numbers=primary_numbers, numbered_points_out=attempts)
+        if result is not None:
+            diagnostics['candidate_range'] = [result['min_value'], result['max_value']]
+            if _is_consistent_recovery(primary_numbers, result, center, max_angle_deg):
+                diagnostics['status'] = 'selected'
+                return diagnostics, result, attempts[0]
+    except Exception:
+        diagnostics['candidate_failed'] = True
+    diagnostics['status'] = 'unverified_outer'
+    return diagnostics, None, None
+
+
 def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                         use_vlm=True, diagnostics_out=None, *, numbered_points_out=None):
+    """通常の目盛り同定が失敗した場合だけ、QR板を除いた画像で再試行する。"""
+    result = _detect_scale_values(
+        img, ticks, center, max_angle_deg, min_points, use_vlm=use_vlm,
+        diagnostics_out=diagnostics_out,
+        numbered_points_out=numbered_points_out)
+    if result is not None:
+        return result
+    masked = _mask_qr_for_ocr(img)
+    if masked is img:
+        return None
+    # 成功済みの判定や針・目盛りの座標を変えず、数字OCRの未同定だけを救済する。
+    retry_diagnostics = {}
+    retry_points = {} if numbered_points_out is not None else None
+    result = _detect_scale_values(
+        masked, ticks, center, max_angle_deg, min_points, use_vlm=use_vlm,
+        diagnostics_out=retry_diagnostics, numbered_points_out=retry_points)
+    if result is None or not _is_consistent_recovery(
+            read_scale_numbers(masked), result, center, max_angle_deg):
+        return None
+    if diagnostics_out is not None:
+        diagnostics_out.update(retry_diagnostics)
+    if numbered_points_out is not None:
+        numbered_points_out.update(retry_points)
+    return result
+
+
+def _detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
+                         use_vlm=True, diagnostics_out=None, *, numbered_points_out=None):
     """
     元画像と、CLAHE（コントラスト強調）を適用した複数のバリアントそれぞれで
     OCR＋目盛り対応付けを行い、min/maxの判定が一致するかをクロスチェックする。
@@ -1128,10 +1318,40 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
     agreed = _find_agreeing_result(results)
 
     numbers = read_scale_numbers(img)
+    # 範囲未確定時の救済にも、同じ対応付けと格子整合のふるいを通す。
+    local_numbers = None
+    if not results:
+        try:
+            local_numbers = _read_scale_numbers_tiled(img)
+            result = _run_ocr_tick(img, ticks, center, max_angle_deg, min_points,
+                                   numbers=local_numbers, **point_kwargs)
+            if result is not None and _is_consistent_recovery(
+                    local_numbers, result, center, max_angle_deg):
+                result['label'] = 'tiled'
+                results.append(result)
+                numbers = local_numbers
+        except Exception:
+            pass
+    primary_diagnostics, primary_result, primary_points = _recheck_primary_scale(
+        img, numbers, ticks, center, max_angle_deg, min_points, expanded_numbers=local_numbers)
+    if primary_result is not None:
+        primary_result.update(source='ocr_tick', is_confident=False, label='primary_band')
+        results.append(primary_result)
+        primary_result['attempts'] = _scale_attempts(results)
+        diagnostics = _build_scale_diagnostics(
+            results, numbers, primary_result, None, None, use_vlm)
+        diagnostics['primary_scale'] = primary_diagnostics
+        diagnostics['decision'].update(min_source='ocr', max_source='ocr',
+                                       reason='半径で分離した外側の数字列を格子整合で確認')
+        if numbered_points_out is not None:
+            numbered_points_out.update(bound=primary_points['bound'], ticks=primary_result['ticks'],
+                                       calibration=primary_result['calibration'])
+        _publish_scale_diagnostics(diagnostics, diagnostics_out, primary_result)
+        return primary_result
     ticks = refine_major_ticks_from_numbers(
         numbers, ticks, center, max_angle_deg=max_angle_deg)
     # --no-vlm ではOllamaの応答状態に結果が左右されないよう、補助判定も使わない。
-    vlm_result = vlm_scale_value.read_min_max(img) if use_vlm else None
+    vlm_result = vlm_scale_value.read_min_max(img) if use_vlm and primary_diagnostics is None else None
 
     # 「OCR単独なら何を答えたか」を評価できるよう、VLMで上書きする前の
     # OCR代表候補を保存する。条件間一致が無い場合は対応点が最も多い候補を使う。
@@ -1147,9 +1367,19 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                                    calibration=(ocr_candidate or {}).get('calibration'))
     diagnostics = _build_scale_diagnostics(
         results, numbers, ocr_candidate, agreed, vlm_result, use_vlm)
+    if primary_diagnostics is not None:
+        diagnostics['primary_scale'] = primary_diagnostics
+        candidate_range = primary_diagnostics.get('candidate_range')
+        if primary_diagnostics['status'] == 'unverified_outer' and candidate_range and (
+                ocr_candidate is None or candidate_range != [ocr_candidate['min_value'], ocr_candidate['max_value']]):
+            diagnostics['decision']['reason'] = '外側の数字列と既存範囲が食い違い、格子整合を確認できない'
+            if numbered_points_out is not None:
+                numbered_points_out.clear()
+            _publish_scale_diagnostics(diagnostics, diagnostics_out)
+            return None
 
     if agreed is not None:
-        agreed['is_confident'] = True
+        agreed['is_confident'] = agreed.get('is_confident', False) and primary_diagnostics is None
         agreed['source'] = 'ocr_tick'
         agreed['attempts'] = _scale_attempts(results)
         decision = diagnostics['decision']
@@ -1165,7 +1395,8 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
             bound = bind_numbers_to_ticks(
                 numbers, ticks, center, max_angle_deg=max_angle_deg)
             zero_pt, zero_overlap = _resolve_scale_position(
-                img, numbers, ticks, center, bound, 0.0, is_zero=True)
+                img, numbers, ticks, center, bound, 0.0, is_zero=True,
+                exclude_point=agreed['full_pt'])
             if zero_pt is not None:
                 agreed['zero_pt'] = zero_pt
                 agreed['min_value'] = 0.0
@@ -1188,7 +1419,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                 bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
                 pt, overlap = _resolve_scale_position(
                     img, numbers, ticks, center, bound, vlm_min,
-                    is_zero=True, occlusion_check=occlusion_check)
+                    is_zero=True, occlusion_check=occlusion_check, exclude_point=agreed['full_pt'])
                 if pt is not None:
                     agreed['zero_pt'] = pt
                     agreed['min_value'] = vlm_min
@@ -1199,7 +1430,7 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
                     bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
                 pt, _overlap = _resolve_scale_position(
                     img, numbers, ticks, center, bound, vlm_max,
-                    is_zero=False, occlusion_check=occlusion_check)
+                    is_zero=False, occlusion_check=occlusion_check, exclude_point=agreed['zero_pt'])
                 if pt is not None:
                     agreed['full_pt'] = pt
                     agreed['max_value'] = vlm_max
@@ -1239,12 +1470,12 @@ def detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
         bound = bind_numbers_to_ticks(numbers, ticks, center, max_angle_deg=max_angle_deg)
         occlusion_check = _make_occlusion_check(img, use_vlm=use_vlm)
 
-        zero_pt, zero_overlap = _resolve_scale_position(
-            img, numbers, ticks, center, bound, min_value,
-            is_zero=True, occlusion_check=occlusion_check)
         full_pt, _overlap = _resolve_scale_position(
             img, numbers, ticks, center, bound, max_value,
             is_zero=False, occlusion_check=occlusion_check)
+        zero_pt, zero_overlap = _resolve_scale_position(
+            img, numbers, ticks, center, bound, min_value,
+            is_zero=True, occlusion_check=occlusion_check, exclude_point=full_pt)
 
         if zero_pt is not None and full_pt is not None:
             result = {

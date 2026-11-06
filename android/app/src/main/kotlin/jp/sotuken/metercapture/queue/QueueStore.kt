@@ -73,7 +73,8 @@ class RoomQueueStore(
 
     override suspend fun markFailed(localId: String, error: String) {
         val item = requireItem(localId)
-        check(item.sendState == SendState.SENDING) {
+        check(item.sendState == SendState.SENDING ||
+            (item.sendState == SendState.SENT && item.sentVia == QueueItem.VIA_FOLDER)) {
             "cannot mark failed from state ${item.sendState}"
         }
         queueDao.update(

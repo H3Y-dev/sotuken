@@ -39,11 +39,25 @@ def reprocess_image(
     save_data["failure_detail"] = failure_detail
     save_data["pipeline_version"] = pipeline_version
 
+    image_hash = calculate_file_hash(image_path)
+    with storage.connection() as conn:
+        cursor = conn.execute(
+            "SELECT device_name, device_id, device_id_source, device_id_issue, "
+            "captured_at, received_at, image_rel FROM meter_readings "
+            "WHERE image_sha256 = ? OR (image_sha256 IS NULL AND image_path = ?) "
+            "ORDER BY id DESC LIMIT 1",
+            (image_hash, image_path),
+        )
+        row = cursor.fetchone()
+        previous = dict(zip((column[0] for column in cursor.description), row)) if row else None
+    if previous is not None:
+        save_data.update({key: value for key, value in previous.items() if key != "device_name"})
+
     return storage.save_reading(
-        device_name=UNKNOWN_DEVICE,
+        device_name=previous["device_name"] if previous is not None else UNKNOWN_DEVICE,
         image_path=image_path,
         read_result=save_data,
-        image_sha256=calculate_file_hash(image_path),
+        image_sha256=image_hash,
     )
 
 

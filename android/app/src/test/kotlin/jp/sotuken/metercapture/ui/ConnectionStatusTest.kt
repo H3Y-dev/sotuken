@@ -141,26 +141,7 @@ class ConnectionStatusTest {
         )
     }
 
-    @Test
-    fun folderReasonLabelOnlyForFolderSentWithError() {
-        val withError = item(
-            "1", SendState.SENT, QueueItem.VIA_FOLDER,
-            lastError = "PC未接続: failed to connect to /192.168.1.20",
-        )
-        assertEquals("PCに届かず、送信箱に保存: 接続できません", folderReasonLabel(withError))
-
-        val notConfigured = item("2", SendState.SENT, QueueItem.VIA_FOLDER, lastError = "送信先未設定")
-        assertEquals("PCに届かず、送信箱に保存: 送信先が未設定です", folderReasonLabel(notConfigured))
-
-        val noError = item("3", SendState.SENT, QueueItem.VIA_FOLDER)
-        assertNull(folderReasonLabel(noError))
-
-        val viaHttp = item("4", SendState.SENT, QueueItem.VIA_HTTP, lastError = "x")
-        assertNull(folderReasonLabel(viaHttp))
-
-        val failed = item("5", SendState.FAILED, lastError = "x")
-        assertNull(folderReasonLabel(failed))
-    }
+    
         @Test
     fun http403IsWrongToken() {
         val error = IOException("Health check failed with HTTP 403: x")
