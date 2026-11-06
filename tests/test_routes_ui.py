@@ -10,6 +10,19 @@ from tests import test_routes_manifest as fixtures
 
 
 class RoutesAppTest(unittest.TestCase):
+    def test_empty_route_save_displays_error(self):
+        from streamlit.testing.v1 import AppTest
+        with tempfile.TemporaryDirectory() as directory, chdir(directory):
+            at = AppTest.from_string(
+                'from manager.storage import Storage\n'
+                'from manager.routes_ui import render_routes\n'
+                'render_routes(Storage("manager.db"))\n').run()
+            next(t for t in at.text_input if t.label == 'ルート名').set_value('空ルート')
+            next(b for b in at.button if b.label == 'ルートを保存').click().run()
+            self.assertFalse(at.exception)
+            self.assertTrue(any('0件では保存できません' in e.value for e in at.error))
+            self.assertEqual(list_routes(Storage('manager.db'))['routes'], [])
+
     def test_route_tab_save_edit_delete_and_manifest_only_round(self):
         from streamlit import cache_data, cache_resource
         from streamlit.testing.v1 import AppTest
