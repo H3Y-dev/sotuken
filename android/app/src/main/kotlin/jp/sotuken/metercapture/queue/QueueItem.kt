@@ -16,6 +16,7 @@ data class QueueItem(
     val lastError: String?,
     val sentAt: String?,
     val sentVia: String? = null,
+    val receiverId: String? = null,
 ) {
     companion object {
         const val VIA_HTTP = "http"
@@ -37,3 +38,8 @@ data class CaptureMeta(
     val operatorValue: Double?,
     val operatorNote: String?,
 )
+
+fun QueueItem.isHeldFor(currentReceiverId: String?): Boolean =
+    receiverId != null && receiverId != currentReceiverId &&
+        (sendState == SendState.PENDING || sendState == SendState.FAILED ||
+            (sendState == SendState.SENT && sentVia == QueueItem.VIA_FOLDER))

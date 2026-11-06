@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -44,6 +45,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import jp.sotuken.metercapture.queue.QueueItem
 import jp.sotuken.metercapture.queue.SendState
+import jp.sotuken.metercapture.queue.isHeldFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -66,6 +68,8 @@ internal fun QueueListScreen(
     onClose: () -> Unit,
     onRetry: (String) -> Unit = {},
     onSendNow: () -> Unit = {},
+    onReassignReceiver: (String) -> Unit = {},
+    currentReceiverId: String? = null,
 ) {
     var selected by remember { mutableStateOf<QueueItem?>(null) }
     // 撮影日時の文字列ではなく、時刻として解釈した値で新しい順に並べる。
@@ -128,7 +132,9 @@ internal fun QueueListScreen(
                             QueueListRow(
                                 item = item,
                                 onClick = { selected = item },
+                                currentReceiverId = currentReceiverId,
                                 onRetry = { onRetry(item.localId) },
+                                onReassignReceiver = { onReassignReceiver(item.localId) },
                             )
                         }
                     }
@@ -138,7 +144,7 @@ internal fun QueueListScreen(
     }
 
     selected?.let { item ->
-        FullImageDialog(item = item, onDismiss = { selected = null })
+        FullImageDialog(item = item, onDismiss = { selected = null }, currentReceiverId = currentReceiverId)
     }
 }
 
@@ -147,6 +153,8 @@ private fun QueueListRow(
     item: QueueItem,
     onClick: () -> Unit,
     onRetry: () -> Unit = {},
+    onReassignReceiver: () -> Unit = {},
+    currentReceiverId: String? = null,
 ) {
     Card(
         modifier = Modifier
@@ -173,7 +181,7 @@ private fun QueueListRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = sendStatusLabel(item),
+                    text = sendStatusLabel(item, currentReceiverId),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = stateColor(item.sendState),
@@ -186,7 +194,8 @@ private fun QueueListRow(
                         maxLines = 2,
                     )
                 }
-                if (canRetry(item)) {
+                HeldReceiverAction(item, currentReceiverId, onReassignReceiver)
+                if (canRetry(item, currentReceiverId)) {
                     TextButton(onClick = onRetry) {
                         Text("再送")
                     }
@@ -233,6 +242,7 @@ private fun Thumbnail(
 private fun FullImageDialog(
     item: QueueItem,
     onDismiss: () -> Unit,
+    currentReceiverId: String?,
 ) {
     val loaded by produceState<LoadedImage?>(initialValue = null, item.imagePath) {
         value = LoadedImage(
@@ -278,7 +288,7 @@ private fun FullImageDialog(
                         color = Color.White,
                     )
                     Text(
-                        text = "${sendStatusLabel(item)}（タップで閉じる）",
+                        text = "${sendStatusLabel(item, currentReceiverId)}（タップで閉じる）",
                         color = Color.White,
                     )
                 }
@@ -351,4 +361,28 @@ private fun exifRotationDegrees(path: String): Int = try {
     }
 } catch (_: Exception) {
     0
+}
+
+@Composable
+private fun HeldReceiverAction(item: QueueItem, currentReceiverId: String?, onConfirm: () -> Unit) {
+    var confirming by remember(item.localId) { mutableStateOf(false) }
+    if (!item.isHeldFor(currentReceiverId)) return
+    TextButton(onClick = { confirming = true }) {
+        Text("今のPCへ送り直す")
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("送信先を変更しますか？") },
+            text = { Text("この写真の送信先を現在設定されているPCに変更して送り直します。") },
+            confirmButton = {
+                TextButton(onClick = { confirming = false; onConfirm() }) {
+                    Text("送り直す")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text("キャンセル") }
+            },
+        )
+    }
 }

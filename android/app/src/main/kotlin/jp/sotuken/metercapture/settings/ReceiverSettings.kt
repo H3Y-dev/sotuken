@@ -20,6 +20,17 @@ class ReceiverSettings(
 
     fun getReceiverId(): String? = prefs.getString(KEY_RECEIVER_ID, null)
 
+    internal fun sendTarget(): SendTarget {
+        val values = prefs.all
+        return SendTarget(values[KEY_URL] as? String, values[KEY_TOKEN] as? String,
+            values[KEY_RECEIVER_ID] as? String)
+    }
+
+    internal class SendTarget(val url: String?, val token: String?, val receiverId: String?) {
+        fun isConfigured(): Boolean = !url.isNullOrBlank() && !token.isNullOrBlank() &&
+            PrivateIpv4Validator.validateUrl(url) is PrivateIpv4Validator.ValidationResult.Valid
+    }
+
     fun getPcName(): String? = prefs.getString(KEY_PC_NAME, null)
 
     fun savePaired(receiver: PairedReceiver) {

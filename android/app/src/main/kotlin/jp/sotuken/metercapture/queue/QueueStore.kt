@@ -14,6 +14,7 @@ interface QueueStore {
     suspend fun markSending(localId: String)
     suspend fun markSent(localId: String, via: String, note: String? = null)
     suspend fun markFailed(localId: String, error: String)
+    suspend fun reassignReceiver(localId: String, receiverId: String?)
     suspend fun retry(localId: String)
     suspend fun updateSentVia(localId: String, via: String)
     suspend fun updateLastError(localId: String, error: String?)
@@ -25,6 +26,7 @@ interface QueueStore {
 
 class RoomQueueStore(
     private val queueDao: QueueDao,
+    private val receiverIdProvider: () -> String? = { null },
 ) : QueueStore {
     override suspend fun enqueue(imageFile: File, meta: CaptureMeta): String {
         val localId = UUID.randomUUID().toString()
@@ -41,6 +43,7 @@ class RoomQueueStore(
                 lastError = null,
                 sentAt = null,
                 sentVia = null,
+                receiverId = receiverIdProvider()?.takeIf { it.isNotBlank() },
             ),
         )
         return localId
@@ -80,6 +83,14 @@ class RoomQueueStore(
         queueDao.update(
             item.copy(sendState = SendState.FAILED, lastError = error, retryCount = item.retryCount + 1),
         )
+    }
+
+    override suspend fun reassignReceiver(localId: String, receiverId: String?) {
+        val item = requireItem(localId)
+        check(item.isHeldFor(receiverId?.takeIf { it.isNotBlank() }))
+        val state = if (item.sentVia == QueueItem.VIA_FOLDER) SendState.SENT else SendState.PENDING
+        queueDao.update(item.copy(receiverId = receiverId?.takeIf { it.isNotBlank() },
+            sendState = state, lastError = null))
     }
 
     override suspend fun retry(localId: String) {

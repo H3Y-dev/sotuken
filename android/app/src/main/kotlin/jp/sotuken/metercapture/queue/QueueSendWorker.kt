@@ -35,7 +35,7 @@ class QueueSendWorker(
         try {
             val queueDao = database.queueItemDao()
             val queueStore = RoomQueueStore(queueDao)
-            val settings = ReceiverSettings(applicationContext)
+            val settings = ReceiverSettings(applicationContext).sendTarget()
 
             val outboxDir = File(
                 requireNotNull(applicationContext.getExternalFilesDir(null)) { "External files directory unavailable" },
@@ -44,8 +44,8 @@ class QueueSendWorker(
 
             val httpSenderProvider = {
                 if (settings.isConfigured()) {
-                    val url = settings.getUrl()!!
-                    val token = settings.getToken()!!
+                    val url = settings.url!!
+                    val token = settings.token!!
                     HttpSender(url, token)
                 } else {
                     null
@@ -54,7 +54,7 @@ class QueueSendWorker(
 
             val healthChecker: suspend () -> kotlin.Result<Unit> = {
                 if (settings.isConfigured()) {
-                    HttpSender.health(settings.getUrl()!!, settings.getToken()!!)
+                    HttpSender.health(settings.url!!, settings.token!!)
                 } else {
                     kotlin.Result.failure(IllegalStateException("送信先未設定"))
                 }
@@ -66,6 +66,7 @@ class QueueSendWorker(
                 outboxDir = outboxDir,
                 httpSenderProvider = httpSenderProvider,
                 healthChecker = healthChecker,
+                currentReceiverId = settings.receiverId,
             )
 
             router.route()

@@ -157,6 +157,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
         if (showHistoryScreen) {
             QueueListScreen(
                 items = queueItems,
+                currentReceiverId = ReceiverSettings(context).getReceiverId(),
                 onClose = { showHistoryScreen = false },
                 onRetry = { localId ->
                     coroutineScope.launch {
@@ -164,6 +165,16 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                             queueStore.retry(localId)
                             QueueSendScheduler.enqueueSend(context)
                         } catch (_: Exception) {
+                        }
+                    }
+                },
+                onReassignReceiver = { localId ->
+                    coroutineScope.launch {
+                        try {
+                            queueStore.reassignReceiver(localId, ReceiverSettings(context).getReceiverId())
+                            QueueSendScheduler.enqueueSend(context)
+                        } catch (error: Exception) {
+                            errorMessage = "送り直しに失敗しました: ${error.message ?: error}"
                         }
                     }
                 },
