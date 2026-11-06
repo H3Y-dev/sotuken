@@ -9,6 +9,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QueueDisplayTest {
+    @Test
+    fun deleteAvailabilityAndConfirmationFollowState() {
+        val unsent = "この写真を削除します。まだPCに届いていないため、削除するとPCには送られません。"
+        val sent = "端末内の写真を削除します。PCに届いた記録は消えません。"
+        for (state in SendState.entries) {
+            assertEquals(state != SendState.SENDING, canDelete(item(state)))
+        }
+        assertEquals(unsent, deleteConfirmationText(item(SendState.PENDING)))
+        assertEquals(unsent, deleteConfirmationText(item(SendState.FAILED)))
+        assertEquals(sent, deleteConfirmationText(item(SendState.SENT, QueueItem.VIA_HTTP)))
+        assertEquals(sent, deleteConfirmationText(item(SendState.SENT, QueueItem.VIA_FOLDER)))
+        assertEquals(unsent, deleteConfirmationText(
+            item(SendState.SENT, QueueItem.VIA_FOLDER).copy(receiverId = "old"), "current",
+        ))
+    }
+
     private fun item(
         state: SendState,
         via: String? = null,

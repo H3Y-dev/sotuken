@@ -157,6 +157,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
         if (showHistoryScreen) {
             QueueListScreen(
                 items = queueItems,
+                onDelete = { localId -> queueStore.delete(localId) },
                 currentReceiverId = ReceiverSettings(context).getReceiverId(),
                 onClose = { showHistoryScreen = false },
                 onRetry = { localId ->
