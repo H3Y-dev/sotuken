@@ -38,3 +38,12 @@ internal fun errorTextFor(item: QueueItem): String? {
 /** 「再送」ボタンを出す項目か。 */
 internal fun canRetry(item: QueueItem, currentReceiverId: String? = null): Boolean =
     item.sendState == SendState.FAILED && !item.isHeldFor(currentReceiverId)
+
+internal fun canDelete(item: QueueItem): Boolean = item.sendState != SendState.SENDING
+
+internal fun deleteConfirmationText(item: QueueItem, currentReceiverId: String? = null): String =
+    if (item.sendState == SendState.SENT && !item.isHeldFor(currentReceiverId)) {
+        "端末内の写真を削除します。PCに届いた記録は消えません。"
+    } else {
+        "この写真を削除します。まだPCに届いていないため、削除するとPCには送られません。"
+    }

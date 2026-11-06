@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,9 +45,12 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.queue.DeleteResult
 import jp.sotuken.metercapture.queue.SendState
 import jp.sotuken.metercapture.queue.isHeldFor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val THUMBNAIL_MAX_SIDE_PX = 256
@@ -59,7 +63,7 @@ private val DISPLAY_FORMAT: DateTimeFormatter =
 private class LoadedImage(val bitmap: Bitmap?)
 
 /**
- * キューの履歴画面。QueueStore.observeQueue() の結果を読んで表示するだけで、キューには書き込まない。
+ * キューの履歴画面。操作はコールバックを通じてQueueStoreへ渡す。
  * 送信済みの項目も一覧に残し、新しい順に並べる。
  */
 @Composable
@@ -70,8 +74,10 @@ internal fun QueueListScreen(
     onSendNow: () -> Unit = {},
     onReassignReceiver: (String) -> Unit = {},
     currentReceiverId: String? = null,
+    onDelete: suspend (String) -> DeleteResult = { DeleteResult.NOT_FOUND },
 ) {
     var selected by remember { mutableStateOf<QueueItem?>(null) }
+    var deleteTarget by remember { mutableStateOf<QueueItem?>(null) }
     // 撮影日時の文字列ではなく、時刻として解釈した値で新しい順に並べる。
     val sorted = remember(items) {
         items.sortedByDescending { parseInstantOrNull(it.capturedAt) ?: Instant.EPOCH }
@@ -135,6 +141,7 @@ internal fun QueueListScreen(
                                 currentReceiverId = currentReceiverId,
                                 onRetry = { onRetry(item.localId) },
                                 onReassignReceiver = { onReassignReceiver(item.localId) },
+                                onDelete = { deleteTarget = item },
                             )
                         }
                     }
@@ -146,6 +153,7 @@ internal fun QueueListScreen(
     selected?.let { item ->
         FullImageDialog(item = item, onDismiss = { selected = null }, currentReceiverId = currentReceiverId)
     }
+    DeleteConfirmDialog(deleteTarget, currentReceiverId, { deleteTarget = null }, onDelete)
 }
 
 @Composable
@@ -155,6 +163,7 @@ private fun QueueListRow(
     onRetry: () -> Unit = {},
     onReassignReceiver: () -> Unit = {},
     currentReceiverId: String? = null,
+    onDelete: () -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -195,6 +204,9 @@ private fun QueueListRow(
                     )
                 }
                 HeldReceiverAction(item, currentReceiverId, onReassignReceiver)
+                TextButton(onClick = onDelete, enabled = canDelete(item)) {
+                    Text("削除")
+                }
                 if (canRetry(item, currentReceiverId)) {
                     TextButton(onClick = onRetry) {
                         Text("再送")
@@ -202,6 +214,56 @@ private fun QueueListRow(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DeleteConfirmDialog(
+    item: QueueItem?,
+    currentReceiverId: String?,
+    onDismiss: () -> Unit,
+    onDelete: suspend (String) -> DeleteResult,
+) {
+    val scope = rememberCoroutineScope()
+    var deleting by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    if (item != null) {
+        AlertDialog(
+            onDismissRequest = { if (!deleting) onDismiss() },
+            title = { Text("写真の削除") },
+            text = { Text(deleteConfirmationText(item, currentReceiverId)) },
+            confirmButton = {
+                TextButton(enabled = !deleting, onClick = {
+                    deleting = true
+                    scope.launch {
+                        try {
+                            error = when (onDelete(item.localId)) {
+                                DeleteResult.DELETED -> null
+                                DeleteResult.SENDING -> "送信中のため削除できません"
+                                DeleteResult.NOT_FOUND -> "写真は既に削除されています"
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failure: Exception) {
+                            error = "削除に失敗しました: ${failure.message ?: failure}"
+                        } finally {
+                            deleting = false
+                            onDismiss()
+                        }
+                    }
+                }) { Text("削除する") }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleting, onClick = onDismiss) { Text("キャンセル") }
+            },
+        )
+    }
+    error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { error = null },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { error = null }) { Text("閉じる") } },
+        )
     }
 }
 

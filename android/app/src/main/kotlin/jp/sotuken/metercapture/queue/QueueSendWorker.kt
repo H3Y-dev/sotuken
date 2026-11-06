@@ -8,7 +8,6 @@ import jp.sotuken.metercapture.queue.sender.HttpSender
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -19,7 +18,7 @@ class QueueSendWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         // 即時作業と定期作業は別の一意名なので、キューの復旧・送信を直列にする。
-        sendMutex.withLock {
+        queueSendMutex.withLock {
             try {
                 sendQueue()
             } catch (e: CancellationException) {
@@ -76,7 +75,4 @@ class QueueSendWorker(
         }
     }
 
-    companion object {
-        private val sendMutex = Mutex()
-    }
 }
