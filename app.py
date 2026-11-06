@@ -134,6 +134,21 @@ def _show_pairing(server):
         st.caption("交換に失敗した場合や応答が届かない場合は、QRを作り直してください。")
 
 
+@st.fragment(run_every="2s")
+def _show_usb_pull():
+    """run_pc.py --usb-pull で起動したUSB吸い出しサービスの状態を表示する。"""
+    from manager.usb_pull_service import get_usb_pull_status
+    status = get_usb_pull_status()
+    if not status or not status.get("running"):
+        return
+    st.divider()
+    st.markdown("**USB吸い出し: 動作中**")
+    st.caption(f"端末 {len(status.get('devices') or [])}台")
+    st.caption(f"吸い出した累計: {status.get('pulled_total', 0)}組")
+    if status.get("last_error"):
+        st.warning(status["last_error"])
+
+
 try:
     _receiver_info = init_receiver_for_app()
 except (ValueError, OSError) as exc:
@@ -156,6 +171,7 @@ with st.sidebar:
         st.error(f"受信口が起動していません: {_receiver_info.get('error')}")
         if _receiver_info.get("url"):
             st.markdown(f"**設定予定URL**:\n`{_receiver_info['url']}`")
+    _show_usb_pull()
 
 @st.cache_data
 def _get_cached_history(db_path: str, mtime: float):
