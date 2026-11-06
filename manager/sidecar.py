@@ -1,5 +1,7 @@
 ﻿import json
 import os
+import re
+import unicodedata
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Literal, Optional
@@ -23,6 +25,8 @@ class SidecarMetadata:
     device_id: Optional[str] = None
     device_id_source: Optional[Literal["qr", "manual"]] = None
     device_id_issue: Optional[Literal["id_invalid"]] = None
+    inspection_id: Optional[str] = None
+    inspection_name: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -45,6 +49,20 @@ def normalize_captured_at(text) -> str | None:
         return captured_at.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     except (ValueError, OverflowError):
         return None
+
+
+def normalize_inspection(inspection_id, inspection_name):
+    """巡回の不正な任意メタデータは捨て、写真の受け付けは継続する。"""
+    if not isinstance(inspection_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", inspection_id):
+        return None, None
+    if isinstance(inspection_name, str):
+        inspection_name = inspection_name.strip()
+        if (not 1 <= len(inspection_name) <= 64
+                or any(unicodedata.category(char) == "Cc" for char in inspection_name)):
+            inspection_name = None
+    else:
+        inspection_name = None
+    return inspection_id, inspection_name
 
 
 def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
@@ -121,7 +139,10 @@ def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
         except (ValueError, TypeError):
             scale_max = None
 
+    inspection_id, inspection_name = normalize_inspection(data.get("inspection_id"), data.get("inspection_name"))
     return SidecarMetadata(
+        inspection_id=inspection_id,
+        inspection_name=inspection_name,
         local_id=local_id,
         captured_at=captured_at,
         device_name=device_name,

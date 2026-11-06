@@ -87,6 +87,8 @@ def apply_sidecar(storage: Storage, image_sha256: str, sidecar: Optional[Sidecar
     register = False
     with storage.connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        inspection_id, inspection_name = storage.inspection_metadata(
+            conn, sidecar.inspection_id, sidecar.inspection_name)
         rows = conn.execute(
             "SELECT id, device_id, device_id_source, device_id_issue, device_name, value "
             "FROM meter_readings WHERE image_sha256 = ?", (image_sha256,),
@@ -108,9 +110,11 @@ def apply_sidecar(storage: Storage, image_sha256: str, sidecar: Optional[Sidecar
             conn.execute(
                 "UPDATE meter_readings SET device_id = ?, device_id_source = ?, "
                 "device_id_issue = ?, device_name = ?, input_method = ?, "
-                "captured_at = COALESCE(?, captured_at) WHERE id = ?",
+                "captured_at = COALESCE(?, captured_at), "
+                "inspection_name = CASE WHEN inspection_id IS NULL THEN ? ELSE inspection_name END, "
+                "inspection_id = COALESCE(inspection_id, ?) WHERE id = ?",
                 (device_id, source, issue, name or UNKNOWN_DEVICE, judge_input_method(value, truth["operator_value"]),
-                 sidecar.captured_at, row_id),
+                 sidecar.captured_at, inspection_name, inspection_id, row_id),
             )
     if register:
         _register_device(storage, incoming_id, sidecar.device_name, incoming_source)
@@ -168,6 +172,8 @@ def ingest_result(
     _register_device(storage, device_id, registration_name, device_id_source)
 
     save_data = {k: v for k, v in result.items() if k != "ticks"}
+    save_data["inspection_id"] = getattr(sidecar, "inspection_id", None)
+    save_data["inspection_name"] = getattr(sidecar, "inspection_name", None)
     save_data["pipeline_version"] = _pipeline_version(result)
     operator_value = getattr(sidecar, "operator_value", None) if sidecar is not None else None
     save_data["status"] = judge_status(result)

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from manager.record import ImageTruth
+from manager.sidecar import normalize_inspection
 
 
 _RAW_DATA_EXCLUDE_KEYS = {"processed_img"}
@@ -55,6 +56,8 @@ class MeterReading:
     captured_at: Optional[str] = None
     received_at: Optional[str] = None
     image_rel: Optional[str] = None
+    inspection_id: Optional[str] = None
+    inspection_name: Optional[str] = None
 
 
 class Storage:
@@ -110,6 +113,8 @@ class Storage:
             ("captured_at", "TEXT"),
             ("received_at", "TEXT"),
             ("image_rel", "TEXT"),
+            ("inspection_id", "TEXT"),
+            ("inspection_name", "TEXT"),
         )
         tables = {row[0] for row in cursor.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
@@ -224,12 +229,29 @@ class Storage:
         ).fetchone() is not None:
             raise sqlite3.IntegrityError("reading_id migration left duplicate IDs")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_meter_readings_device_id ON meter_readings(device_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_meter_readings_inspection_id ON meter_readings(inspection_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_meter_readings_image_sha256 ON meter_readings(image_sha256)")
         cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_meter_readings_reading_id "
             "ON meter_readings(reading_id) WHERE reading_id IS NOT NULL"
         )
         return repaired_count
+
+    @staticmethod
+    def inspection_metadata(conn, inspection_id, inspection_name):
+        """書き込みトランザクション内で、同じ巡回の最初の名前を共有する。"""
+        inspection_id, inspection_name = normalize_inspection(inspection_id, inspection_name)
+        if inspection_id is not None:
+            row = conn.execute(
+                "SELECT inspection_name FROM meter_readings WHERE inspection_id = ? "
+                "AND inspection_name IS NOT NULL ORDER BY id LIMIT 1", (inspection_id,),
+            ).fetchone()
+            if row:
+                inspection_name = row[0]
+            elif inspection_name is not None:
+                conn.execute("UPDATE meter_readings SET inspection_name = ? WHERE inspection_id = ? "
+                             "AND inspection_name IS NULL", (inspection_name, inspection_id))
+        return inspection_id, inspection_name
 
     def _init_db(self) -> None:
         """テーブルが存在しない場合は作成する"""
@@ -253,34 +275,35 @@ class Storage:
                     if key not in _RAW_DATA_EXCLUDE_KEYS}
         raw_data_json = json.dumps(raw_data, ensure_ascii=False, default=_json_safe)
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO meter_readings 
-            (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
-             reading_id, status, input_method, confidence, failure_stage, failure_code,
-             failure_detail, pipeline_version, log_path, overlay_path,
-             device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                now_str, device_name, value, stage, image_path, raw_data_json, image_sha256,
-                reading_id, read_result.get("status"), read_result.get("input_method"),
-                read_result.get("confidence"), read_result.get("failure_stage"),
-                read_result.get("failure_code"), read_result.get("failure_detail"),
-                read_result.get("pipeline_version"), read_result.get("log_path"),
-                read_result.get("overlay_path"),
-                read_result.get("device_id"), read_result.get("device_id_source"),
-                read_result.get("device_id_issue"), read_result.get("captured_at"),
-                read_result.get("received_at"), read_result.get("image_rel"),
-            ),
-        )
-        conn.commit()
-        last_id = cursor.lastrowid
-        if not self._conn:
-            conn.close()
-        return last_id
+        with self.connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            inspection_id, inspection_name = self.inspection_metadata(
+                conn, read_result.get("inspection_id"), read_result.get("inspection_name"))
+            cursor.execute(
+                """
+                INSERT INTO meter_readings
+                (timestamp, device_name, value, stage, image_path, raw_data_json, image_sha256,
+                 reading_id, status, input_method, confidence, failure_stage, failure_code,
+                 failure_detail, pipeline_version, log_path, overlay_path,
+                 device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel,
+                 inspection_id, inspection_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    now_str, device_name, value, stage, image_path, raw_data_json, image_sha256,
+                    reading_id, read_result.get("status"), read_result.get("input_method"),
+                    read_result.get("confidence"), read_result.get("failure_stage"),
+                    read_result.get("failure_code"), read_result.get("failure_detail"),
+                    read_result.get("pipeline_version"), read_result.get("log_path"),
+                    read_result.get("overlay_path"),
+                    read_result.get("device_id"), read_result.get("device_id_source"),
+                    read_result.get("device_id_issue"), read_result.get("captured_at"),
+                    read_result.get("received_at"), read_result.get("image_rel"),
+                    inspection_id, inspection_name,
+                ),
+            )
+            return cursor.lastrowid
 
     def update_reading_metadata(self, row_id: int, device_name: str, input_method: str) -> None:
         """後着サイドカーで分かった機器名と値の出所だけを書き換える。読み取り結果には触れない。"""
@@ -329,7 +352,8 @@ class Storage:
             SELECT id, timestamp, device_name, value, stage, image_path, {raw_column}, image_sha256,
                    reading_id, status, input_method, confidence, failure_stage, failure_code,
                    failure_detail, pipeline_version, log_path, overlay_path,
-                   device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel
+                   device_id, device_id_source, device_id_issue, captured_at, received_at, image_rel,
+                   inspection_id, inspection_name
             FROM meter_readings
             ORDER BY id DESC
             """
@@ -367,6 +391,8 @@ class Storage:
                     captured_at=row[21],
                     received_at=row[22],
                     image_rel=row[23],
+                    inspection_id=row[24],
+                    inspection_name=row[25],
                 )
             )
         return results
