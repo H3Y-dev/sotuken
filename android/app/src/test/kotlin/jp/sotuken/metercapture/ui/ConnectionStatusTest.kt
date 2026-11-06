@@ -161,5 +161,16 @@ class ConnectionStatusTest {
         val failed = item("5", SendState.FAILED, lastError = "x")
         assertNull(folderReasonLabel(failed))
     }
+        @Test
+    fun http403IsWrongToken() {
+        val error = IOException("Health check failed with HTTP 403: x")
+        assertEquals("合言葉が違います", classifyHealthFailure(error))
+    }
+
+    @Test
+    fun http404StaysNoResponse() {
+        val error = IOException("Health check failed with HTTP 404: x")
+        assertEquals("応答がありません", classifyHealthFailure(error))
+    }
     
 }

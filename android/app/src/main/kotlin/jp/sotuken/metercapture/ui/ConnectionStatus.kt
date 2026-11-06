@@ -42,7 +42,7 @@ private val CONNECT_HINTS = listOf(
 /** メッセージ（文字列）から短い理由を作る。lastErrorの分類にも使う。 */
 fun classifyFailureMessage(message: String?): String = when {
     message.isNullOrBlank() -> "応答がありません"
-    message.contains("HTTP 401") -> "合言葉が違います"
+    message.contains("HTTP 401") || message.contains("HTTP 403") -> "合言葉が違います"
     message.contains("HTTP 400") -> "送信先の形式が違います"
     CONNECT_HINTS.any { message.contains(it, ignoreCase = true) } -> "接続できません"
     else -> "応答がありません"

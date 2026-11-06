@@ -35,7 +35,7 @@ fun ConnectionBar(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
         color = barForeground(state),
-        maxLines = 1,
+        maxLines = 2,
         modifier = Modifier
             .fillMaxWidth()
             .background(barBackground(state))
