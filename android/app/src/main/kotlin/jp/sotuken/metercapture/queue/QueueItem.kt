@@ -1,9 +1,10 @@
 package jp.sotuken.metercapture.queue
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "queue_items")
+@Entity(tableName = "queue_items", indices = [Index(value = ["inspectionId"])])
 data class QueueItem(
     @PrimaryKey val localId: String,
     val imagePath: String,
@@ -19,6 +20,9 @@ data class QueueItem(
     val receiverId: String? = null,
     val deviceId: String? = null,
     val deviceIdSource: String? = null,
+    val inspectionId: String? = null,
+    val inspectionName: String? = null,
+    val routeId: String? = null,
 ) {
     companion object {
         const val VIA_HTTP = "http"
@@ -42,6 +46,9 @@ data class CaptureMeta(
     val operatorNote: String?,
     val deviceId: String? = null,
     val deviceIdSource: String? = null,
+    val inspectionId: String? = null,
+    val inspectionName: String? = null,
+    val routeId: String? = null,
 )
 
 fun QueueItem.isHeldFor(currentReceiverId: String?): Boolean =

@@ -38,6 +38,11 @@ object SenderPayloads {
                 append(",\"device_id_source\":").append(jsonString(item.deviceIdSource))
             }
         }
+        if (item.inspectionId != null) {
+            append(",\"inspection_id\":").append(jsonString(item.inspectionId))
+            item.inspectionName?.let { append(",\"inspection_name\":").append(jsonString(it)) }
+            item.routeId?.let { append(",\"route_id\":").append(jsonString(it)) }
+        }
         append('}')
     }
 

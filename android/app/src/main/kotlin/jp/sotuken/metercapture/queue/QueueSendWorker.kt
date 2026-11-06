@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import java.io.File
+import jp.sotuken.metercapture.inspection.isPhotoSendable
 import jp.sotuken.metercapture.queue.sender.HttpSender
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.Dispatchers
@@ -30,49 +31,49 @@ class QueueSendWorker(
     }
 
     private suspend fun sendQueue(): Result {
-        val database = CaptureDatabase.create(applicationContext)
-        try {
-            val queueDao = database.queueItemDao()
-            val queueStore = RoomQueueStore(queueDao)
-            val settings = ReceiverSettings(applicationContext).sendTarget()
+        val database = CaptureDatabase.getInstance(applicationContext)
+        val queueDao = database.queueItemDao()
+        val inspectionDao = database.inspectionDao()
+        val queueStore = RoomQueueStore(queueDao)
+        val settings = ReceiverSettings(applicationContext).sendTarget()
 
-            val outboxDir = File(
-                requireNotNull(applicationContext.getExternalFilesDir(null)) { "External files directory unavailable" },
-                "outbox",
-            )
+        val outboxDir = File(
+            requireNotNull(applicationContext.getExternalFilesDir(null)) { "External files directory unavailable" },
+            "outbox",
+        )
 
-            val httpSenderProvider = {
-                if (settings.isConfigured()) {
-                    val url = settings.url!!
-                    val token = settings.token!!
-                    HttpSender(url, token)
-                } else {
-                    null
-                }
+        val httpSenderProvider = {
+            if (settings.isConfigured()) {
+                val url = settings.url!!
+                val token = settings.token!!
+                HttpSender(url, token)
+            } else {
+                null
             }
-
-            val healthChecker: suspend () -> kotlin.Result<Unit> = {
-                if (settings.isConfigured()) {
-                    HttpSender.health(settings.url!!, settings.token!!)
-                } else {
-                    kotlin.Result.failure(IllegalStateException("送信先未設定"))
-                }
-            }
-
-            val router = SendRouter(
-                queueDao = queueDao,
-                queueStore = queueStore,
-                outboxDir = outboxDir,
-                httpSenderProvider = httpSenderProvider,
-                healthChecker = healthChecker,
-                currentReceiverId = settings.receiverId,
-            )
-
-            router.route()
-            return Result.success()
-        } finally {
-            database.close()
         }
+
+        val healthChecker: suspend () -> kotlin.Result<Unit> = {
+            if (settings.isConfigured()) {
+                HttpSender.health(settings.url!!, settings.token!!)
+            } else {
+                kotlin.Result.failure(IllegalStateException("送信先未設定"))
+            }
+        }
+
+        val router = SendRouter(
+            queueDao = queueDao,
+            queueStore = queueStore,
+            outboxDir = outboxDir,
+            httpSenderProvider = httpSenderProvider,
+            healthChecker = healthChecker,
+            currentReceiverId = settings.receiverId,
+            isSendable = { item ->
+                isPhotoSendable(item, item.inspectionId?.let { inspectionDao.findById(it)?.state })
+            },
+        )
+
+        router.route()
+        return Result.success()
     }
 
 }

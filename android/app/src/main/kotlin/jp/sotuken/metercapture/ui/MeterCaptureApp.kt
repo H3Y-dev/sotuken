@@ -41,18 +41,12 @@ import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueSendScheduler
 import jp.sotuken.metercapture.queue.QueueStore
 import jp.sotuken.metercapture.settings.DeviceIdSettings
-import jp.sotuken.metercapture.settings.PrivateIpv4Validator
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.LaunchedEffect
-import jp.sotuken.metercapture.queue.sender.HttpSender
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import androidx.compose.runtime.saveable.rememberSaveable
 
 @Composable
-fun MeterCaptureApp(queueStore: QueueStore) {
+fun MeterCaptureApp(queueStore: QueueStore, health: ReceiverHealthState = rememberReceiverHealth()) {
     val context = LocalContext.current
     val queueItems by queueStore.observeQueue().collectAsStateWithLifecycle(initialValue = emptyList())
     var hasCameraPermission by remember {
@@ -78,35 +72,10 @@ fun MeterCaptureApp(queueStore: QueueStore) {
     val coroutineScope = rememberCoroutineScope()
     // 接続状況バー用の状態（SK-09）
     val receiverSettings = remember { ReceiverSettings(context) }
-    var settingsVersion by remember { mutableStateOf(0) }
-    val configured = remember(settingsVersion) { receiverSettings.isConfigured() }
-    var healthOk by remember { mutableStateOf<Boolean?>(null) }
-    var healthReason by remember { mutableStateOf("") }
-    var healthInFlight by remember { mutableStateOf(false) }
-    var healthGeneration by remember { mutableStateOf(0) }
-    var isResumed by remember { mutableStateOf(false) }
+    val configured = health.configured
+    val healthOk = health.healthOk
+    val healthReason = health.reason
     var showStatusDialog by remember { mutableStateOf(false) }
-
-    fun checkHealth(force: Boolean = false) {
-        val url = receiverSettings.getUrl()
-        val token = receiverSettings.getToken()
-        if (!receiverSettings.isConfigured() || url.isNullOrBlank() || token.isNullOrBlank()) {
-            healthOk = null
-            return
-        }
-        if (healthInFlight && !force) return
-        healthInFlight = true
-        healthGeneration += 1
-        val generation = healthGeneration
-        coroutineScope.launch {
-            val result = withContext(Dispatchers.IO) { HttpSender.health(url, token) }
-            if (generation == healthGeneration) {
-                healthOk = result.isSuccess
-                healthReason = classifyHealthFailure(result.exceptionOrNull())
-                healthInFlight = false
-            }
-        }
-    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -117,19 +86,8 @@ fun MeterCaptureApp(queueStore: QueueStore) {
         hasCameraPermission =
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
-        isResumed = true
-        checkHealth()
+        health.check()
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { isResumed = false }
-    LaunchedEffect(isResumed) {
-        if (isResumed) {
-            while (true) {
-                delay(15_000)
-                checkHealth()
-            }
-        }
-    }
-
     val barState = connectionBarState(configured, healthOk)
     val undelivered = countUndelivered(queueItems)
     val lastSentText = formatHHmm(latestHttpSentAt(queueItems))
@@ -230,7 +188,7 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                                         capturedImage = image
                                         operatorValueInput = ""
                                         errorMessage = null
-                                        checkHealth()
+                                        health.check()
                                     } catch (error: Exception) {
                                         capturedImage = null
                                         errorMessage = "キューへの追加に失敗しました: ${error.message ?: error}"
@@ -300,89 +258,12 @@ fun MeterCaptureApp(queueStore: QueueStore) {
                 },
                 onClose = {
                     showPairingScreen = false
-                    settingsVersion += 1
-                    healthOk = null
-                    checkHealth(force = true)
+                    health.onSettingsChanged()
                 },
             )
         }
         if (showSettingsDialog) {
-            var urlInput by remember { mutableStateOf(receiverSettings.getUrl() ?: "") }
-            var tokenInput by remember { mutableStateOf(receiverSettings.getToken() ?: "") }
-            var validationError by remember { mutableStateOf<String?>(null) }
-
-            AlertDialog(
-                onDismissRequest = { showSettingsDialog = false },
-                title = { Text("送信先の設定") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = {
-                            showSettingsDialog = false
-                            showPairingScreen = true
-                        }) { Text("QRで登録") }
-                        OutlinedTextField(
-                            value = urlInput,
-                            onValueChange = {
-                                urlInput = it
-                                validationError = null
-                            },
-                            label = { Text("送信先URL (例: http://192.168.1.20:8765)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        OutlinedTextField(
-                            value = tokenInput,
-                            onValueChange = {
-                                tokenInput = it
-                                validationError = null
-                            },
-                            label = { Text("合言葉 (Token)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        validationError?.let {
-                            Text(
-                                text = it,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            when (val result = PrivateIpv4Validator.validateUrl(urlInput)) {
-                                is PrivateIpv4Validator.ValidationResult.Invalid -> {
-                                    validationError = result.message
-                                }
-                                PrivateIpv4Validator.ValidationResult.Valid -> {
-                                    if (tokenInput.isBlank()) {
-                                        validationError = "合言葉を入力してください"
-                                    } else {
-                                        receiverSettings.save(urlInput, tokenInput)
-                                        settingsVersion += 1
-                                        healthOk = null
-                                        checkHealth(force = true)
-                                        try {
-                                            QueueSendScheduler.enqueueSend(context)
-                                        } catch (_: Exception) {
-                                        }
-                                        showSettingsDialog = false
-                                    }
-                                }
-                            }
-                        },
-                    ) {
-                        Text("保存")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSettingsDialog = false }) {
-                        Text("キャンセル")
-                    }
-                },
-            )
+            ReceiverSettingsDialog(receiverSettings, { showSettingsDialog = false }, health::onSettingsChanged, { showPairingScreen = true })
         }
         if (showStatusDialog) {
             AlertDialog(

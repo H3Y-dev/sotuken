@@ -42,7 +42,7 @@ class RoomQueueStoreInstrumentedTest {
                 oldDb.version = 1
             }
             val database = Room.databaseBuilder(context, CaptureDatabase::class.java, name)
-                .addMigrations(CaptureDatabase.MIGRATION_1_2)
+                .addMigrations(*CaptureDatabase.ALL_MIGRATIONS)
                 .build()
             try {
                 val item = database.queueItemDao().findById("existing")
