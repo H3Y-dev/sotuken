@@ -55,11 +55,16 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
             }
         }
     }
-    val health = rememberReceiverHealth()
     val settings = remember { ReceiverSettings(context) }
     val legacy = remember(queueStore) { LegacyQueueView(queueStore) }
     val inspections by remember(inspectionStore) { inspectionStore.observeInspections() }.collectAsStateWithLifecycle(emptyList())
     val photos by remember(queueStore) { queueStore.observeQueue() }.collectAsStateWithLifecycle(emptyList())
+    val hasWork = inspections.any { it.inspection.state == InspectionState.WAITING } || countUndelivered(photos.filter { it.inspectionId == null }) > 0
+    val health = rememberReceiverHealth {
+        if (hasWork) QueueSendScheduler.enqueueSend(context)
+    }
+    val stateById = inspections.associate { it.inspection.inspectionId to it.inspection.state }
+    val barUndelivered = countUndelivered(photos.filter { isPhotoSendable(it, stateById[it.inspectionId]) })
     var stack by rememberSaveable { mutableStateOf(listOf(AppScreen.Home.encode())) }
     val screen = decodeAppScreen(stack.last())
     fun home() { stack = listOf(AppScreen.Home.encode()) }
@@ -111,7 +116,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
             InspectionScaffold(
                 title = when (screen) { AppScreen.Home -> "点検の一覧"; AppScreen.Create -> "新しい点検"; else -> "点検" },
                 health = health,
-                barUndelivered = countUndelivered(photos),
+                barUndelivered = barUndelivered,
                 onBarClick = { showStatus = true; health.check(force = true) },
                 onHome = if (screen == AppScreen.Home) null else ({ home() }),
             ) {
@@ -130,7 +135,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                                 stack = listOf(AppScreen.Home.encode(), AppScreen.Create.encode())
                             }
                         },
-                        onOpen = { open(it) }, onSettings = { showSettings = true }, onGuide = { showStatus = true }, onRoutes = { open(AppScreen.Routes) }, onLegacy = { open(AppScreen.LegacyCapture) },
+                        onOpen = { open(it) }, onSettings = { showSettings = true }, onGuide = { open(AppScreen.ConnectionGuide) }, onRoutes = { open(AppScreen.Routes) }, onLegacy = { open(AppScreen.LegacyCapture) },
                     )
                     AppScreen.Create -> InspectionCreateScreen(
                         CreateUiState(name, placeholder, operator, place, savedRoutes.map { RouteChoice(it.route.routeId, "${it.route.name}（${it.route.devices.size}機器）") }, selectedRouteId, error ?: routeError, starting),
@@ -219,7 +224,31 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                     }
                     is AppScreen.SendStatus -> {
                         val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
-                        if (inspection != null) InspectionSendStatusPlaceholder(inspection, photos.filter { it.inspectionId == inspection.inspectionId }, { selectedPhoto = it }, { home() })
+                        if (inspection != null) InspectionSendStatusScreen(
+                            buildSendStatusUiState(inspection, photos.filter { it.inspectionId == inspection.inspectionId }, HealthView(health.healthOk, health.network), settings.getReceiverId(), settings.getPcName() ?: settings.getUrl()?.let { runCatching { java.net.URI(it).host }.getOrNull() }),
+                            onSendNow = { QueueSendScheduler.enqueueSend(context) },
+                            onRetryUndelivered = {
+                                if (!busy) {
+                                    busy = true
+                                    scope.launch {
+                                        try {
+                                            withContext(Dispatchers.IO) { inspectionStore.retryUndelivered(inspection.inspectionId) }
+                                            QueueSendScheduler.enqueueSend(context)
+                                        } catch (e: CancellationException) { throw e
+                                        } catch (e: Exception) { operationError = "再送の準備に失敗しました: ${e.message}"
+                                        } finally { busy = false }
+                                    }
+                                }
+                            },
+                            onReassign = { id -> scope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) { queueStore.reassignReceiver(id, settings.getReceiverId()) }
+                                    QueueSendScheduler.enqueueSend(context)
+                                } catch (e: CancellationException) { throw e
+                                } catch (e: Exception) { operationError = "送信先の変更に失敗しました: ${e.message}" }
+                            } },
+                            onGuide = { open(AppScreen.ConnectionGuide) }, onHome = { home() },
+                        )
                     }
                     AppScreen.Routes -> RouteListScreen(
                         buildRouteListUiState(savedRoutes, remoteRoutes, routeLoading, routeError, confirmRoute),
@@ -245,7 +274,8 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                             if (selectedRouteId == id) selectedRouteId = null
                         } }, onBack = { back() },
                     )
-                    else -> Text("この画面は次の更新で入ります", Modifier.padding(16.dp))
+                    AppScreen.ConnectionGuide -> ConnectionGuideScreen(networkLabel(health.network), health.healthOk, { home() }, { showSettings = true })
+                    AppScreen.LegacyCapture -> Unit
                 }
             }
         }
@@ -305,35 +335,10 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
         if (showStatus) AlertDialog(
             onDismissRequest = { showStatus = false }, title = { Text("接続の状態") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(connectionBarText(connectionBarState(health.configured, health.healthOk), countUndelivered(photos), "", health.reason))
+                Text(connectionBarTextWithNetwork(health.network, connectionBarState(health.configured, health.healthOk), barUndelivered, "", health.reason))
                 TextButton(onClick = { showStatus = false; showSettings = true }) { Text("送信先の設定") }
             } },
             confirmButton = { TextButton(onClick = { showStatus = false }) { Text("閉じる") } },
         )
-    }
-}
-
-@Composable
-private fun InspectionSendStatusPlaceholder(inspection: Inspection, photos: List<QueueItem>, onPhotoClick: (QueueItem) -> Unit, onHome: () -> Unit) {
-    androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("送信待ち", style = MaterialTheme.typography.headlineSmall)
-            Text(inspection.name)
-            Text("写真${photos.size}枚")
-        }
-        items(photos.size, key = { photos[it].localId }) { index ->
-            val photo = photos[index]
-            OutlinedCard(onClick = { onPhotoClick(photo) }, modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Thumbnail(photo.imagePath, Modifier.size(76.dp))
-                    Column {
-                        Text(photo.deviceName ?: "機器名なし")
-                        Text(photo.deviceId ?: "機器IDなし")
-                        Text("${formatInspectionCaptureTime(photo.capturedAt)} 撮影")
-                    }
-                }
-            }
-        }
-        item { Button(onClick = onHome, modifier = Modifier.fillMaxWidth()) { Text("点検の一覧へ") } }
     }
 }

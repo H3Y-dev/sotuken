@@ -43,6 +43,9 @@ interface InspectionDao {
     @Query("SELECT * FROM queue_items WHERE inspectionId = :id ORDER BY capturedAt ASC")
     suspend fun findPhotos(id: String): List<QueueItem>
 
+    @Query("UPDATE queue_items SET sendState = 'PENDING', sentAt = NULL, sentVia = NULL, lastError = NULL WHERE localId = :localId AND sendState = 'SENT'")
+    suspend fun requeueSent(localId: String)
+
     /** ホームのカード用の集計。機器数は機器IDまたは機器名で数え、どちらも無い写真は数えない。 */
     @Query(
         "SELECT inspectionId, COUNT(*) AS photoCount, " +

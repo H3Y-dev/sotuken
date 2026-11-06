@@ -6,6 +6,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ReceiverUrlCandidatesTest {
+    @Test fun samePcMovesOldUrlToCandidates() { assertEquals(listOf("old", "older"), mergeCandidateUrls("old", listOf("older"), "new", true)) }
+    @Test fun otherPcClearsCandidates() { assertEquals(emptyList<String>(), mergeCandidateUrls("old", listOf("older"), "new", false)) }
+    @Test fun keepsAtMostThreeWithoutDuplicates() { assertEquals(listOf("old", "a", "b"), mergeCandidateUrls("old", listOf("new", "a", "old", "b", "c"), "new", true)) }
     @Test fun pickReachableReturnsFirstSuccess() = runTest {
         val called = mutableListOf<String>()
         val result = pickReachableUrl(listOf("a", "b", "c")) { called += it; if (it == "b") Result.success(Unit) else Result.failure(Exception("offline")) }

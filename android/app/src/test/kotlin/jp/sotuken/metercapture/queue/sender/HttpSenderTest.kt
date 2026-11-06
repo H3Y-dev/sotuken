@@ -33,6 +33,10 @@ class HttpSenderTest {
 
     private val validToken = "test-secret-token"
     @Volatile private var uploadStatus: String = "200 OK"
+    @Volatile private var manifestResponse: String = """{"ok":true,"matched":1,"missing_photos":[]}"""
+    @Volatile private var manifestBody: String? = null
+    @Volatile private var manifestToken: String? = null
+    @Volatile private var manifestContentType: String? = null
     @Volatile private var loseUploadResponse = false
 
     @Before
@@ -67,7 +71,13 @@ class HttpSenderTest {
                             lastReceivedBody = body
                         }
                         val status = if (headers["x-sotuken-token"] == validToken) uploadStatus else "401 Unauthorized"
-                        val response = """{"ok":true}""".toByteArray(Charsets.UTF_8)
+                        val isManifest = requestLine.contains("/manifest ")
+                        if (isManifest) {
+                            manifestBody = body.toString(Charsets.UTF_8)
+                            manifestToken = headers["x-sotuken-token"]
+                            manifestContentType = headers["content-type"]
+                        }
+                        val response = (if (isManifest) manifestResponse else """{"ok":true}""").toByteArray(Charsets.UTF_8)
                         if (loseUploadResponse && requestLine.startsWith("POST /upload ")) {
                             Thread.sleep(300)
                         } else socket.getOutputStream().apply {
@@ -276,6 +286,47 @@ class HttpSenderTest {
         } finally {
             image.delete()
         }
+    }
+
+    @Test fun postManifestSendsJsonAndToken() = runTest {
+        val json = """{"v":1,"inspection_name":"点検"}"""
+        val reply = HttpSender("http://127.0.0.1:$serverPort", validToken).postManifest("I-1", json)
+        assertTrue(reply.isSuccess)
+        assertEquals("POST /inspections/I-1/manifest HTTP/1.1", lastRequestLine)
+        assertEquals(json, manifestBody); assertEquals(validToken, manifestToken)
+        assertEquals("application/json; charset=utf-8", manifestContentType)
+    }
+    @Test fun postManifestParsesReply() = runTest {
+        manifestResponse = """{"ok":true,"matched":2,"missing_photos":["b.jpg"]}"""
+        assertEquals(jp.sotuken.metercapture.inspection.ManifestReply(2, listOf("b.jpg")), HttpSender("http://127.0.0.1:$serverPort", validToken).postManifest("I-1", "{}").getOrThrow())
+    }
+    @Test fun postManifest404IsTemporaryWithUpdateMessage() = runTest {
+        uploadStatus = "404 Not Found"
+        val error = HttpSender("http://127.0.0.1:$serverPort", validToken).postManifest("I-1", "{}").exceptionOrNull()
+        assertTrue(error is TemporarySendException); assertTrue(error!!.message!!.contains("PCのアプリを更新"))
+    }
+    @Test fun postManifestRejectsInvalidInspectionId() = runTest {
+        assertTrue(HttpSender("http://127.0.0.1:$serverPort", validToken).postManifest("../x", "{}").exceptionOrNull() is PermanentSendException)
+        assertEquals(null, lastRequestLine)
+    }
+    @Test fun postManifestRejectsInvalidOrOversizedReply() = runTest {
+        val sender = HttpSender("http://127.0.0.1:$serverPort", validToken)
+        for (body in listOf("{}", "x".repeat(65_537))) {
+            manifestResponse = body
+            assertTrue(sender.postManifest("I-1", "{}").exceptionOrNull() is TemporarySendException)
+        }
+        for (code in listOf(400, 409, 413)) {
+            uploadStatus = "$code Error"
+            assertTrue(sender.postManifest("I-1", "{}").exceptionOrNull() is PermanentSendException)
+        }
+    }
+    @Test fun upload409IsPermanent() = runTest {
+        uploadStatus = "409 Conflict"
+        val file = File.createTempFile("conflict", ".jpg").apply { writeText("image") }
+        try {
+            val item = QueueItem("a", file.path, "2026-11-06T00:00:00Z", null, null, null, SendState.SENDING, 0, null, null)
+            assertTrue(HttpSender("http://127.0.0.1:$serverPort", validToken).send(item).exceptionOrNull() is PermanentSendException)
+        } finally { file.delete() }
     }
 
     @Test
