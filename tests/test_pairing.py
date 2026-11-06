@@ -33,7 +33,13 @@ class PairingTests(unittest.TestCase):
         body = raw if raw is not None else json.dumps({'token': token})
         conn.request(method, path, body, headers or {'Content-Type': 'application/json'})
         resp = conn.getresponse()
-        result = resp.status, json.loads(resp.read())
+        try:
+            data = json.loads(resp.read())
+        except (ConnectionResetError, ConnectionAbortedError):
+            if resp.status not in (400, 413):
+                raise
+            data = {}
+        result = resp.status, data
         conn.close()
         return result
 
@@ -82,7 +88,10 @@ class PairingTests(unittest.TestCase):
             conn.send(b'{')
             resp = conn.getresponse()
             self.assertEqual(resp.status, 408)
-            resp.read()
+            try:
+                resp.read()
+            except (ConnectionResetError, ConnectionAbortedError):
+                pass  # Windows may reset after the already-verified 408.
         conn.close()
         self.assertEqual(self.request(invite['token'])[0], 200)
 
@@ -113,7 +122,10 @@ class PairingTests(unittest.TestCase):
             try:
                 resp = conn.getresponse()
                 self.assertEqual(resp.status, 408)
-                resp.read()
+                try:
+                    resp.read()
+                except (ConnectionResetError, ConnectionAbortedError):
+                    pass  # Windows may reset after the already-verified 408.
             finally:
                 stop.set()
                 sender.join()
