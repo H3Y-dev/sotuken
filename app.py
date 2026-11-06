@@ -254,156 +254,179 @@ with tab1:
 
 with tab2:
     st.header("読み取りの記録")
-    device_options = ["すべて"] + sorted({reading.device_name for reading in history})
-    history_dates = [datetime.fromisoformat(reading.captured_at or reading.received_at or reading.timestamp).date()
-                     for reading in history]
-    default_date_from = min(history_dates) if history_dates else date.today()
-    default_date_to = max(history_dates) if history_dates else date.today()
+    auto_refresh = st.checkbox("自動更新(5秒ごと)", value=False)
 
-    filter_device, filter_date_from, filter_date_to = st.columns(3)
-    with filter_device:
-        selected_history_device = st.selectbox("機器名", options=device_options)
-    with filter_date_from:
-        selected_date_from = st.date_input("開始日", value=default_date_from)
-    with filter_date_to:
-        selected_date_to = st.date_input("終了日", value=default_date_to)
-
-    inspections = inspection_options(history)
-    inspection_labels = {None: "すべて", "": "点検なし(旧データ)"}
-    inspection_labels.update({key: f"{name}（{count}件）" for key, name, count in inspections})
-    from manager.routes import get_manifest, get_route, inspection_status, route_progress, arrived_manifest_devices
-    with manager.storage.connection() as conn:
-        for inspection_id, inspection_name in conn.execute('SELECT inspection_id, inspection_name FROM inspections ORDER BY started_at DESC'):
-            inspection_labels.setdefault(inspection_id, f"{inspection_name or inspection_id}（写真の受信待ち）")
-    selected_inspection = st.selectbox("点検（巡回）", options=list(inspection_labels),
-                                     format_func=inspection_labels.get)
-
-    filtered_history = filter_readings(
-        history,
-        device_name=selected_history_device,
-        date_from=selected_date_from,
-        date_to=selected_date_to,
-        inspection_id=selected_inspection,
-    )
-    st.caption(f"絞り込み結果 {len(filtered_history)}件 / 全{len(history)}件")
-    if selected_inspection:
-        inspection_rows = filter_readings(history, inspection_id=selected_inspection)
+    @st.fragment(run_every="5s" if auto_refresh else None)
+    def _render_records():
+        if st.button("更新", key="refresh_records"):
+            _get_cached_history.clear()
+            st.rerun()
+        history = manager.get_history(include_raw=False)
+        from manager.pending_images import pending_images
         from manager.receiver import get_default_incoming_dir
-        incoming_dir = getattr(_receiver_info.get('server'), 'incoming_dir', get_default_incoming_dir())
-        status = inspection_status(manager.storage, selected_inspection, incoming_dir)
-        st.subheader(f"点検の受信状態: {status['state']}")
-        if status['missing_photos']:
-            st.warning(f"{len(status['missing_photos'])}枚未着: " + '、'.join(status['missing_photos']))
-        manifest = get_manifest(manager.storage, selected_inspection)
-        route_id = (manifest or {}).get('route_id') or next((r.route_id for r in inspection_rows if r.route_id), None)
-        route = get_route(manager.storage, route_id) if route_id else None
-        if route:
-            st.subheader('ルートの撮影状況（実際に届いた写真を優先）')
-            arrived = arrived_manifest_devices(manager.storage, manifest, inspection_rows, incoming_dir)
-            st.dataframe(pd.DataFrame(route_progress(route, [*inspection_rows, *arrived], manifest)), use_container_width=True, hide_index=True)
-        devices_table = inspection_devices(inspection_rows)
-        st.subheader("この点検のメーター一覧")
-        st.caption("選択した点検全体の一覧（機器名・日付の絞り込み前）")
-        st.dataframe(pd.DataFrame(devices_table), use_container_width=True, hide_index=True)
-        missing_id_count = sum(row["写真の枚数"] for row in devices_table if row["機器ID"] == "機器IDなし")
-        st.caption(f"機器IDなしの写真: {missing_id_count}枚")
-    latest_rows = latest_per_device(filtered_history)
-    st.header("各メーターの最新の読み取り")
-    if latest_rows:
-        latest_table = pd.DataFrame([
-            {"メーター名": row["display_name"],
-             "読み取り値": "-" if row["value"] is None else str(row["value"]),
-             "時刻": datetime.fromisoformat(row["timestamp"]).strftime("%Y-%m-%d %H:%M"),
-             "状態": row["status_label"]}
-            for row in latest_rows[:50]
-        ])
-        status_colors = {"正常": "color: #24643B", "要確認": "color: #805500",
-                         "失敗": "color: #B42318"}
-        st.dataframe(latest_table.style.applymap(status_colors.get, subset=["状態"]),
-                     use_container_width=True, hide_index=True)
-        if len(latest_rows) > 50:
-            st.caption(f"ほか{len(latest_rows) - 50}件は全履歴で確認できます")
-    else:
-        st.info("表示できる記録がありません。")
-
-    review_count = sum(row["status_label"] == "要確認" for row in latest_rows)
-    failed_count = sum(row["status_label"] == "失敗" for row in latest_rows)
-    unnamed_count = sum(row["display_name"] == "名前なし" for row in latest_rows)
-    st.caption(f"要確認 {review_count}件・失敗 {failed_count}件・名前なし {unnamed_count}件")
-    if st.button("点検の結果を書き出す"):
+        incoming_dir = getattr(_receiver_info.get("server"), "incoming_dir", get_default_incoming_dir())
         try:
-            st.session_state["inspection_csv_path"] = export_inspection_csv(latest_rows)
-        except Exception as exc:
-            st.session_state.pop("inspection_csv_path", None)
-            st.error(f"点検の結果を書き出せませんでした: {exc}")
-    inspection_path = st.session_state.get("inspection_csv_path")
-    if inspection_path:
-        st.success(f"保存しました: {inspection_path}")
-        if os.name == "nt" and st.button("フォルダを開く"):
-            try:
-                os.startfile(os.path.dirname(inspection_path))
-            except OSError:
-                pass
+            pending_count, pending_names = pending_images(incoming_dir, manager.storage)
+        except OSError as exc:
+            st.warning(f"読み取り待ちの確認ができませんでした: {exc}")
+        else:
+            if pending_count:
+                st.info(f"読み取り中 {pending_count}枚")
+                st.caption("、".join(pending_names))
 
-    if history:
-        filtered_ids = {reading.id for reading in filtered_history}
-        history_data = manager.format_history_for_ui(history)
-        filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
+        device_options = ["すべて"] + sorted({reading.device_name for reading in history})
+        history_dates = [datetime.fromisoformat(reading.captured_at or reading.received_at or reading.timestamp).date()
+                         for reading in history]
+        default_date_from = min(history_dates) if history_dates else date.today()
+        default_date_to = max(history_dates) if history_dates else date.today()
 
-        with st.expander("全履歴", expanded=False):
-            st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
-            _render_history_table(filtered_history_data)
+        filter_device, filter_date_from, filter_date_to = st.columns(3)
+        with filter_device:
+            selected_history_device = st.selectbox("機器名", options=device_options)
+        with filter_date_from:
+            selected_date_from = st.date_input("開始日", value=default_date_from)
+        with filter_date_to:
+            selected_date_to = st.date_input("終了日", value=default_date_to)
 
-        if st.button("CSVを書き出す"):
-            csv_path = "readings_export.csv"
-            export_to_csv(filtered_history, csv_path)
-            with open(csv_path, "rb") as f:
-                st.download_button(
-                    label="CSVを保存",
-                    data=f,
-                    file_name="readings_export.csv",
-                    mime="text/csv",
-                )
+        inspections = inspection_options(history)
+        inspection_labels = {None: "すべて", "": "点検なし(旧データ)"}
+        inspection_labels.update({key: f"{name}（{count}件）" for key, name, count in inspections})
+        from manager.routes import get_manifest, get_route, inspection_status, route_progress, arrived_manifest_devices
+        with manager.storage.connection() as conn:
+            for inspection_id, inspection_name in conn.execute('SELECT inspection_id, inspection_name FROM inspections ORDER BY started_at DESC'):
+                inspection_labels.setdefault(inspection_id, f"{inspection_name or inspection_id}（写真の受信待ち）")
+        selected_inspection = st.selectbox("点検（巡回）", options=list(inspection_labels),
+                                         format_func=inspection_labels.get)
 
-        if st.button("JSONLを書き出す"):
-            jsonl_path = "readings_export.jsonl"
-            export_to_jsonl(filtered_history, jsonl_path)
-            with open(jsonl_path, "rb") as f:
-                st.download_button(
-                    label="JSONLを保存",
-                    data=f,
-                    file_name="readings_export.jsonl",
-                    mime="application/x-ndjson",
-                )
-    else:
-        with st.expander("全履歴", expanded=False):
-            st.caption("0件 / 全0件")
-            st.info("履歴データが存在しません。")
-
-    st.header("機器別の推移")
-    grouped_readings = group_by_device(history)
-
-    if not grouped_readings:
-        st.info("表示できる記録がありません。")
-    else:
-        selected_device = st.selectbox(
-            "機器", options=list(grouped_readings.keys())
+        filtered_history = filter_readings(
+            history,
+            device_name=selected_history_device,
+            date_from=selected_date_from,
+            date_to=selected_date_to,
+            inspection_id=selected_inspection,
         )
-        series_data = readings_to_series(grouped_readings[selected_device])
+        st.caption(f"絞り込み結果 {len(filtered_history)}件 / 全{len(history)}件")
+        if selected_inspection:
+            inspection_rows = filter_readings(history, inspection_id=selected_inspection)
+            from manager.receiver import get_default_incoming_dir
+            incoming_dir = getattr(_receiver_info.get('server'), 'incoming_dir', get_default_incoming_dir())
+            status = inspection_status(manager.storage, selected_inspection, incoming_dir)
+            st.subheader(f"点検の受信状態: {status['state']}")
+            if status['missing_photos']:
+                st.warning(f"{len(status['missing_photos'])}枚未着: " + '、'.join(status['missing_photos']))
+            manifest = get_manifest(manager.storage, selected_inspection)
+            route_id = (manifest or {}).get('route_id') or next((r.route_id for r in inspection_rows if r.route_id), None)
+            route = get_route(manager.storage, route_id) if route_id else None
+            if route:
+                st.subheader('ルートの撮影状況（実際に届いた写真を優先）')
+                arrived = arrived_manifest_devices(manager.storage, manifest, inspection_rows, incoming_dir)
+                st.dataframe(pd.DataFrame(route_progress(route, [*inspection_rows, *arrived], manifest)), use_container_width=True, hide_index=True)
+            devices_table = inspection_devices(inspection_rows)
+            st.subheader("この点検のメーター一覧")
+            st.caption("選択した点検全体の一覧（機器名・日付の絞り込み前）")
+            st.dataframe(pd.DataFrame(devices_table), use_container_width=True, hide_index=True)
+            missing_id_count = sum(row["写真の枚数"] for row in devices_table if row["機器ID"] == "機器IDなし")
+            st.caption(f"機器IDなしの写真: {missing_id_count}枚")
+        latest_rows = latest_per_device(filtered_history)
+        st.header("各メーターの最新の読み取り")
+        if latest_rows:
+            latest_table = pd.DataFrame([
+                {"メーター名": row["display_name"],
+                 "読み取り値": "-" if row["value"] is None else str(row["value"]),
+                 "時刻": datetime.fromisoformat(row["timestamp"]).strftime("%Y-%m-%d %H:%M"),
+                 "状態": row["status_label"]}
+                for row in latest_rows[:50]
+            ])
+            status_colors = {"正常": "color: #24643B", "要確認": "color: #805500",
+                             "失敗": "color: #B42318"}
+            st.dataframe(latest_table.style.applymap(status_colors.get, subset=["状態"]),
+                         use_container_width=True, hide_index=True)
+            if len(latest_rows) > 50:
+                st.caption(f"ほか{len(latest_rows) - 50}件は全履歴で確認できます")
+        else:
+            st.info("表示できる記録がありません。")
 
-        if not series_data:
+        review_count = sum(row["status_label"] == "要確認" for row in latest_rows)
+        failed_count = sum(row["status_label"] == "失敗" for row in latest_rows)
+        unnamed_count = sum(row["display_name"] == "名前なし" for row in latest_rows)
+        st.caption(f"要確認 {review_count}件・失敗 {failed_count}件・名前なし {unnamed_count}件")
+        if st.button("点検の結果を書き出す"):
+            try:
+                st.session_state["inspection_csv_path"] = export_inspection_csv(latest_rows)
+            except Exception as exc:
+                st.session_state.pop("inspection_csv_path", None)
+                st.error(f"点検の結果を書き出せませんでした: {exc}")
+        inspection_path = st.session_state.get("inspection_csv_path")
+        if inspection_path:
+            st.success(f"保存しました: {inspection_path}")
+            if os.name == "nt" and st.button("フォルダを開く"):
+                try:
+                    os.startfile(os.path.dirname(inspection_path))
+                except OSError:
+                    pass
+
+        if history:
+            filtered_ids = {reading.id for reading in filtered_history}
+            history_data = manager.format_history_for_ui(history)
+            filtered_history_data = [row for row in history_data if row["id"] in filtered_ids]
+
+            with st.expander("全履歴", expanded=False):
+                st.caption(f"{len(filtered_history_data)}件 / 全{len(history_data)}件")
+                _render_history_table(filtered_history_data)
+
+            if st.button("CSVを書き出す"):
+                csv_path = "readings_export.csv"
+                export_to_csv(filtered_history, csv_path)
+                with open(csv_path, "rb") as f:
+                    st.download_button(
+                        label="CSVを保存",
+                        data=f,
+                        file_name="readings_export.csv",
+                        mime="text/csv",
+                    )
+
+            if st.button("JSONLを書き出す"):
+                jsonl_path = "readings_export.jsonl"
+                export_to_jsonl(filtered_history, jsonl_path)
+                with open(jsonl_path, "rb") as f:
+                    st.download_button(
+                        label="JSONLを保存",
+                        data=f,
+                        file_name="readings_export.jsonl",
+                        mime="application/x-ndjson",
+                    )
+        else:
+            with st.expander("全履歴", expanded=False):
+                st.caption("0件 / 全0件")
+                st.info("履歴データが存在しません。")
+
+        st.header("機器別の推移")
+        grouped_readings = group_by_device(history)
+
+        if not grouped_readings:
             st.info("表示できる記録がありません。")
         else:
-            chart_df = pd.DataFrame(
-                list(series_data.items()), columns=["captured_at", "value"]
+            selected_device = st.selectbox(
+                "機器", options=list(grouped_readings.keys())
             )
-            chart_df["captured_at"] = pd.to_datetime(chart_df["captured_at"])
-            st.line_chart(
-                chart_df.sort_values("captured_at").set_index("captured_at"),
-                # 記録計の青ペン。画面の他の数値表示と同じ色で揃える。
-                color="#2B4A6F",
-                height=280,
-            )
+            series_data = readings_to_series(grouped_readings[selected_device])
+
+            if not series_data:
+                st.info("表示できる記録がありません。")
+            else:
+                chart_df = pd.DataFrame(
+                    list(series_data.items()), columns=["captured_at", "value"]
+                )
+                chart_df["captured_at"] = pd.to_datetime(chart_df["captured_at"])
+                st.line_chart(
+                    chart_df.sort_values("captured_at").set_index("captured_at"),
+                    # 記録計の青ペン。画面の他の数値表示と同じ色で揃える。
+                    color="#2B4A6F",
+                    height=280,
+                )
+
+    _render_records()
+
 
 with tab3:
     st.header("点検結果")

@@ -67,7 +67,12 @@ class TestReceiverServer(unittest.TestCase):
                 data = json.loads(resp.read().decode("utf-8"))
                 return resp.status, data
         except urllib.error.HTTPError as e:
-            raw = e.read().decode("utf-8")
+            try:
+                raw = e.read().decode("utf-8")
+            except (ConnectionResetError, ConnectionAbortedError):
+                if e.code not in (400, 408, 413):
+                    raise
+                return e.code, {}
             try:
                 data = json.loads(raw)
             except Exception:
@@ -165,7 +170,10 @@ class TestReceiverServer(unittest.TestCase):
             response = http.client.HTTPResponse(sock)
             response.begin()
             self.assertEqual(400, response.status)
-            response.read()
+            try:
+                response.read()
+            except (ConnectionResetError, ConnectionAbortedError):
+                pass  # The 400 status above remains mandatory.
         self.assertEqual([], os.listdir(self.incoming_dir))
 
     def test_unknown_path_returns_404(self):
