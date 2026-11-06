@@ -2,9 +2,11 @@ package jp.sotuken.metercapture.ui
 
 import jp.sotuken.metercapture.queue.QueueItem
 import jp.sotuken.metercapture.queue.SendState
+import jp.sotuken.metercapture.queue.isHeldFor
 
 /** 履歴画面に出す送信状態の文言。送信箱（folder）への保存は PC 未到着として区別する。 */
-internal fun sendStatusLabel(item: QueueItem): String = when (item.sendState) {
+internal fun sendStatusLabel(item: QueueItem, currentReceiverId: String? = null): String =
+    if (item.isHeldFor(currentReceiverId)) "別のPC宛て(保留)" else when (item.sendState) {
     SendState.PENDING -> "未送信"
     SendState.SENDING -> "送信中"
     SendState.SENT -> when (item.sentVia) {
@@ -34,4 +36,5 @@ internal fun errorTextFor(item: QueueItem): String? {
 }
 
 /** 「再送」ボタンを出す項目か。 */
-internal fun canRetry(item: QueueItem): Boolean = item.sendState == SendState.FAILED
+internal fun canRetry(item: QueueItem, currentReceiverId: String? = null): Boolean =
+    item.sendState == SendState.FAILED && !item.isHeldFor(currentReceiverId)

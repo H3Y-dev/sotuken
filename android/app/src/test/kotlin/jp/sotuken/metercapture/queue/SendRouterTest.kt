@@ -32,6 +32,29 @@ class SendRouterTest {
     }
 
     @Test
+    fun differentReceiverIsHeldWithoutSendingOrRetrying() = runTest {
+        withTestEnv { outbox, image ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val id = store.enqueue(image, emptyMeta())
+            dao.update(requireNotNull(dao.findById(id)).copy(receiverId = "old-pc"))
+            val sender = RecordingSender(returnSuccess = true)
+            val router = SendRouter(dao, store, outbox, { sender }, { Result.success(Unit) },
+                folderSender = sender, currentReceiverId = "new-pc")
+            repeat(2) { router.route() }
+            assertEquals(SendState.PENDING, dao.findById(id)?.sendState)
+            assertTrue(requireNotNull(dao.findById(id)).isHeldFor("new-pc"))
+            assertEquals(0, dao.findById(id)?.retryCount)
+            assertEquals(0, sender.sentItems.size)
+            store.reassignReceiver(id, "new-pc")
+            assertEquals(SendState.PENDING, dao.findById(id)?.sendState)
+            router.route()
+            assertEquals(SendState.SENT, dao.findById(id)?.sendState)
+            assertEquals(1, sender.sentItems.size)
+        }
+    }
+
+    @Test
     fun reachableRoutesPendingItemToHttp() = runTest {
         withTestEnv { outboxDir, imageFile ->
             val dao = FakeQueueDao()
