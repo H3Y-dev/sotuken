@@ -20,6 +20,7 @@ interface InspectionStore {
     suspend fun create(input: NewInspection, now: Instant = Instant.now()): Inspection
     suspend fun addPhoto(inspectionId: String, imageFile: File, meta: CaptureMeta): String
     suspend fun complete(inspectionId: String, now: Instant = Instant.now()): InspectionSummary
+    suspend fun deletePhoto(inspectionId: String, localId: String): DeleteResult
     suspend fun delete(inspectionId: String): Boolean
 }
 
@@ -64,6 +65,14 @@ class RoomInspectionStore(
             }
             checkNotNull(summary)
         }
+    }
+
+    override suspend fun deletePhoto(inspectionId: String, localId: String): DeleteResult = mutationMutex.withLock {
+        requireInProgress(inspectionId)
+        if (inspectionDao.findPhotos(inspectionId).none { it.localId == localId }) {
+            return@withLock DeleteResult.NOT_FOUND
+        }
+        queueStore.delete(localId)
     }
 
     override suspend fun delete(inspectionId: String): Boolean = mutationMutex.withLock {

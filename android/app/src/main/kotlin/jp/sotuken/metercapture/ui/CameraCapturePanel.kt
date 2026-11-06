@@ -10,6 +10,8 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +41,7 @@ internal fun ColumnScope.CameraCapturePanel(
     onSaved: (CapturedImage) -> Unit,
     onError: (String) -> Unit,
     temporaryCapture: Boolean = false,
+    large: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -112,6 +115,7 @@ internal fun ColumnScope.CameraCapturePanel(
     }
 
     Button(
+        modifier = if (large) Modifier.fillMaxWidth().heightIn(min = 88.dp) else Modifier,
         enabled = imageCapture != null && !isCapturing,
         onClick = {
             val capture = imageCapture ?: return@Button
@@ -131,7 +135,10 @@ internal fun ColumnScope.CameraCapturePanel(
             )
         },
     ) {
-        Text(if (isCapturing) "保存中..." else "撮影")
+        Text(
+            if (isCapturing) "保存中..." else if (large) "撮影する" else "撮影",
+            style = if (large) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.labelLarge,
+        )
     }
 }
 

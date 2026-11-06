@@ -19,6 +19,15 @@ data class DeviceQr(
 private val DEVICE_ID_PATTERN = Regex("[A-Za-z0-9._-]{1,32}")
 private const val DEVICE_NAME_MAX = 64
 
+fun isValidDeviceId(id: String): Boolean = DEVICE_ID_PATTERN.matches(id)
+
+fun validDeviceNameOrNull(raw: String): String? {
+    if (hasControlCharacter(raw)) return null
+    return raw.trim { it.isWhitespace() }.takeIf {
+        it.isNotEmpty() && it.codePointCount(0, it.length) <= DEVICE_NAME_MAX
+    }
+}
+
 /** QRの文字列を検証して返す。機器QRでない・壊れている場合は null（例外は出さない）。 */
 fun parseDeviceQr(text: String): DeviceQr? {
     val data = try {
@@ -30,12 +39,10 @@ fun parseDeviceQr(text: String): DeviceQr? {
     if (!isNumberEqualToOne(data["v"])) return null
 
     val id = (data["id"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
-    if (!DEVICE_ID_PATTERN.matches(id)) return null
+    if (!isValidDeviceId(id)) return null
 
     val rawName = (data["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
-    if (hasControlCharacter(rawName)) return null
-    val name = rawName.trim { it.isWhitespace() }
-    if (name.isEmpty() || name.codePointCount(0, name.length) > DEVICE_NAME_MAX) return null
+    val name = validDeviceNameOrNull(rawName) ?: return null
 
     val unit = (data["unit"] as? JsonPrimitive)?.takeIf { it.isString }?.content
     return DeviceQr(id, name, unit, numberOrNull(data["min"]), numberOrNull(data["max"]))

@@ -31,7 +31,7 @@ object SenderPayloads {
         append("\"device_name\":").append(jsonStringOrNull(item.deviceName)).append(',')
         append("\"operator_value\":").append(jsonNumberOrNull(item.operatorValue)).append(',')
         append("\"operator_note\":").append(jsonStringOrNull(item.operatorNote))
-        // 機器IDはQRで確定したときだけ載せる（手入力は付けない。PC側の既存キーは変えない）。
+        // 機器IDがあるときだけ載せる（出所は qr または manual。PC側の既存キーは変えない）。
         if (item.deviceId != null) {
             append(",\"device_id\":").append(jsonString(item.deviceId))
             if (item.deviceIdSource != null) {

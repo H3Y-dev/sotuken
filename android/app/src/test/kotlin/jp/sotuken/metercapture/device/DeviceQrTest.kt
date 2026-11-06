@@ -1,11 +1,23 @@
 package jp.sotuken.metercapture.device
 
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** QR機器ラベル仕様.md のテストケース表（PC側 parse_payload と共通）。 */
 class DeviceQrTest {
+    @Test fun isValidDeviceIdMatchesQrRule() {
+        listOf("A-1", "a._9", "x".repeat(32)).forEach { assertTrue(isValidDeviceId(it)) }
+        listOf("", " x", "x ", "A/1", "あ", "x".repeat(33)).forEach { assertFalse(isValidDeviceId(it)) }
+    }
+    @Test fun validDeviceNameOrNullTrimsAndRejects() {
+        assertEquals("圧力計", validDeviceNameOrNull(" 圧力計 "))
+        assertEquals("x".repeat(64), validDeviceNameOrNull("x".repeat(64)))
+        listOf("", " ", "x".repeat(65), "a\nb", "a\u200Bb").forEach { assertNull(validDeviceNameOrNull(it)) }
+    }
     private fun accepted(text: String, id: String, name: String) {
         val qr = parseDeviceQr(text)
         assertEquals(id, qr?.id)
