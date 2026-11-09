@@ -534,6 +534,48 @@ class SendRouterTest {
         }
     }
 
+    @Test
+    fun fallbackReasonDistinguishesNotConfiguredFromUnreachable() = runTest {
+        withTestEnv { outboxDir, imageFile ->
+            val dao = FakeQueueDao()
+            val store = RoomQueueStore(dao)
+            val folderSender = RecordingSender(returnSuccess = true)
+
+            // 1. Not configured: httpSenderProvider = { null }
+            val unconfiguredId = store.enqueue(imageFile, emptyMeta())
+            val routerUnconfigured = SendRouter(
+                queueDao = dao,
+                queueStore = store,
+                outboxDir = outboxDir,
+                httpSenderProvider = { null },
+                healthChecker = { Result.failure(IllegalStateException("送信先未設定")) },
+                folderSender = folderSender,
+            )
+            routerUnconfigured.route()
+            val unconfiguredItem = dao.findById(unconfiguredId)
+            assertEquals(SendState.SENT, unconfiguredItem?.sendState)
+            assertEquals(QueueItem.VIA_FOLDER, unconfiguredItem?.sentVia)
+            assertEquals("送信先未設定", unconfiguredItem?.lastError)
+
+            // 2. Configured but unreachable: httpSenderProvider is present, health check fails
+            val unreachableId = store.enqueue(imageFile, emptyMeta())
+            val dummyHttp = RecordingSender(returnSuccess = true)
+            val routerUnreachable = SendRouter(
+                queueDao = dao,
+                queueStore = store,
+                outboxDir = outboxDir,
+                httpSenderProvider = { dummyHttp },
+                healthChecker = { Result.failure(java.net.ConnectException("接続できません")) },
+                folderSender = folderSender,
+            )
+            routerUnreachable.route()
+            val unreachableItem = dao.findById(unreachableId)
+            assertEquals(SendState.SENT, unreachableItem?.sendState)
+            assertEquals(QueueItem.VIA_FOLDER, unreachableItem?.sentVia)
+            assertEquals("PC未接続: 接続できません", unreachableItem?.lastError)
+        }
+    }
+
     private fun emptyMeta() = CaptureMeta(
         deviceName = null,
         operatorValue = null,

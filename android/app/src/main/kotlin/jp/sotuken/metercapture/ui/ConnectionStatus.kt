@@ -48,11 +48,12 @@ fun classifyFailureMessage(message: String?): String = when {
     else -> "応答がありません"
 }
 
-/** 未着 = PENDING・SENDING・FAILED + (SENTかつ送信箱経由)。 */
-fun countUndelivered(items: List<QueueItem>): Int = items.count {
-    when (it.sendState) {
+/** 未着 = PENDING・SENDING・FAILED + (SENTかつ送信箱経由)。点検中の写真は対象外にできる。 */
+fun countUndelivered(items: List<QueueItem>, isSendable: (QueueItem) -> Boolean = { true }): Int = items.count { item ->
+    if (!isSendable(item)) return@count false
+    when (item.sendState) {
         SendState.PENDING, SendState.SENDING, SendState.FAILED -> true
-        SendState.SENT -> it.sentVia == QueueItem.VIA_FOLDER
+        SendState.SENT -> item.sentVia == QueueItem.VIA_FOLDER
     }
 }
 
@@ -74,11 +75,15 @@ fun connectionBarText(
     undelivered: Int,
     lastSent: String,
     reason: String,
+    hasOutbox: Boolean = true,
 ): String = when (state) {
     ConnectionBarState.NOT_CONFIGURED -> "▲ 送信先が未設定です（タップして設定）"
     ConnectionBarState.CHECKING -> "… PCとの接続を確認中"
     ConnectionBarState.CONNECTED -> "● PCに接続中　未着 ${undelivered}件　最終送信 $lastSent"
-    ConnectionBarState.UNREACHABLE -> "○ PCに届かない（送信箱に保存中）　未着 ${undelivered}件　$reason"
+    ConnectionBarState.UNREACHABLE -> {
+        val savingLabel = if (hasOutbox) "（送信箱に保存中）" else "（送信待ち）"
+        "○ PCに届かない${savingLabel}　未着 ${undelivered}件　$reason"
+    }
 }
 
 

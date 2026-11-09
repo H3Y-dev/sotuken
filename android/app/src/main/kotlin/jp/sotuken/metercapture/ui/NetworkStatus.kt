@@ -30,7 +30,7 @@ fun readNetworkSnapshot(context: Context, capabilities: Collection<NetworkCapabi
     }, usb)
 }
 
-fun connectionBarTextWithNetwork(snapshot: NetworkSnapshot, state: ConnectionBarState, undelivered: Int, lastSent: String, reason: String): String =
-    "${networkLabel(snapshot)}　${connectionBarText(state, undelivered, lastSent, reason)}"
+fun connectionBarTextWithNetwork(snapshot: NetworkSnapshot, state: ConnectionBarState, undelivered: Int, lastSent: String, reason: String, hasOutbox: Boolean = true): String =
+    "${networkLabel(snapshot)}　${connectionBarText(state, undelivered, lastSent, reason, hasOutbox)}"
 
 fun shouldTriggerAutoSend(previous: Boolean?, now: Boolean, hasWork: Boolean): Boolean = now && previous != true && hasWork

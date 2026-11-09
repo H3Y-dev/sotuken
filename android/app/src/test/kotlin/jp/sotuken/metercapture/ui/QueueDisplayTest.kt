@@ -99,4 +99,71 @@ class QueueDisplayTest {
         assertFalse(canRetry(item(SendState.PENDING)))
         assertFalse(canRetry(item(SendState.SENT, QueueItem.VIA_FOLDER)))
     }
+
+    @Test
+    fun sendStatusLabelDistinguishesAllConditions() {
+        assertEquals("未送信", sendStatusLabel(item(SendState.PENDING)))
+        assertEquals("PC未到着・端末に保存済み", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_FOLDER)))
+        assertEquals("PC受信済み", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_HTTP)))
+        assertEquals("失敗", sendStatusLabel(item(SendState.FAILED)))
+        assertEquals("点検中(完了すると送信します)", sendStatusLabel(item(SendState.PENDING), isSendable = { false }))
+        val held = item(SendState.PENDING).copy(receiverId = "old-pc")
+        assertEquals("別のPC宛て(保留)", sendStatusLabel(held, currentReceiverId = "new-pc"))
+    }
+
+    @Test
+    fun undeliveredSummaryIncludesPendingAndExcludesNonSendableOrHeld() {
+        val pendingOnly = listOf(
+            item(SendState.PENDING, id = "1"),
+            item(SendState.PENDING, id = "2"),
+        )
+        assertEquals("未送信: 2件（端末に保存済み）", undeliveredSummary(pendingOnly))
+
+        val mixed = listOf(
+            item(SendState.PENDING, id = "1"),
+            item(SendState.SENT, QueueItem.VIA_FOLDER, id = "2"),
+        )
+        assertEquals("未送信: 2件（端末に保存済み）", undeliveredSummary(mixed))
+
+        val nonSendableMixed = listOf(
+            item(SendState.PENDING, id = "1"),
+            item(SendState.PENDING, id = "2"),
+        )
+        assertEquals(
+            "未送信: 1件（端末に保存済み）",
+            undeliveredSummary(nonSendableMixed, isSendable = { it.localId == "1" }),
+        )
+
+        val heldMixed = listOf(
+            item(SendState.PENDING, id = "1").copy(receiverId = "old"),
+            item(SendState.SENT, QueueItem.VIA_FOLDER, id = "2"),
+        )
+        assertEquals(
+            "PC未到着: 1件（端末に保存済み）",
+            undeliveredSummary(heldMixed, currentReceiverId = "current"),
+        )
+    }
+
+    @Test
+    fun errorTextForPendingWhenConnectionUnreachable() {
+        val pending = item(SendState.PENDING)
+        assertEquals(
+            "PCに届いていません。接続できません",
+            errorTextFor(pending, connectionUnreachable = true, connectionReason = "接続できません"),
+        )
+        assertEquals(
+            "PCに届いていません。接続できません",
+            errorTextFor(pending.copy(lastError = "PC未接続: 接続できません"), connectionUnreachable = true),
+        )
+        assertNull(
+            errorTextFor(pending, connectionUnreachable = false, connectionReason = "接続できません"),
+        )
+        assertNull(
+            errorTextFor(pending, connectionUnreachable = true, connectionReason = "接続できません", isSendable = { false }),
+        )
+        val held = pending.copy(receiverId = "old-pc")
+        assertNull(
+            errorTextFor(held, connectionUnreachable = true, connectionReason = "接続できません", currentReceiverId = "new-pc"),
+        )
+    }
 }

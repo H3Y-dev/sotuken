@@ -42,4 +42,11 @@ class PairingPayloadTest {
     @Test fun limitsUtf8Bytes() {
         assertThrows(PairingException::class.java) { parse(json.replace("検査PC", "あ".repeat(700))) }
     }
+
+    @Test fun enqueuesSendOnPairingOnlyWhenPendingCountPositive() {
+        assertFalse(shouldEnqueueSendOnPairing(0))
+        assertFalse(shouldEnqueueSendOnPairing(-1))
+        assertTrue(shouldEnqueueSendOnPairing(1))
+        assertTrue(shouldEnqueueSendOnPairing(5))
+    }
 }

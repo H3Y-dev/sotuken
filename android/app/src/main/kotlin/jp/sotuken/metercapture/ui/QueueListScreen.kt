@@ -74,6 +74,9 @@ internal fun QueueListScreen(
     onSendNow: () -> Unit = {},
     onReassignReceiver: (String) -> Unit = {},
     currentReceiverId: String? = null,
+    connectionUnreachable: Boolean = false,
+    connectionReason: String? = null,
+    isSendable: (QueueItem) -> Boolean = { true },
     onDelete: suspend (String) -> DeleteResult = { DeleteResult.NOT_FOUND },
 ) {
     var selected by remember { mutableStateOf<QueueItem?>(null) }
@@ -112,7 +115,7 @@ internal fun QueueListScreen(
                     }
                 }
 
-                undeliveredSummary(items)?.let { summary ->
+                undeliveredSummary(items, currentReceiverId, isSendable)?.let { summary ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -139,6 +142,9 @@ internal fun QueueListScreen(
                                 item = item,
                                 onClick = { selected = item },
                                 currentReceiverId = currentReceiverId,
+                                connectionUnreachable = connectionUnreachable,
+                                connectionReason = connectionReason,
+                                isSendable = isSendable,
                                 onRetry = { onRetry(item.localId) },
                                 onReassignReceiver = { onReassignReceiver(item.localId) },
                                 onDelete = { deleteTarget = item },
@@ -151,7 +157,7 @@ internal fun QueueListScreen(
     }
 
     selected?.let { item ->
-        FullImageDialog(item = item, onDismiss = { selected = null }, currentReceiverId = currentReceiverId)
+        FullImageDialog(item = item, onDismiss = { selected = null }, currentReceiverId = currentReceiverId, isSendable = isSendable)
     }
     DeleteConfirmDialog(deleteTarget, currentReceiverId, { deleteTarget = null }, onDelete)
 }
@@ -163,6 +169,9 @@ private fun QueueListRow(
     onRetry: () -> Unit = {},
     onReassignReceiver: () -> Unit = {},
     currentReceiverId: String? = null,
+    connectionUnreachable: Boolean = false,
+    connectionReason: String? = null,
+    isSendable: (QueueItem) -> Boolean = { true },
     onDelete: () -> Unit = {},
 ) {
     Card(
@@ -190,12 +199,16 @@ private fun QueueListRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = sendStatusLabel(item, currentReceiverId),
+                    text = sendStatusLabel(item, currentReceiverId, isSendable),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = stateColor(item.sendState),
+                    color = if (!isSendable(item) && !item.isHeldFor(currentReceiverId)) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        stateColor(item.sendState)
+                    },
                 )
-                errorTextFor(item)?.let { errorText ->
+                errorTextFor(item, connectionUnreachable, connectionReason, isSendable, currentReceiverId)?.let { errorText ->
                     Text(
                         text = errorText,
                         style = MaterialTheme.typography.bodySmall,
@@ -207,7 +220,7 @@ private fun QueueListRow(
                 TextButton(onClick = onDelete, enabled = canDelete(item)) {
                     Text("削除")
                 }
-                if (canRetry(item, currentReceiverId)) {
+                if (canRetry(item, currentReceiverId, isSendable)) {
                     TextButton(onClick = onRetry) {
                         Text("再送")
                     }
@@ -305,6 +318,7 @@ internal fun FullImageDialog(
     item: QueueItem,
     onDismiss: () -> Unit,
     currentReceiverId: String?,
+    isSendable: (QueueItem) -> Boolean = { true },
 ) {
     val loaded by produceState<LoadedImage?>(initialValue = null, item.imagePath) {
         value = LoadedImage(
@@ -350,7 +364,7 @@ internal fun FullImageDialog(
                         color = Color.White,
                     )
                     Text(
-                        text = "${sendStatusLabel(item, currentReceiverId)}（タップで閉じる）",
+                        text = "${sendStatusLabel(item, currentReceiverId, isSendable)}（タップで閉じる）",
                         color = Color.White,
                     )
                 }

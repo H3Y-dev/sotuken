@@ -153,5 +153,27 @@ class ConnectionStatusTest {
         val error = IOException("Health check failed with HTTP 404: x")
         assertEquals("応答がありません", classifyHealthFailure(error))
     }
-    
+
+    @Test
+    fun barTextDistinguishesHasOutboxFromPendingOnly() {
+        assertEquals(
+            "○ PCに届かない（送信箱に保存中）　未着 2件　接続できません",
+            connectionBarText(ConnectionBarState.UNREACHABLE, 2, "なし", "接続できません", hasOutbox = true),
+        )
+        assertEquals(
+            "○ PCに届かない（送信待ち）　未着 2件　接続できません",
+            connectionBarText(ConnectionBarState.UNREACHABLE, 2, "なし", "接続できません", hasOutbox = false),
+        )
+    }
+
+    @Test
+    fun countUndeliveredExcludesNonSendablePhotos() {
+        val items = listOf(
+            item("1", SendState.PENDING),
+            item("2", SendState.SENT, via = QueueItem.VIA_FOLDER),
+            item("3", SendState.PENDING),
+        )
+        assertEquals(3, countUndelivered(items))
+        assertEquals(2, countUndelivered(items, isSendable = { it.localId != "3" }))
+    }
 }
