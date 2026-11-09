@@ -65,6 +65,8 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
     }
     val stateById = inspections.associate { it.inspection.inspectionId to it.inspection.state }
     val barUndelivered = countUndelivered(photos.filter { isPhotoSendable(it, stateById[it.inspectionId]) })
+    val barHasOutbox = photos.filter { isPhotoSendable(it, stateById[it.inspectionId]) }
+        .any { it.sendState == SendState.SENT && it.sentVia == QueueItem.VIA_FOLDER }
     var stack by rememberSaveable { mutableStateOf(listOf(AppScreen.Home.encode())) }
     val screen = decodeAppScreen(stack.last())
     fun home() { stack = listOf(AppScreen.Home.encode()) }
@@ -117,6 +119,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                 title = when (screen) { AppScreen.Home -> "点検の一覧"; AppScreen.Create -> "新しい点検"; else -> "点検" },
                 health = health,
                 barUndelivered = barUndelivered,
+                barHasOutbox = barHasOutbox,
                 onBarClick = { showStatus = true; health.check(force = true) },
                 onHome = if (screen == AppScreen.Home) null else ({ home() }),
             ) {
@@ -335,7 +338,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
         if (showStatus) AlertDialog(
             onDismissRequest = { showStatus = false }, title = { Text("接続の状態") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(connectionBarTextWithNetwork(health.network, connectionBarState(health.configured, health.healthOk), barUndelivered, "", health.reason))
+                Text(connectionBarTextWithNetwork(health.network, connectionBarState(health.configured, health.healthOk), barUndelivered, "", health.reason, hasOutbox = barHasOutbox))
                 TextButton(onClick = { showStatus = false; showSettings = true }) { Text("送信先の設定") }
             } },
             confirmButton = { TextButton(onClick = { showStatus = false }) { Text("閉じる") } },

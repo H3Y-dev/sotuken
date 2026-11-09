@@ -28,7 +28,7 @@ class QueueSendWorker(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Result.retry()
+                Result.failure()
             }
         }
     }
@@ -48,18 +48,23 @@ class QueueSendWorker(
         val reach = pickReachableUrl(if (settings.isConfigured()) settings.candidateUrls else emptyList()) {
             HttpSender.health(it, settings.token!!)
         }
-        val sender = reach.url?.let { HttpSender(it, settings.token!!) }
+        val reachableSender = reach.url?.let { HttpSender(it, settings.token!!) }
+        val sender = if (settings.isConfigured()) {
+            reachableSender ?: HttpSender(settings.candidateUrls.first(), settings.token!!)
+        } else {
+            null
+        }
         val coordinator = InspectionSendCoordinator(
             inspectionDao,
-            manifestPoster = sender?.let { http -> { id, json -> http.postManifest(id, json) } },
+            manifestPoster = reachableSender?.let { http -> { id, json -> http.postManifest(id, json) } },
             sha256Of = { item -> runCatching { SenderPayloads.computeSha256Hex(File(item.imagePath)) }.getOrNull() },
             now = { Instant.now() },
         )
-        coordinator.beforeRoute(reachable = sender != null)
+        coordinator.beforeRoute(reachable = reach.url != null)
         val httpSenderProvider = { sender }
         val healthChecker: suspend () -> kotlin.Result<Unit> = {
-            if (sender != null) kotlin.Result.success(Unit)
-            else kotlin.Result.failure(reach.error ?: IllegalStateException("送信先未設定"))
+            if (reach.url != null) kotlin.Result.success(Unit)
+            else kotlin.Result.failure(reach.error ?: IllegalStateException("接続できません"))
         }
         val router = SendRouter(
             queueDao = queueDao,
