@@ -113,7 +113,9 @@ internal fun PairingScreen(pendingCount: Int, onClose: () -> Unit) {
                                 PairingClient().register(current, settings)
                                 ensureActive()
                                 if (active) {
-                                    QueueSendScheduler.enqueueSend(context)
+                                    if (shouldEnqueueSendOnPairing(pendingCount)) {
+                                        QueueSendScheduler.enqueueSend(context)
+                                    }
                                     onClose()
                                 }
                             } catch (cancelled: CancellationException) {

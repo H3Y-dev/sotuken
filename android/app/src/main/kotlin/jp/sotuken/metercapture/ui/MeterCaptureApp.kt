@@ -38,8 +38,10 @@ import jp.sotuken.metercapture.device.deviceIdForCapture
 import jp.sotuken.metercapture.device.deviceIdSourceForCapture
 import jp.sotuken.metercapture.device.heldDeviceAfterNameEdit
 import jp.sotuken.metercapture.queue.CaptureMeta
+import jp.sotuken.metercapture.queue.QueueItem
 import jp.sotuken.metercapture.queue.QueueSendScheduler
 import jp.sotuken.metercapture.queue.QueueStore
+import jp.sotuken.metercapture.queue.SendState
 import jp.sotuken.metercapture.settings.DeviceIdSettings
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import kotlinx.coroutines.launch
@@ -91,7 +93,8 @@ fun MeterCaptureApp(queueStore: QueueStore, health: ReceiverHealthState = rememb
     val barState = connectionBarState(configured, healthOk)
     val undelivered = countUndelivered(queueItems)
     val lastSentText = formatHHmm(latestHttpSentAt(queueItems))
-    val barText = connectionBarText(barState, undelivered, lastSentText, healthReason)
+    val hasOutbox = queueItems.any { it.sendState == SendState.SENT && it.sentVia == QueueItem.VIA_FOLDER }
+    val barText = connectionBarText(barState, undelivered, lastSentText, healthReason, hasOutbox = hasOutbox)
     val lastFailure = queueItems
         .filter { !it.lastError.isNullOrBlank() }
         .maxByOrNull { it.capturedAt }
@@ -217,10 +220,13 @@ fun MeterCaptureApp(queueStore: QueueStore, health: ReceiverHealthState = rememb
             }
         }
         if (showHistoryScreen) {
+            val isUnreachable = barState == ConnectionBarState.UNREACHABLE || barState == ConnectionBarState.NOT_CONFIGURED
             QueueListScreen(
                 items = queueItems,
                 onDelete = { localId -> queueStore.delete(localId) },
                 currentReceiverId = ReceiverSettings(context).getReceiverId(),
+                connectionUnreachable = isUnreachable,
+                connectionReason = if (barState == ConnectionBarState.NOT_CONFIGURED) "送信先未設定" else healthReason,
                 onClose = { showHistoryScreen = false },
                 onRetry = { localId ->
                     coroutineScope.launch {

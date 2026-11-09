@@ -18,6 +18,8 @@ class PairingInvitation(
 
 class PairedReceiver(val url: String, val token: String, val receiverId: String, val pcName: String)
 
+fun shouldEnqueueSendOnPairing(pendingCount: Int): Boolean = pendingCount > 0
+
 fun parsePairingQr(raw: String): PairingInvitation {
     if (raw.toByteArray(Charsets.UTF_8).size > 2048) throw PairingException("QRが大きすぎます")
     if (!raw.startsWith("SOTUKEN-PAIR:")) throw PairingException("送信先登録用のQRを読み取ってください")
