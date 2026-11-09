@@ -1,0 +1,30 @@
+[
+  {
+    "rows": 0,
+    "first_seconds": 0.23068020003847778,
+    "rerun_seconds": 0.02370730007532984,
+    "pages_seconds": {
+      "点検": 0.6624679999658838,
+      "機器": 0.02447930001653731
+    },
+    "warm_pages_seconds": {
+      "点検": 0.02052010002080351,
+      "機器": 0.02345239999704063
+    },
+    "top10": "         1201907 function calls (1152459 primitive calls) in 1.217 seconds\n\n   Ordered by: cumulative time\n   List reduced from 2432 to 10 due to restriction <10>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       18    0.001    0.000    1.219    0.068 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:403(_run_script)\n       18    0.000    0.000    1.022    0.057 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\exec_code.py:35(exec_func_with_error_handling)\n       18    0.000    0.000    1.022    0.057 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:535(code_to_exec)\n   380/18    0.005    0.000    1.015    0.056 {built-in method builtins.exec}\n       18    0.001    0.000    1.015    0.056 C:\\卒研\\git_stk\\sotuken-wt-web\\app.py:1(<module>)\n    460/6    0.004    0.000    0.678    0.113 <frozen importlib._bootstrap>:1165(_find_and_load)\n    460/6    0.002    0.000    0.677    0.113 <frozen importlib._bootstrap>:1120(_find_and_load_unlocked)\n    436/6    0.002    0.000    0.675    0.113 <frozen importlib._bootstrap>:666(_load_unlocked)\n    331/5    0.001    0.000    0.675    0.135 <frozen importlib._bootstrap_external>:934(exec_module)\n   940/12    0.001    0.000    0.670    0.056 <frozen importlib._bootstrap>:233(_call_with_frames_removed)\n\n\n"
+  },
+  {
+    "rows": 300,
+    "first_seconds": 0.0314250000519678,
+    "rerun_seconds": 0.0499536000424996,
+    "pages_seconds": {
+      "点検": 0.04042949993163347,
+      "機器": 0.5828118999488652
+    },
+    "warm_pages_seconds": {
+      "点検": 0.038599399966187775,
+      "機器": 0.047745599993504584
+    },
+    "top10": "         1938153 function calls (1865198 primitive calls) in 1.174 seconds\n\n   Ordered by: cumulative time\n   List reduced from 4207 to 10 due to restriction <10>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       18    0.002    0.000    1.176    0.065 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:403(_run_script)\n       18    0.000    0.000    0.987    0.055 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\exec_code.py:35(exec_func_with_error_handling)\n       18    0.000    0.000    0.987    0.055 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:535(code_to_exec)\n   209/18    0.002    0.000    0.978    0.054 {built-in method builtins.exec}\n       18    0.001    0.000    0.978    0.054 C:\\卒研\\git_stk\\sotuken-wt-web\\app.py:1(<module>)\n    29/18    0.000    0.000    0.903    0.050 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\fragment.py:160(wrap)\n    29/18    0.002    0.000    0.899    0.050 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\fragment.py:180(wrapped_fragment)\n       11    0.000    0.000    0.858    0.078 C:\\卒研\\git_stk\\sotuken-wt-web\\manager\\web_pages_ui.py:190(render_records)\n       11    0.001    0.000    0.846    0.077 C:\\卒研\\git_stk\\sotuken-wt-web\\manager\\web_pages_ui.py:194(_render_records)\n    44/43    0.000    0.000    0.647    0.015 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\caching\\cache_utils.py:202(__call__)\n\n\n"
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "rows": 0,
+    "first_seconds": 1.1128957000328228,
+    "rerun_seconds": 0.08285609993617982,
+    "pages_seconds": {
+      "点検": 0.08426329994108528,
+      "機器": 0.08322839997708797
+    },
+    "warm_pages_seconds": {
+      "点検": 0.08268290001433343,
+      "機器": 0.08251790003851056
+    },
+    "top10": "         3220165 function calls (3030123 primitive calls) in 1.957 seconds\n\n   Ordered by: cumulative time\n   List reduced from 2844 to 10 due to restriction <10>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       12    0.003    0.000    1.958    0.163 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:403(_run_script)\n       12    0.000    0.000    1.262    0.105 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\exec_code.py:35(exec_func_with_error_handling)\n       12    0.000    0.000    1.262    0.105 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:535(code_to_exec)\n   382/12    0.005    0.000    1.254    0.105 {built-in method builtins.exec}\n       12    0.001    0.000    1.254    0.105 C:\\Users\\dorum\\AppData\\Local\\Temp\\tmpumjyygw0\\baseline_app.py:1(<module>)\n   468/12    0.004    0.000    0.727    0.061 <frozen importlib._bootstrap>:1165(_find_and_load)\n   468/12    0.002    0.000    0.726    0.061 <frozen importlib._bootstrap>:1120(_find_and_load_unlocked)\n   444/12    0.002    0.000    0.722    0.060 <frozen importlib._bootstrap>:666(_load_unlocked)\n   339/11    0.001    0.000    0.721    0.066 <frozen importlib._bootstrap_external>:934(exec_module)\n   957/24    0.001    0.000    0.711    0.030 <frozen importlib._bootstrap>:233(_call_with_frames_removed)\n\n\n"
+  },
+  {
+    "rows": 300,
+    "first_seconds": 0.7140452000312507,
+    "rerun_seconds": 0.12185860006138682,
+    "pages_seconds": {
+      "点検": 0.12466900004073977,
+      "機器": 0.12036410009022802
+    },
+    "warm_pages_seconds": {
+      "点検": 0.12095819995738566,
+      "機器": 0.12349529995117337
+    },
+    "top10": "         4158361 function calls (3949007 primitive calls) in 2.031 seconds\n\n   Ordered by: cumulative time\n   List reduced from 4303 to 10 due to restriction <10>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       12    0.003    0.000    2.034    0.169 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:403(_run_script)\n       12    0.000    0.000    1.359    0.113 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\exec_code.py:35(exec_func_with_error_handling)\n       12    0.000    0.000    1.359    0.113 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_runner.py:535(code_to_exec)\n   201/12    0.002    0.000    1.349    0.112 {built-in method builtins.exec}\n       12    0.001    0.000    1.349    0.112 C:\\Users\\dorum\\AppData\\Local\\Temp\\tmpbidrfrwm\\baseline_app.py:1(<module>)\n    24/12    0.000    0.000    1.126    0.094 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\fragment.py:160(wrap)\n    24/12    0.002    0.000    1.119    0.093 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\fragment.py:180(wrapped_fragment)\n       12    0.002    0.000    1.115    0.093 C:\\Users\\dorum\\AppData\\Local\\Temp\\tmpbidrfrwm\\baseline_app.py:259(_render_records)\n      725    0.004    0.000    0.946    0.001 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\metrics_util.py:364(wrapped_func)\n       12    0.000    0.000    0.659    0.055 C:\\卒研\\git_stk\\sotuken\\venv\\Lib\\site-packages\\streamlit\\runtime\\scriptrunner\\script_cache.py:44(get_bytecode)\n\n\n"
+  }
+]

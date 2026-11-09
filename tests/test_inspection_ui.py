@@ -79,6 +79,7 @@ class InspectionAppTest(unittest.TestCase):
              patch('manager.receiver.init_receiver_for_app', return_value=dict(running=False, error='t', url='t', token='t')), \
              patch('manager.export._documents_dir', return_value=out):
             at.run()
+            at.radio(key="page").set_value("機器").run()
             self.assertEqual(len(at.exception), 0, str(at.exception))
             at.date_input(key='insp_from').set_value(date(2026, 10, 30))
             at.date_input(key='insp_to').set_value(date(2026, 10, 30))
