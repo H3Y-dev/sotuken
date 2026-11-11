@@ -267,8 +267,8 @@ class SendRouterTest {
 
             // HTTPで再送されない
             assertEquals(0, httpSender.sentItems.size)
-            // sentViaはfolderのまま
-            assertEquals(QueueItem.VIA_FOLDER, dao.findById(localId)?.sentVia)
+            // 再送せず、USBで到着した記録に更新する。
+            assertEquals(QueueItem.VIA_USB, dao.findById(localId)?.sentVia)
         }
     }
 

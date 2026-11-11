@@ -28,6 +28,7 @@ class SendRouter(
     suspend fun route() {
         // 1. 中断された送信中アイテムをPENDINGへ復元
         queueStore.recoverInterruptedSends()
+        queueStore.reconcileUsbArrivals(outboxDir)
 
         // 疎通確認
         val httpSender = httpSenderProvider()

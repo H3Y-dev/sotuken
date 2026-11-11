@@ -27,6 +27,7 @@ data class QueueItem(
     companion object {
         const val VIA_HTTP = "http"
         const val VIA_FOLDER = "folder"
+        const val VIA_USB = "usb"
         const val DEVICE_ID_SOURCE_QR = "qr"
     }
 }
@@ -55,3 +56,6 @@ fun QueueItem.isHeldFor(currentReceiverId: String?): Boolean =
     receiverId != null && receiverId != currentReceiverId &&
         (sendState == SendState.PENDING || sendState == SendState.FAILED ||
             (sendState == SendState.SENT && sentVia == QueueItem.VIA_FOLDER))
+
+fun QueueItem.hasArrived(): Boolean =
+    sendState == SendState.SENT && (sentVia == QueueItem.VIA_HTTP || sentVia == QueueItem.VIA_USB)
