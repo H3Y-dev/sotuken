@@ -144,6 +144,8 @@ class LatestReadingsAppTest(unittest.TestCase):
              patch("manager.receiver.init_receiver_for_app", return_value=dict(running=False, error="test", url="test", token="test")), \
              patch("manager.export._documents_dir", return_value=self.out):
             (button.click() if button else self.at).run()
+            if self.at.radio(key="page").value != "機器":
+                self.at.radio(key="page").set_value("機器").run()
         self.assertEqual(len(self.at.exception), 0, str(self.at.exception))
         return self.at
 
@@ -171,7 +173,7 @@ class LatestReadingsAppTest(unittest.TestCase):
 
     def test_filters_apply_to_latest_and_history_and_empty_result(self):
         at = self.run_app()
-        at.selectbox[0].select("圧力計A")
+        next(s for s in at.selectbox if s.label == "機器名").select("圧力計A")
         self.run_app()
         self.assertEqual(at.dataframe[0].value["メーター名"].tolist(), ["圧力計A"])
         self.assertEqual(len(at.dataframe[1].value), 3)
@@ -193,7 +195,7 @@ class LatestReadingsAppTest(unittest.TestCase):
 
     def test_export_failure_is_visible_and_folder_failure_is_silent(self):
         at = self.run_app()
-        with patch("manager.export.export_inspection_csv", side_effect=OSError("disk full")):
+        with patch("manager.web_pages_ui.export_inspection_csv", side_effect=OSError("disk full")):
             self.run_app(next(b for b in at.button if b.label == "点検の結果を書き出す"))
         self.assertTrue(any("disk full" in error.value for error in at.error))
         self.run_app(next(b for b in at.button if b.label == "点検の結果を書き出す"))

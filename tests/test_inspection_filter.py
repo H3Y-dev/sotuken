@@ -167,7 +167,8 @@ class InspectionFilterAppTest(unittest.TestCase):
                     return_value={'running': False, 'error': 'test'}):
                 at = AppTest.from_file(str(app_path), default_timeout=30).run()
                 self.assertFalse(at.exception)
-                inspection = next(s for s in at.selectbox if s.label == '点検（巡回）')
+                at.radio(key='page').set_value('点検').run()
+                inspection = next(s for s in at.selectbox if s.label == '点検')
                 inspection.select('r').run()
                 self.assertFalse(at.exception)
                 self.assertIn('この点検のメーター一覧', [s.value for s in at.subheader])
@@ -188,6 +189,6 @@ class InspectionFilterAppTest(unittest.TestCase):
                 inspection.select('').run()
                 self.assertFalse(at.exception)
                 self.assertNotIn('この点検のメーター一覧', [s.value for s in at.subheader])
-                self.assertEqual(len(at.dataframe[1].value), 1)
+                self.assertEqual(len(at.dataframe[0].value), 1)
                 inspection.select(None).run()
                 self.assertNotIn('この点検のメーター一覧', [s.value for s in at.subheader])

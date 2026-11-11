@@ -84,7 +84,8 @@ class RecordsRefreshAppTests(unittest.TestCase):
             with patch('manager.receiver.init_receiver_for_app', return_value=receiver):
                 at = AppTest.from_file(str(app), default_timeout=30).run()
                 self.assertFalse(at.exception)
-                self.assertIn('記録', [tab.label for tab in at.tabs])
+                self.assertIn('点検', at.radio(key='page').options)
+                at.radio(key='page').set_value('点検').run()
                 self.assertIn('読み取り中 1枚', [item.value for item in at.info])
                 auto = next(c for c in at.checkbox if c.label == '自動更新(5秒ごと)')
                 self.assertFalse(auto.value)
@@ -97,7 +98,7 @@ class RecordsRefreshAppTests(unittest.TestCase):
                 self.assertFalse(at.exception)
                 self.assertNotIn('読み取り中 1枚', [item.value for item in at.info])
                 self.assertTrue(any('全1件' in item.value for item in at.caption))
-                inspection = next(s for s in at.selectbox if s.label == '点検（巡回）')
+                inspection = next(s for s in at.selectbox if s.label == '点検')
                 self.assertTrue(any('new round' in option for option in inspection.options))
                 next(c for c in at.checkbox if c.label == '自動更新(5秒ごと)').check().run()
                 self.assertFalse(at.exception)

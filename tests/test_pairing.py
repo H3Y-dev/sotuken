@@ -202,6 +202,7 @@ class PairingTests(unittest.TestCase):
             app.run()
             self.assertEqual(len(app.exception), 0)
             self.assertIsNone(self.server.pairing_status())
+            app.radio(key='page').set_value('接続・設定').run()
             next(b for b in app.button if b.label == 'スマホを登録').click().run()
             self.assertEqual(len(app.exception), 0)
             first = self.server.pairing_status()['payload']
