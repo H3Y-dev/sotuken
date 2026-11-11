@@ -27,3 +27,7 @@ fun initialTarget(routeDevices: List<RouteDevice>?, photos: List<QueueItem>): Ca
 
 fun targetAfterCapture(routeDevices: List<RouteDevice>?, photosAfter: List<QueueItem>, captured: CaptureTarget?): CaptureTarget? =
     if (routeDevices?.any { it.id == captured?.deviceId } == true) initialTarget(routeDevices, photosAfter) else null
+
+fun shouldKeepQrTarget(current: CaptureTarget?, tapped: RouteDevice): Boolean =
+    current?.deviceId != null && current.deviceId == tapped.id && current.source == "qr"
+
