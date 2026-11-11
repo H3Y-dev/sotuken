@@ -14,6 +14,19 @@ class RoutesManifestTest(unittest.TestCase):
     def setUp(self):
         self.storage = Storage(':memory:')
 
+    def test_route_validation_messages(self):
+        cases = [
+            ('', [dict(id='A', name='計器')], 'ルート名が空です'),
+            ('   ', [dict(id='A', name='計器')], 'ルート名が空です'),
+            ('巡回', [dict(id='A', name='')], '機器名が空です'),
+            ('巡回', [], 'ルートの機器は1〜200件で登録してください（0件では保存できません）'),
+        ]
+        for name, devices, message in cases:
+            with self.subTest(name=name, devices=devices):
+                with self.assertRaises(ValueError) as caught:
+                    save_route(self.storage, name, devices)
+                self.assertEqual(str(caught.exception), message)
+
     def manifest(self):
         return dict(v=1, inspection_id='I-1', inspection_name='巡回', route_id=None,
                     operator='', place='', started_at='2026-11-06T01:00:00Z',

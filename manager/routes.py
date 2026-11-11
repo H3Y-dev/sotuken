@@ -27,6 +27,8 @@ def now():
 
 
 def save_route(storage, name, devices, route_id=None):
+    if isinstance(name, str) and not name.strip():
+        raise ValueError('ルート名が空です')
     name = validate_device_name(name)
     route_id = validate_id(route_id) if route_id is not None else 'R-' + datetime.now().strftime('%Y%m%d%H%M%S') + '-' + secrets.token_hex(2)
     checked = []
