@@ -20,6 +20,7 @@ internal fun sendStatusLabel(
         SendState.SENT -> when (item.sentVia) {
             QueueItem.VIA_FOLDER -> "PC未到着・端末に保存済み"
             QueueItem.VIA_HTTP -> "PC受信済み"
+            QueueItem.VIA_USB -> "送信済み(USB)"
             else -> "送信済み"
         }
         SendState.FAILED -> "失敗"

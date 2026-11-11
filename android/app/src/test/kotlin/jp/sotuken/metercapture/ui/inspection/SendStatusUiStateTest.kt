@@ -8,6 +8,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SendStatusUiStateTest {
+    @Test fun usbArrivalCountsInPhotoProgressAndManifestRetry() {
+        val arrived = photo.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_USB)
+        val state = build(inspection.copy(manifestError = "offline"), listOf(arrived))
+        assertEquals("1 / 1枚", state.photoProgress)
+        assertTrue(state.showManifestOnlyRetry)
+        assertTrue(state.rows.single().status.contains("USB"))
+    }
+
     private val inspection = Inspection("I-1", "点検", "担当", "工場", null, null, null, InspectionState.WAITING, "2026-11-06T00:00:00Z")
     private val photo = QueueItem("a", "/a.jpg", "2026-11-06T01:00:00Z", null, null, null, SendState.PENDING, 0, null, null)
     private val wifi = NetworkSnapshot(true, false, false)

@@ -30,6 +30,18 @@ def write_csv(text, directory, name="sample.csv"):
 
 
 class AggregateReviewTest(unittest.TestCase):
+    def test_median_in_condition_and_total_rows(self):
+        for errors, expected in [([1, 3, 100], '3.00'), ([1, 3, 7, 100], '5.00'), ([], '-')]:
+            with self.subTest(errors=errors), tempfile.TemporaryDirectory() as directory:
+                values = errors or ['-']
+                path = write_csv('ファイル名,条件,誤差%FS\n' + ''.join(
+                    f'{i},反射,{value}\n' for i, value in enumerate(values)), directory)
+                text = render_markdown(summarize(load_rows([path])))
+                self.assertIn('誤差平均 (%FS) | 誤差中央値 (%FS)', text)
+                for label in ('反射', '合計'):
+                    row = next(line for line in text.splitlines() if line.startswith(f'| {label} |'))
+                    self.assertEqual(row.split('|')[-2].strip(), expected)
+
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
@@ -92,10 +104,10 @@ class AggregateReviewTest(unittest.TestCase):
                         "## (e) 誤差が大きい画像 ワースト3"):
             self.assertIn(heading, text)
         self.assertIn("画像の総数: 5 件", text)
-        self.assertIn("| 反射 | 2 | 1 | 1 | 2.00 |", text)
-        self.assertIn("| 斜め | 2 | 1 | 0 | 7.50 |", text)
-        self.assertIn("| ブレ | 1 | 0 | 1 | 5.00 |", text)
-        self.assertIn("| 合計 | 5 | 2 | 2 | 4.83 |", text)
+        self.assertIn("| 反射 | 2 | 1 | 1 | 2.00 | 2.00 |", text)
+        self.assertIn("| 斜め | 2 | 1 | 0 | 7.50 | 7.50 |", text)
+        self.assertIn("| ブレ | 1 | 0 | 1 | 5.00 | 5.00 |", text)
+        self.assertIn("| 合計 | 5 | 2 | 2 | 4.83 | 5.00 |", text)
         self.assertIn("許容内 (5%FS以下)", text)
         self.assertIn("| 1 | c.png | 斜め | 7.50 | sample.csv |", text)
 

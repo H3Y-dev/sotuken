@@ -99,6 +99,10 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
         stack = listOf(AppScreen.Home.encode(), AppScreen.Capture(id).encode(), AppScreen.History(id).encode())
     }
 
+    LaunchedEffect(queueStore, screen) {
+        context.getExternalFilesDir(null)?.let { queueStore.refreshUsbArrivals(File(it, "outbox")) }
+    }
+
     LaunchedEffect(screen, inspections) {
         val id = screen.inspectionIdOrNull() ?: return@LaunchedEffect
         val found = inspectionStore.observeInspection(id).first()
