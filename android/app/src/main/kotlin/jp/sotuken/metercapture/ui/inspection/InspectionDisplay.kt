@@ -14,7 +14,7 @@ data class HomeCard(val inspectionId: String, val title: String, val stateLabel:
 data class HomeUiState(val inProgress: List<HomeCard>, val waiting: List<HomeCard>, val sent: List<HomeCard>, val legacyUndelivered: String?)
 
 data class SavedCard(val imagePath: String, val deviceName: String?, val deviceId: String?, val capturedAt: String)
-data class CaptureUiState(val header: String, val progress: String, val missingChips: List<RouteDevice>, val targetName: String, val targetId: String, val countLine: String, val justSaved: SavedCard?)
+data class CaptureUiState(val header: String, val progress: String, val missingChips: List<RouteDevice>, val targetName: String, val targetId: String, val countLine: String, val justSaved: SavedCard?, val targetSourceLabel: String)
 data class RouteCheckRow(val device: RouteDevice, val count: Int, val done: Boolean)
 data class HistoryRow(val item: QueueItem, val title: String, val idLine: String, val timeLine: String, val sourceLabel: String, val canEdit: Boolean)
 data class HistoryUiState(val header: String, val photoCount: Int, val deviceLine: String, val routeRows: List<RouteCheckRow>?, val rows: List<HistoryRow>, val notices: List<String>, val noRouteNote: String?)
@@ -26,13 +26,22 @@ fun formatInspectionCaptureTime(capturedAt: String, zone: ZoneId = ZoneId.system
 fun buildCaptureUiState(inspection: Inspection, routeDevices: List<RouteDevice>?, photos: List<QueueItem>, target: CaptureTarget?, justSaved: SavedCard?): CaptureUiState {
     val summary = summarizeInspection(photos, routeDevices)
     val counts = "写真${summary.photoCount}枚 ・ ${summary.deviceCount}機器"
+    val routeIds = routeDevices?.map { it.id }?.toSet().orEmpty()
     return CaptureUiState(
         "${inspection.name} ・ ${inspectionStateLabel(inspection.state)}",
         if (routeDevices == null) counts else "対象 ${summary.routeDeviceCount}機器中 ${summary.shotRouteDeviceCount}機器を撮影",
         summary.missing, target?.deviceName ?: "機器が選ばれていません",
         target?.let { it.deviceId ?: "機器IDなし" } ?: "QRを読むか、手入力してください",
         "この点検：$counts", justSaved,
+        targetSourceLabel(target, routeIds),
     )
+}
+
+fun targetSourceLabel(target: CaptureTarget?, routeIds: Set<String>): String = when {
+    target?.deviceId == null -> "機器IDなし"
+    target.source == "qr" -> "QR"
+    target.source == "manual" && target.deviceId in routeIds -> "一覧から"
+    else -> "手入力"
 }
 
 fun deviceSourceLabel(item: QueueItem, routeIds: Set<String>): String = when {

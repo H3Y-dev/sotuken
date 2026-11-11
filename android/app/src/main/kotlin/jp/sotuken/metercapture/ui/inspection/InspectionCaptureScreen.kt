@@ -75,13 +75,16 @@ fun InspectionCaptureScreen(
         Text(state.progress)
         if (saved == null && !saving) {
             state.missingChips.forEach { device ->
-                OutlinedButton(onClick = { select(targetFromRoute(device)) }) { Text("未撮影：${device.name} ${device.id}") }
+                OutlinedButton(onClick = {
+                    if (!shouldKeepQrTarget(target, device)) select(targetFromRoute(device))
+                }) { Text("未撮影：${device.name} ${device.id}") }
             }
             if (hasPermission) DeviceQrSection(null, { scanning = it }, { select(targetFromQr(it)) }, {})
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(state.targetName, style = MaterialTheme.typography.titleLarge)
                     Text(state.targetId)
+                    Text("出所: ${state.targetSourceLabel}")
                     TextButton(onClick = { manual = true }) { Text("機器名・IDを手入力する") }
                 }
             }

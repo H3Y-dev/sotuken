@@ -27,4 +27,19 @@ class CaptureTargetTest {
     @Test fun afterCaptureWithoutRouteClearsTarget() = assertNull(targetAfterCapture(null, listOf(photo()), targetFromRoute(route[0])))
     @Test fun afterCaptureOfLastMissingIsNull() = assertNull(targetAfterCapture(route, listOf(photo(), photo("two", "A-2")), targetFromRoute(route[1])))
     @Test fun afterCaptureOfExtraClearsTarget() = assertNull(targetAfterCapture(route, listOf(photo(deviceId = "Z-9")), CaptureTarget("Z-9", "追加", "manual")))
+    @Test fun targetSourceLabelIdentifiesSources() {
+        val routeIds = setOf("A-1", "A-2")
+        assertEquals("QR", targetSourceLabel(CaptureTarget("A-1", "圧力計", "qr"), routeIds))
+        assertEquals("一覧から", targetSourceLabel(CaptureTarget("A-1", "圧力計", "manual"), routeIds))
+        assertEquals("手入力", targetSourceLabel(CaptureTarget("X-9", "その他", "manual"), routeIds))
+        assertEquals("機器IDなし", targetSourceLabel(CaptureTarget(null, "名前のみ", null), routeIds))
+        assertEquals("機器IDなし", targetSourceLabel(null, routeIds))
+    }
+    @Test fun shouldKeepQrTargetPreservesSameDeviceQrOnly() {
+        val device = RouteDevice("A-1", "圧力計")
+        assertTrue(shouldKeepQrTarget(CaptureTarget("A-1", "圧力計", "qr"), device))
+        assertFalse(shouldKeepQrTarget(CaptureTarget("A-2", "温度計", "qr"), device))
+        assertFalse(shouldKeepQrTarget(CaptureTarget("A-1", "圧力計", "manual"), device))
+        assertFalse(shouldKeepQrTarget(null, device))
+    }
 }

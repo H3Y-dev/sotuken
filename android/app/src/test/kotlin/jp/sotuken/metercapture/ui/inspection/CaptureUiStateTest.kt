@@ -26,5 +26,10 @@ class CaptureUiStateTest {
         val state = buildCaptureUiState(displayInspection, null, emptyList(), null, null)
         assertEquals("機器が選ばれていません", state.targetName)
         assertEquals("QRを読むか、手入力してください", state.targetId)
+        assertEquals("機器IDなし", state.targetSourceLabel)
+    }
+    @Test fun targetSourceLabelInState() {
+        val state = buildCaptureUiState(displayInspection, displayRoute, emptyList(), CaptureTarget("A-1", "圧力計", "qr"), null)
+        assertEquals("QR", state.targetSourceLabel)
     }
 }
