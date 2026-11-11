@@ -33,12 +33,12 @@ data class SendStatusUiState(
 
 fun buildSendStatusUiState(inspection: Inspection, photos: List<QueueItem>, health: HealthView, currentReceiverId: String?, pcName: String?): SendStatusUiState {
     val missing = parseMissingFileNames(inspection.pcMissingFileNames).toSet()
-    val arrived = photos.count { it.sendState == SendState.SENT && it.sentVia == QueueItem.VIA_HTTP && SenderPayloads.buildImageFileName(it) !in missing }
+    val arrived = photos.count { it.hasArrived() && SenderPayloads.buildImageFileName(it) !in missing }
     val undelivered = photos.filter { it.sendState == SendState.FAILED || SenderPayloads.buildImageFileName(it) in missing }.size
     val waiting = inspection.state == InspectionState.WAITING
     val held = photos.any { it.isHeldFor(currentReceiverId) }
     val offline = networkLabel(health.network) == "未接続"
-    val manifestOnly = waiting && photos.all { it.sendState == SendState.SENT && it.sentVia == QueueItem.VIA_HTTP } && inspection.manifestError != null
+    val manifestOnly = waiting && photos.all { it.hasArrived() } && inspection.manifestError != null
     val state = inspection.state
     val badge = when (state) {
         InspectionState.SENDING -> "送信中"

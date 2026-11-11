@@ -7,6 +7,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.queue.hasArrived
 import jp.sotuken.metercapture.queue.SendState
 
 enum class ConnectionBarState {
@@ -57,9 +58,9 @@ fun countUndelivered(items: List<QueueItem>, isSendable: (QueueItem) -> Boolean 
     }
 }
 
-/** HTTPで届いた項目のsentAtの最新。読めない値は無視する。 */
+/** 到着済み項目のsentAtの最新。USBは送信箱への保存時刻。読めない値は無視する。 */
 fun latestHttpSentAt(items: List<QueueItem>): Instant? = items
-    .filter { it.sendState == SendState.SENT && it.sentVia == QueueItem.VIA_HTTP }
+    .filter { it.hasArrived() }
     .mapNotNull { item -> runCatching { Instant.parse(item.sentAt) }.getOrNull() }
     .maxOrNull()
 

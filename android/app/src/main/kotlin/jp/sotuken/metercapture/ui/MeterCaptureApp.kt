@@ -39,6 +39,7 @@ import jp.sotuken.metercapture.device.deviceIdSourceForCapture
 import jp.sotuken.metercapture.device.heldDeviceAfterNameEdit
 import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.queue.hasArrived
 import jp.sotuken.metercapture.queue.QueueSendScheduler
 import jp.sotuken.metercapture.queue.QueueStore
 import jp.sotuken.metercapture.queue.SendState
@@ -259,8 +260,7 @@ fun MeterCaptureApp(queueStore: QueueStore, health: ReceiverHealthState = rememb
         if (showPairingScreen) {
             PairingScreen(
                 pendingCount = queueItems.count {
-                    it.sendState != jp.sotuken.metercapture.queue.SendState.SENT ||
-                        it.sentVia != jp.sotuken.metercapture.queue.QueueItem.VIA_HTTP
+                    !it.hasArrived()
                 },
                 onClose = {
                     showPairingScreen = false
