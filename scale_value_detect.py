@@ -1102,10 +1102,10 @@ def _run_ocr_tick(img, ticks, center, max_angle_deg, min_points, *, numbered_poi
     return result
 
 
-def _find_agreeing_result(results):
+def _find_agreeing_result(results, center=None):
     """
     複数の（前処理違いの）試行結果のうち、min/maxが一致するものが
-    2件以上あれば、その中で最もn_usedが大きいものを返す。
+    2件以上あれば、採用点数を優先し、明らかな中間値の不整合だけを選び直す。
     どの2件も一致しなければNone（クロスチェック不成立＝信頼できない）。
     """
     groups = {}
@@ -1116,7 +1116,38 @@ def _find_agreeing_result(results):
     best_group = max(groups.values(), key=len, default=[])
     if len(best_group) < 2:
         return None
-    return max(best_group, key=lambda r: r['n_used'])
+    best = max(best_group, key=lambda r: r['n_used'])
+    if center is None:
+        return best
+
+    def endpoints(result):
+        return [math.atan2(result[key][1] - center[1], result[key][0] - center[0])
+                for key in ('zero_pt', 'full_pt')]
+
+    def error(result):
+        points = result.get('calibration', [])
+        span = result['max_value'] - result['min_value']
+        if len(points) < 3 or span <= 0:
+            return float('inf')
+        zero, full = endpoints(result)
+        errors = []
+        for direction in (1, -1):
+            arc = (direction * (full - zero)) % (2 * math.pi)
+            if arc > 1e-6:
+                errors.append(max(abs((angle - zero - direction * arc *
+                                      (value - result['min_value']) / span + math.pi)
+                                     % (2 * math.pi) - math.pi) / arc
+                                  for angle, value in points))
+        return min(errors, default=float('inf'))
+
+    # 非線形を補正しない。端点が近く、全点のずれが弧長の8%以内の既存候補に限る。
+    if error(best) > 0.16:
+        consistent = [r for r in best_group if error(r) <= 0.08 and all(
+            abs((a - b + math.pi) % (2 * math.pi) - math.pi) <= math.radians(12)
+            for a, b in zip(endpoints(best), endpoints(r)))]
+        if consistent:
+            best = max(consistent, key=lambda r: r['n_used'])
+    return best
 
 
 def _scale_attempts(results):
@@ -1315,7 +1346,7 @@ def _detect_scale_values(img, ticks, center, max_angle_deg=12.0, min_points=3,
             result['label'] = label
             results.append(result)
 
-    agreed = _find_agreeing_result(results)
+    agreed = _find_agreeing_result(results, center)
 
     numbers = read_scale_numbers(img)
     # 範囲未確定時の救済にも、同じ対応付けと格子整合のふるいを通す。
