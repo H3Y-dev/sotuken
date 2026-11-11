@@ -5,6 +5,7 @@ import pandas as pd
 import qrcode
 import streamlit as st
 
+from manager.web_data_ui import persistent_widget
 from manager.devices import list_devices
 from manager.routes import delete_route, get_route, list_routes, route_qr_payload, save_route
 
@@ -16,27 +17,30 @@ def render_routes(storage):
     labels = {None: '新規作成', **{r['route_id']: f"{r['name']}（{r['count']}台）" for r in routes}}
     if 'route_pending_selection' in st.session_state:
         st.session_state['route_selection'] = st.session_state.pop('route_pending_selection')
-    selected = st.selectbox('編集・配布するルート', list(labels), format_func=labels.get, key='route_selection')
+    selected = persistent_widget(st.selectbox, '編集・配布するルート', list(labels), format_func=labels.get, key='route_selection')
     route = get_route(storage, selected) if selected else None
     editor_key = (selected, route['updated_at'] if route else None)
     if st.session_state.get('route_editor_key') != editor_key:
+        for key in list(st.session_state):
+            if key.startswith((f'route_devices_{selected}_', f'persisted_route_devices_{selected}_')):
+                del st.session_state[key]
         st.session_state['route_editor_key'] = editor_key
         st.session_state['route_draft'] = list(route['devices']) if route else []
         st.session_state['route_name'] = route['name'] if route else ''
         st.session_state['route_revision'] = 0
-    st.text_input('ルート名', key='route_name', max_chars=64)
+    persistent_widget(st.text_input, 'ルート名', key='route_name', max_chars=64)
     draft = st.session_state['route_draft']
     registry = list_devices(storage)
     choices = {d['device_id']: d for d in registry}
     with st.form('route_add_registered'):
-        chosen = st.selectbox('既存の機器から追加', list(choices),
+        chosen = persistent_widget(st.selectbox, '既存の機器から追加', list(choices), key='route_add_device',
                               format_func=lambda k: f"{k}  {choices[k].get('device_name') or ''}") if choices else None
         if st.form_submit_button('選んだ機器を追加', disabled=not choices):
             draft.append(dict(id=chosen, name=choices[chosen].get('device_name') or chosen))
             st.session_state['route_revision'] += 1
     with st.form('route_add_manual'):
-        manual_id = st.text_input('機器ID（手入力）', max_chars=32)
-        manual_name = st.text_input('機器名（手入力）', max_chars=64)
+        manual_id = persistent_widget(st.text_input, '機器ID（手入力）', key='route_manual_id', max_chars=32)
+        manual_name = persistent_widget(st.text_input, '機器名（手入力）', key='route_manual_name', max_chars=64)
         if st.form_submit_button('手入力で追加'):
             from manager.qr_label import validate_device_id, validate_device_name
             try:
@@ -48,7 +52,7 @@ def render_routes(storage):
     st.caption('順番の数字を変更して並べ替えられます。不要な機器は「削除」にチェックしてください。')
     table = pd.DataFrame([{'順番': i + 1, '機器ID': d['id'], '機器名': d['name'], '削除': False}
                           for i, d in enumerate(draft)], columns=['順番', '機器ID', '機器名', '削除'])
-    edited = st.data_editor(table, hide_index=True, use_container_width=True,
+    edited = persistent_widget(st.data_editor, table, hide_index=True, use_container_width=True,
                             disabled=['機器ID'], key=f'route_devices_{selected}_{st.session_state["route_revision"]}',
                             column_config={'順番': st.column_config.NumberColumn(min_value=1, step=1),
                                            '削除': st.column_config.CheckboxColumn()})

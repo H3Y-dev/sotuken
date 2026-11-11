@@ -8,7 +8,7 @@ from manager.export import (export_to_csv, export_to_jsonl, filter_readings,
     export_inspection_csv, inspection_options, inspection_devices)
 from manager.inspection_ui import (default_inspection_id, device_choices,
     missing_devices, preview_inspection, save_inspection)
-from manager.web_data_ui import load_history, load_overview, render_pending
+from manager.web_data_ui import load_history, load_overview, render_pending, persistent_widget
 
 
 def _show_more(key, step):
@@ -85,11 +85,11 @@ def render_manual(manager):
 
     col_input1, col_input2, col_input3 = st.columns(3)
     with col_input1:
-        device_name = st.text_input("機器名", value="Gauge_01")
+        device_name = persistent_widget(st.text_input, "機器名", value="Gauge_01", key="manual_device")
     with col_input2:
-        th_min = st.number_input("下限閾値 (Min)", value=0.0, step=1.0)
+        th_min = persistent_widget(st.number_input, "下限閾値 (Min)", key="manual_min", value=0.0, step=1.0)
     with col_input3:
-        th_max = st.number_input("上限閾値 (Max)", value=40.0, step=1.0)
+        th_max = persistent_widget(st.number_input, "上限閾値 (Max)", key="manual_max", value=40.0, step=1.0)
 
     uploaded_file = st.file_uploader(
         "画像を選ぶ", type=["jpg", "jpeg", "png"]
@@ -189,7 +189,7 @@ def _render_trend(series_data):
 
 def render_records(manager, receiver, device_page=False):
     st.header("機器" if device_page else "点検")
-    auto_refresh = st.checkbox("自動更新(5秒ごと)", value=False)
+    auto_refresh = persistent_widget(st.checkbox, "自動更新(5秒ごと)", value=False, key="records_auto")
 
     @st.fragment(run_every="5s" if auto_refresh else None)
     def _render_records():
@@ -202,7 +202,7 @@ def render_records(manager, receiver, device_page=False):
         for key, name, status, photos, devices in load_overview(manager, receiver):
             inspection_labels[key] = f"{name}（{status['state']}・{photos}枚・{devices}台）"
         from manager.routes import get_manifest, get_route, inspection_status, route_progress, arrived_manifest_devices
-        selected_inspection = st.selectbox("点検", options=list(inspection_labels),
+        selected_inspection = persistent_widget(st.selectbox, "点検", options=list(inspection_labels),
                                          key="selected_inspection",
                                          format_func=inspection_labels.get)
 
@@ -214,11 +214,11 @@ def render_records(manager, receiver, device_page=False):
 
         filter_device, filter_date_from, filter_date_to = st.columns(3)
         with filter_device:
-            selected_history_device = st.selectbox("機器名", options=device_options)
+            selected_history_device = persistent_widget(st.selectbox, "機器名", options=device_options, key="records_device")
         with filter_date_from:
-            selected_date_from = st.date_input("開始日", value=default_date_from)
+            selected_date_from = persistent_widget(st.date_input, "開始日", key="records_from", value=default_date_from)
         with filter_date_to:
-            selected_date_to = st.date_input("終了日", value=default_date_to)
+            selected_date_to = persistent_widget(st.date_input, "終了日", key="records_to", value=default_date_to)
 
         filtered_history = filter_readings(
             history,
@@ -283,7 +283,7 @@ def render_records(manager, receiver, device_page=False):
                 _render_history_table(manager.format_history_for_ui(visible))
             if not device_page:
                 st.subheader("写真の一覧")
-                if st.checkbox("写真を表示", value=False):
+                if persistent_widget(st.checkbox, "写真を表示", value=False, key="records_photos"):
                     photo_limit = st.session_state.get("photo_limit", 20)
                     for reading in filtered_history[:photo_limit]:
                         thumb = get_thumbnail_path(reading.image_path) if reading.image_path else None
@@ -328,8 +328,8 @@ def render_records(manager, receiver, device_page=False):
             if not grouped_readings:
                 st.info("表示できる記録がありません。")
             else:
-                selected_device = st.selectbox(
-                    "機器", options=list(grouped_readings.keys())
+                selected_device = persistent_widget(st.selectbox,
+                    "機器", key="trend_device", options=list(grouped_readings.keys())
                 )
                 series_data = readings_to_series(grouped_readings[selected_device])
 
@@ -351,11 +351,11 @@ def render_judgment(manager):
         st.info("機器が登録されていません。")
     else:
         _today = date.today()
-        _insp_id = st.text_input("点検ID", value=default_inspection_id(), key="insp_id")
+        _insp_id = persistent_widget(st.text_input, "点検ID", value=default_inspection_id(), key="insp_id")
         _col_from, _col_to = st.columns(2)
-        _insp_from = _col_from.date_input("開始日", value=_today, key="insp_from")
-        _insp_to = _col_to.date_input("終了日", value=_today, key="insp_to")
-        _insp_devices = st.multiselect("対象機器", list(_choices), default=list(_choices),
+        _insp_from = persistent_widget(_col_from.date_input, "開始日", value=_today, key="insp_from")
+        _insp_to = persistent_widget(_col_to.date_input, "終了日", value=_today, key="insp_to")
+        _insp_devices = persistent_widget(st.multiselect, "対象機器", list(_choices), default=list(_choices),
                                        format_func=_choices.get, key="insp_devices")
         _insp_result = None
         try:

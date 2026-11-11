@@ -80,3 +80,70 @@ class WebNavigationTest(unittest.TestCase):
                 self.assertFalse(at.exception, page)
                 if header:
                     self.assertIn(header, [h.value for h in at.header])
+
+    def test_inspection_filters_survive_navigation(self):
+        from streamlit.testing.v1 import AppTest
+        from manager.storage import Storage
+        app = Path(__file__).resolve().parents[1] / 'app.py'
+        with tempfile.TemporaryDirectory() as directory, chdir(directory), patch(
+                'manager.receiver.init_receiver_for_app',
+                return_value={'running': False, 'error': 'test'}):
+            storage = Storage('manager.db')
+            for key in ('A', 'B'):
+                storage.save_reading(key, key + '.jpg', {
+                    'stage': 'ok', 'status': 'ok', 'value': 1,
+                    'inspection_id': key, 'inspection_name': key})
+            at = AppTest.from_file(str(app), default_timeout=30).run()
+            at.radio(key='page').set_value('点検').run()
+            at.selectbox(key='selected_inspection').set_value('A').run()
+            at.checkbox[0].check().run()
+            at.selectbox[1].set_value('A').run()
+            at.radio(key='page').set_value('ホーム').run()
+            at.radio(key='page').set_value('点検').run()
+            self.assertFalse(at.exception)
+            self.assertEqual(at.selectbox(key='selected_inspection').value, 'A')
+            self.assertTrue(at.checkbox[0].value)
+            self.assertEqual(at.selectbox[1].value, 'A')
+
+    def test_route_draft_survives_navigation(self):
+        from streamlit.testing.v1 import AppTest
+        app = Path(__file__).resolve().parents[1] / 'app.py'
+        with tempfile.TemporaryDirectory() as directory, chdir(directory), patch(
+                'manager.receiver.init_receiver_for_app',
+                return_value={'running': False, 'error': 'test'}):
+            at = AppTest.from_file(str(app), default_timeout=30).run()
+            at.radio(key='page').set_value('ルート').run()
+            at.text_input(key='route_name').set_value('My Route').run()
+            at.radio(key='page').set_value('ホーム').run()
+            at.radio(key='page').set_value('ルート').run()
+            self.assertFalse(at.exception)
+            self.assertEqual(at.text_input(key='route_name').value, 'My Route')
+
+    def test_existing_route_selection_survives_navigation(self):
+        from streamlit.testing.v1 import AppTest
+        from manager.storage import Storage
+        from manager.routes import save_route
+        app = Path(__file__).resolve().parents[1] / 'app.py'
+        with tempfile.TemporaryDirectory() as directory, chdir(directory), patch(
+                'manager.receiver.init_receiver_for_app',
+                return_value={'running': False, 'error': 'test'}):
+            route = save_route(Storage('manager.db'), 'Existing', [{'id': 'meter', 'name': 'Meter'}])
+            at = AppTest.from_file(str(app), default_timeout=30).run()
+            at.radio(key='page').set_value('ルート').run()
+            at.selectbox(key='route_selection').set_value(route['route_id']).run()
+            at.text_input(key='route_name').set_value('Edited Route').run()
+            # AppTest has no data_editor input API; apply its widget edit payload.
+            import json
+            states = at._tree.get_widget_states()
+            edit = states.widgets.add()
+            edit.id = at.dataframe[0].proto.id
+            edit.string_value = json.dumps({'edited_rows': {'0': {'機器名': 'Edited Meter'}},
+                                            'added_rows': [], 'deleted_rows': []})
+            at._run(states)
+            at.radio(key='page').set_value('ホーム').run()
+            at.radio(key='page').set_value('ルート').run()
+            self.assertFalse(at.exception)
+            self.assertEqual(at.selectbox(key='route_selection').value, route['route_id'])
+            self.assertEqual(at.text_input(key='route_name').value, 'Edited Route')
+            self.assertEqual(at.dataframe[0].value.iloc[0]['機器ID'], 'meter')
+            self.assertEqual(at.dataframe[0].value.iloc[0]['機器名'], 'Edited Meter')

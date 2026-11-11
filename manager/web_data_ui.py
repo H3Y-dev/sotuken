@@ -1,4 +1,5 @@
 """Shared, versioned DB snapshots and the administrator's landing page."""
+from copy import deepcopy
 from pathlib import Path
 
 import streamlit as st
@@ -7,6 +8,24 @@ from manager.manager import MeterManager
 from manager.pending_images import pending_images
 from manager.receiver import get_default_incoming_dir
 from manager.routes import inspection_status
+
+
+def persistent_widget(widget, *args, key, **kwargs):
+    """Keep input state outside Streamlit's disposable widget keys."""
+    saved_key = f'persisted_{key}'
+    # data_editor rejects session_state assignment; restore its table instead.
+    if widget == st.data_editor:
+        base_key = f'{saved_key}_base'
+        if key not in st.session_state:
+            st.session_state[base_key] = deepcopy(st.session_state.get(saved_key, args[0]))
+        result = widget(st.session_state[base_key], *args[1:], key=key, **kwargs)
+        st.session_state[saved_key] = deepcopy(result)
+        return result
+    if key not in st.session_state and saved_key in st.session_state:
+        st.session_state[key] = deepcopy(st.session_state[saved_key])
+    result = widget(*args, key=key, **kwargs)
+    st.session_state[saved_key] = deepcopy(st.session_state[key])
+    return result
 
 
 def database_version(db_path):
@@ -96,7 +115,7 @@ def render_home(manager, receiver):
         st.caption(f"受信口: 待ち受け中 / {receiver['url']}")
     else:
         st.warning(f"受信口が起動していません: {receiver.get('error')}")
-    auto = st.checkbox('自動更新(5秒ごと)', value=False, key='home_auto')
+    auto = persistent_widget(st.checkbox, '自動更新(5秒ごと)', value=False, key='home_auto')
 
     @st.fragment(run_every='5s' if auto else None)
     def summary():
