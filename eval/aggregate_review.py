@@ -205,6 +205,12 @@ def _fmt_mean(errors):
     return f"{st.mean(errors):.2f}"
 
 
+def _fmt_median(errors):
+    if not errors:
+        return "-"
+    return f"{st.median(errors):.2f}"
+
+
 def _ordered_stages(counts):
     order = {"ok": 0, "scale": 1, "center": 2}
     return sorted(counts.items(), key=lambda item: (order.get(item[0], 99), item[0]))
@@ -254,8 +260,8 @@ def render_markdown(summary, sources=None):
             headers.append("読めなかった数")
             aligns.append("---:")
         if summary["has_error"]:
-            headers.extend(["許容内 (5%FS以下)", "誤差平均 (%FS)"])
-            aligns.extend(["---:", "---:"])
+            headers.extend(["許容内 (5%FS以下)", "誤差平均 (%FS)", "誤差中央値 (%FS)"])
+            aligns.extend(["---:", "---:", "---:"])
         lines.append("| " + " | ".join(headers) + " |")
         lines.append("| " + " | ".join(aligns) + " |")
 
@@ -267,6 +273,7 @@ def render_markdown(summary, sources=None):
             if summary["has_error"]:
                 cells.append(str(group["within"]))
                 cells.append(_fmt_mean(group["errors"]))
+                cells.append(_fmt_median(group["errors"]))
             lines.append("| " + " | ".join(cells) + " |")
             totals["total"] += group["total"]
             totals["unreadable"] += group["unreadable"]
@@ -279,6 +286,7 @@ def render_markdown(summary, sources=None):
         if summary["has_error"]:
             cells.append(str(totals["within"]))
             cells.append(_fmt_mean(totals["errors"]))
+            cells.append(_fmt_median(totals["errors"]))
         lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
 
