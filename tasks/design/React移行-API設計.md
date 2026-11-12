@@ -88,7 +88,7 @@ Error = {error:{code:string, message:string, request_id:string,
 
 unitなどDBにない属性は既存公開値から取得できる場合のみ設定し、それ以外はnull。状態値を新しい成功/失敗判定に置き換えない。Pairingのinactiveは期限切れ・中止・交換済みを区別しない（既存APIで区別不能）。ブラウザは期限を過ぎたQRをローカルでも隠し、再作成を案内する。
 
-HTTPエラーは400 invalid_request、401 unauthenticated、403 forbidden_origin、404 not_found、409 owner_conflict、413 too_large、422 validation_failed、503 owner_unavailable/db_busy。Retry-Afterは503で1秒。内部例外・ファイルパス・鍵をmessageに含めない。リトライはGETのみとし、QR開始や手動処理を通信失敗時に自動再実行しない。
+HTTPエラーは400 invalid_request、401 unauthenticated、403 forbidden_origin、404 not_found、409 owner_conflict、413 too_large、422 validation_failed、500 internal_error（想定外の例外。詳細・パス・鍵は返さず、自動再試行しない）、503 owner_unavailable/db_busy/data_invalid（日時変換失敗など保存データの不整合）。Retry-Afterは503で1秒。内部例外・ファイルパス・鍵をmessageに含めない。リトライはGETのみとし、QR開始や手動処理を通信失敗時に自動再実行しない。
 
 ### 最初の検証に必要なAPI
 
@@ -142,7 +142,7 @@ PC APIは127.0.0.1:8766だけにbindする。ブラウザも `http://127.0.0.1:8
 
 内部窓口は別の256bit内部鍵を要求する。PC APIのサービス認証専用とし、Cookie・CSRFトークン・スマホトークンは受け入れない。内部HTTPにも厳密なHost検証、Originヘッダー付き要求の拒否、接続元ループバック制限を入れる。内部鍵はAPIとownerの起動時だけ共有し、ブラウザには渡さない。8765側に管理ルートや汎用中継を足さない。
 
-image_idはDB idと種別original/overlayからサーバーが作る不透明ID。IDから当該DB行を引き、保存済みパスのみ使用する。URLやJSONに任意パスを受け取るAPIは作らない。許可ルートは検証用incoming、既存の画像保存先、overlay保存先を起動設定で絶対パスに固定する。resolve後のファイルが許可ルートの配下かをPathの階層で判定し、文字列prefix比較は使わない。UNC・デバイスパス・ADS・親ディレクトリ脱出を拒否し、symlink/junction経由の脱出も拒否する。最終的に開いたファイルの実体も検証し、検査後差し替えを防ぐ。存在しない・範囲外・許可形式外はいずれも404。DB内にパスがあっても無条件には信用しない。
+image_idはDB idと種別original/overlayからサーバーが作る不透明ID（実装は `<DB id>-<o|v>-<HMAC>`。HMACの鍵は起動ごとに生成し、クライアントは中身を解釈しない）。IDから当該DB行を1行だけ引き、署名を検証して保存済みパスのみ使用する。起動引数 `--incoming-dir`・`--images-dir`・`--overlays-dir` は必須で、欠けたら起動を拒否する。`--port`（既定8766）は衝突時のみ変更し、Hostは実際のポートと厳密一致させる。URLやJSONに任意パスを受け取るAPIは作らない。許可ルートは検証用incoming、既存の画像保存先、overlay保存先を起動設定で絶対パスに固定する。resolve後のファイルが許可ルートの配下かをPathの階層で判定し、文字列prefix比較は使わない。UNC・デバイスパス・ADS・親ディレクトリ脱出を拒否し、symlink/junction経由の脱出も拒否する。最終的に開いたファイルの実体も検証し、検査後差し替えを防ぐ。存在しない・範囲外・許可形式外はいずれも404。DB内にパスがあっても無条件には信用しない。
 
 ## 5. DB並行アクセスと二重起動
 
