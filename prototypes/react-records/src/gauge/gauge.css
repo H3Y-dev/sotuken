@@ -1,0 +1,139 @@
+/* 計器盤（方向性A）。値の正本は DESIGN.md。色はここの変数だけを使い、部品に直書きしない。
+   この画面だけで読み込む。既存の「機器」画面（index.css）には効かせない。 */
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-panel: var(--g-panel);
+  --color-dial: var(--g-dial);
+  --color-ink: var(--g-ink);
+  --color-text: var(--g-text);
+  --color-steel: var(--g-steel);
+  --color-rule: var(--g-rule);
+  --color-hairline: var(--g-hairline);
+  --color-ok: var(--g-ok);
+  --color-ok-tint: var(--g-ok-tint);
+  --color-warn: var(--g-warn);
+  --color-warn-tint: var(--g-warn-tint);
+  --color-fail: var(--g-fail);
+  --color-fail-tint: var(--g-fail-tint);
+
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --font-sans: var(--g-font-text);
+  --font-heading: var(--g-font-text);
+  --font-mono: var(--g-font-num);
+}
+
+.gauge {
+  /* ── 色（名前付きの実値） ── */
+  --g-panel: #e3e6e4;      /* 盤面: 計器盤の明るい灰色 */
+  --g-dial: #f8f8f5;       /* 文字盤: カード・計器の白 */
+  --g-text: #1c2226;       /* 墨: 本文 */
+  --g-ink: #1d3a63;        /* 紺インク: 数値・針・主ボタン */
+  --g-steel: #475158;      /* 鋼: 補足の文字 */
+  --g-rule: #757f85;       /* 罫: 入力枠・目盛りの補助（盤面に対し3:1以上） */
+  --g-hairline: #b4bbbe;   /* 細罫: 区切り（装飾のみ） */
+  --g-ok: #2c6a45;         /* 正常: 緑 */
+  --g-ok-tint: #ddebe1;
+  --g-band: #3e8a5c;       /* 許容範囲の帯（文字盤に対し3:1以上） */
+  --g-warn: #845a00;       /* 要確認: 黄土色 */
+  --g-warn-tint: #f4e7c6;
+  --g-fail: #a23b24;       /* 失敗: 赤錆色 */
+  --g-fail-tint: #f5dcd5;
+
+  --g-font-text: "BIZ UDPGothic", "BIZ UDゴシック", "BIZ UDGothic", "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --g-font-num: var(--g-font-text); /* 同じ書体で、数字だけ tabular-nums で桁をそろえる */
+
+  /* shadcn/ui の意味の名前へ割り当てる */
+  --background: var(--g-panel);
+  --foreground: var(--g-text);
+  --card: var(--g-dial);
+  --card-foreground: var(--g-text);
+  --primary: var(--g-ink);
+  --primary-foreground: #ffffff;
+  --secondary: var(--g-panel);
+  --secondary-foreground: var(--g-text);
+  --muted: var(--g-panel);
+  --muted-foreground: var(--g-steel);
+  --accent: var(--g-panel);
+  --accent-foreground: var(--g-text);
+  --destructive: var(--g-fail);
+  --border: var(--g-hairline);
+  --input: var(--g-rule);
+  --ring: var(--g-ink);
+
+  min-height: 100vh;
+  background: var(--g-panel);
+  color: var(--g-text);
+  font-family: var(--g-font-text);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* index.css の要素への指定（p・h1・header など）は層の外にあり、Tailwind の指定より強い。
+   この画面の中では層の値へ戻して打ち消す。 */
+.gauge :is(main, header, section, h1, h2, h3, p, small) {
+  all: revert-layer;
+}
+
+.gauge .g-num {
+  font-family: var(--g-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 目盛りの定規。見出しの下の区切りに使う（計器の意匠はここと文字盤の絵だけ） */
+.gauge .g-tickrule {
+  height: 10px;
+  border-top: 2px solid var(--g-ink);
+  background:
+    repeating-linear-gradient(to right, var(--g-ink) 0 1px, transparent 1px 12px) top left / 100% 5px no-repeat,
+    repeating-linear-gradient(to right, var(--g-ink) 0 2px, transparent 2px 60px) top left / 100% 10px no-repeat;
+}
+
+/* 状態の帯（カードの左端）。灰色だけでも区別できるよう、太さと模様を変える */
+/* 幅はどれも10pxにそろえ、中の文字の位置がずれないようにする。正常と途中は細い線だけ見せる */
+.gauge .g-edge { border-left: 10px solid transparent; border-image: linear-gradient(to right, var(--g-hairline) 0 4px, transparent 4px) 0 0 0 10; }
+.gauge .g-edge[data-kind="ok"] { border-image: linear-gradient(to right, var(--g-ok) 0 4px, transparent 4px) 0 0 0 10; }
+.gauge .g-edge[data-kind="warn"] {
+  border-left: 10px solid transparent;
+  border-image: repeating-linear-gradient(45deg, var(--g-warn) 0 6px, var(--g-warn-tint) 6px 10px) 0 0 0 10;
+}
+.gauge .g-edge[data-kind="fail"] { border-left: 10px solid var(--g-fail); border-image: none; }
+.gauge .g-edge[data-kind="missing"] { border: 2px dashed var(--g-ink); border-image: none; padding-left: 28px; }
+
+/* 進み具合（撮影→到着→読み取り→記録） */
+.gauge .g-seg { height: 10px; border: 1.5px solid var(--g-rule); background: var(--g-dial); transition: background-color 200ms ease-out; }
+.gauge .g-seg[data-on="true"] { background: var(--g-ink); border-color: var(--g-ink); }
+.gauge .g-seg[data-on="fail"] { background: var(--g-fail); border-color: var(--g-fail); }
+.gauge .g-seg[data-on="false"] { border-style: dashed; }
+
+.gauge .g-needle { transform-origin: 60px 60px; transition: transform 400ms cubic-bezier(.2, .7, .2, 1); }
+
+.gauge a:focus-visible,
+.gauge button:focus-visible {
+  outline: 3px solid var(--g-ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge *, .gauge *::before, .gauge *::after { transition: none !important; animation: none !important; }
+}
