@@ -1,0 +1,573 @@
+{
+  "directory": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi",
+  "route": {
+    "v": 1,
+    "route_id": "R-MULTI",
+    "name": "Multi meter flow",
+    "devices": [
+      {
+        "id": "SYN-001",
+        "name": "合成 圧力計0-150 白"
+      },
+      {
+        "id": "SYN-003",
+        "name": "合成 圧力計0-150 黒"
+      },
+      {
+        "id": "SYN-002",
+        "name": "合成 圧力計0-150 クリーム"
+      },
+      {
+        "id": "SYN-004",
+        "name": "合成 圧力計0-16 白"
+      },
+      {
+        "id": "SYN-006",
+        "name": "合成 圧力計0-16 黒"
+      }
+    ],
+    "updated_at": "2026-11-12T05:52:58.803102+00:00"
+  },
+  "sent": [
+    {
+      "file_name": "20261112T090001_1.png",
+      "fixture": "C:/卒研/合成画像/テスト用QR付き_20261030/画像/正面/p150_v07_var1_正面.png",
+      "device_id": "SYN-001",
+      "source": "qr",
+      "expected_value": 10.5,
+      "sha256": "4ec7f6661506c670b6551cdbf23357451284d40bd56080f6db46f34a5ddb9cbf"
+    },
+    {
+      "file_name": "20261112T090002_2.png",
+      "fixture": "C:/卒研/合成画像/テスト用QR付き_20261030/画像/正面/p150_v14_var1_正面.png",
+      "device_id": "SYN-003",
+      "source": "qr",
+      "expected_value": 21.0,
+      "sha256": "f1a381f49d8b6f97313e2bf4c20f3220940be7cb9b75fe8a94ae217f69e39619"
+    },
+    {
+      "file_name": "20261112T090003_3.png",
+      "fixture": "C:/卒研/合成画像/テスト用QR付き_20261030/画像/正面/p150_v23_var1_正面.png",
+      "device_id": "SYN-002",
+      "source": "qr",
+      "expected_value": 34.5,
+      "sha256": "4bc107c39223d282c56272dad5a35b8ccb5f208c2f6f9fbe49ed15b56f342c8c"
+    },
+    {
+      "file_name": "20261112T090004_4.png",
+      "fixture": "C:/卒研/合成画像/テスト用QR付き_20261030/画像/正面/p16_v36_var1_正面.png",
+      "device_id": "SYN-004",
+      "source": "list",
+      "expected_value": 5.76,
+      "sha256": "afdc948f9518fd41d3c7cdb59c70404c6684cc919ee90999216e7177da82958f"
+    },
+    {
+      "file_name": "20261112T090005_5.png",
+      "fixture": "C:/卒研/合成画像/テスト用QR付き_20261030/画像/正面/p16_v48_var1_正面.png",
+      "device_id": "SYN-005",
+      "source": "qr",
+      "expected_value": 7.68,
+      "sha256": "f0c0595aec39c9ba554beb5ddf0ca4fc6be10524bbff3626984cc2024138e0a3"
+    },
+    {
+      "file_name": "20261112T090006_6.png",
+      "fixture": "C:/卒研/合成画像/テスト用QR付き_20261030/画像/正面/p16_v48_var1_正面.png",
+      "device_id": "SYN-005",
+      "source": null,
+      "expected_value": 7.68,
+      "sha256": "3a86ce9ccd7dff7ac7484c7945213c058c9f9f5a1d1b65d76587bfcc51e62dbf"
+    }
+  ],
+  "manifest": {
+    "v": 1,
+    "inspection_id": "I-MULTI-20261112",
+    "inspection_name": "Multi meter flow",
+    "route_id": "R-MULTI",
+    "operator": "test",
+    "place": "isolated",
+    "started_at": "2026-11-12T00:00:00Z",
+    "completed_at": "2026-11-12T01:00:00Z",
+    "photos": [
+      {
+        "file_name": "20261112T090001_1.png",
+        "sha256": "4ec7f6661506c670b6551cdbf23357451284d40bd56080f6db46f34a5ddb9cbf",
+        "device_id": "SYN-001",
+        "device_id_source": "qr",
+        "captured_at": "2026-11-12T09:00:00+09:00"
+      },
+      {
+        "file_name": "20261112T090002_2.png",
+        "sha256": "f1a381f49d8b6f97313e2bf4c20f3220940be7cb9b75fe8a94ae217f69e39619",
+        "device_id": "SYN-003",
+        "device_id_source": "qr",
+        "captured_at": "2026-11-12T09:00:00+09:00"
+      },
+      {
+        "file_name": "20261112T090003_3.png",
+        "sha256": "4bc107c39223d282c56272dad5a35b8ccb5f208c2f6f9fbe49ed15b56f342c8c",
+        "device_id": "SYN-002",
+        "device_id_source": "qr",
+        "captured_at": "2026-11-12T09:00:00+09:00"
+      },
+      {
+        "file_name": "20261112T090004_4.png",
+        "sha256": "afdc948f9518fd41d3c7cdb59c70404c6684cc919ee90999216e7177da82958f",
+        "device_id": "SYN-004",
+        "device_id_source": "sidecar",
+        "captured_at": "2026-11-12T09:00:00+09:00"
+      },
+      {
+        "file_name": "20261112T090005_5.png",
+        "sha256": "f0c0595aec39c9ba554beb5ddf0ca4fc6be10524bbff3626984cc2024138e0a3",
+        "device_id": "SYN-005",
+        "device_id_source": "qr",
+        "captured_at": "2026-11-12T09:00:00+09:00"
+      },
+      {
+        "file_name": "20261112T090006_6.png",
+        "sha256": "3a86ce9ccd7dff7ac7484c7945213c058c9f9f5a1d1b65d76587bfcc51e62dbf",
+        "device_id": "SYN-005",
+        "device_id_source": null,
+        "captured_at": "2026-11-12T09:00:00+09:00"
+      }
+    ],
+    "missing": [
+      "SYN-006"
+    ],
+    "extra": [
+      "SYN-005"
+    ]
+  },
+  "before": {
+    "state": "受信中",
+    "matched": 0,
+    "missing_photos": []
+  },
+  "manifest_reply": {
+    "ok": true,
+    "matched": 6,
+    "missing_photos": []
+  },
+  "rejected_manifest": {
+    "status": 400,
+    "body": "{\"error\": \"manifestのJSONが不正です\"}",
+    "original": {
+      "v": 1,
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI",
+      "operator": "test",
+      "place": "isolated",
+      "started_at": "2026-11-12T00:00:00Z",
+      "completed_at": "2026-11-12T01:00:00Z",
+      "photos": [
+        {
+          "file_name": "20261112T090001_1.png",
+          "sha256": "4ec7f6661506c670b6551cdbf23357451284d40bd56080f6db46f34a5ddb9cbf",
+          "device_id": "SYN-001",
+          "device_id_source": "qr",
+          "captured_at": "2026-11-12T09:00:00+09:00"
+        },
+        {
+          "file_name": "20261112T090002_2.png",
+          "sha256": "f1a381f49d8b6f97313e2bf4c20f3220940be7cb9b75fe8a94ae217f69e39619",
+          "device_id": "SYN-003",
+          "device_id_source": "qr",
+          "captured_at": "2026-11-12T09:00:00+09:00"
+        },
+        {
+          "file_name": "20261112T090003_3.png",
+          "sha256": "4bc107c39223d282c56272dad5a35b8ccb5f208c2f6f9fbe49ed15b56f342c8c",
+          "device_id": "SYN-002",
+          "device_id_source": "qr",
+          "captured_at": "2026-11-12T09:00:00+09:00"
+        },
+        {
+          "file_name": "20261112T090004_4.png",
+          "sha256": "afdc948f9518fd41d3c7cdb59c70404c6684cc919ee90999216e7177da82958f",
+          "device_id": "SYN-004",
+          "device_id_source": "list",
+          "captured_at": "2026-11-12T09:00:00+09:00"
+        },
+        {
+          "file_name": "20261112T090005_5.png",
+          "sha256": "f0c0595aec39c9ba554beb5ddf0ca4fc6be10524bbff3626984cc2024138e0a3",
+          "device_id": "SYN-005",
+          "device_id_source": "qr",
+          "captured_at": "2026-11-12T09:00:00+09:00"
+        },
+        {
+          "file_name": "20261112T090006_6.png",
+          "sha256": "3a86ce9ccd7dff7ac7484c7945213c058c9f9f5a1d1b65d76587bfcc51e62dbf",
+          "device_id": "SYN-005",
+          "device_id_source": null,
+          "captured_at": "2026-11-12T09:00:00+09:00"
+        }
+      ],
+      "missing": [
+        "SYN-006"
+      ],
+      "extra": [
+        "SYN-005"
+      ]
+    }
+  },
+  "received": {
+    "state": "完了",
+    "matched": 6,
+    "missing_photos": []
+  },
+  "arrived_before_ocr": [
+    {
+      "device_id": "SYN-001"
+    },
+    {
+      "device_id": "SYN-003"
+    },
+    {
+      "device_id": "SYN-002"
+    },
+    {
+      "device_id": "SYN-004"
+    },
+    {
+      "device_id": "SYN-005"
+    },
+    {
+      "device_id": "SYN-005"
+    }
+  ],
+  "missing_transport": {
+    "state": "不足あり",
+    "matched": 5,
+    "missing_photos": [
+      "20261112T090001_1.png"
+    ]
+  },
+  "progress_before_ocr": [
+    {
+      "機器ID": "SYN-001",
+      "機器名": "合成 圧力計0-150 白",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-003",
+      "機器名": "合成 圧力計0-150 黒",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-002",
+      "機器名": "合成 圧力計0-150 クリーム",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-004",
+      "機器名": "合成 圧力計0-16 白",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-006",
+      "機器名": "合成 圧力計0-16 黒",
+      "撮影状態": "未撮影",
+      "スマホ申告": "未撮影"
+    },
+    {
+      "機器ID": "SYN-005",
+      "機器名": "",
+      "撮影状態": "追加",
+      "スマホ申告": "追加"
+    }
+  ],
+  "decoded_qr": [
+    "QrResult(status='found', device_id='SYN-001', device_name='合成 圧力計0-150 白', payloads=['{\"v\":1,\"id\":\"SYN-001\",\"name\":\"合成 圧力計0-150 白\"}'], method='wechat_full')",
+    "QrResult(status='found', device_id='SYN-003', device_name='合成 圧力計0-150 黒', payloads=['{\"v\":1,\"id\":\"SYN-003\",\"name\":\"合成 圧力計0-150 黒\"}'], method='wechat_full')",
+    "QrResult(status='found', device_id='SYN-002', device_name='合成 圧力計0-150 クリーム', payloads=['{\"v\":1,\"id\":\"SYN-002\",\"name\":\"合成 圧力計0-150 クリーム\"}'], method='wechat_full')",
+    "QrResult(status='found', device_id='SYN-004', device_name='合成 圧力計0-16 白', payloads=['{\"v\":1,\"id\":\"SYN-004\",\"name\":\"合成 圧力計0-16 白\"}'], method='wechat_full')",
+    "QrResult(status='found', device_id='SYN-005', device_name='合成 圧力計0-16 クリーム', payloads=['{\"v\":1,\"id\":\"SYN-005\",\"name\":\"合成 圧力計0-16 クリーム\"}'], method='wechat_full')",
+    "QrResult(status='found', device_id='SYN-005', device_name='合成 圧力計0-16 クリーム', payloads=['{\"v\":1,\"id\":\"SYN-005\",\"name\":\"合成 圧力計0-16 クリーム\"}'], method='wechat_full')"
+  ],
+  "seconds": [
+    13.064,
+    16.299,
+    22.483,
+    14.419,
+    20.51,
+    17.447
+  ],
+  "after": {
+    "state": "完了",
+    "matched": 6,
+    "missing_photos": []
+  },
+  "rows": [
+    {
+      "id": 1,
+      "timestamp": "2026-11-12 14:53:12",
+      "device_name": "合成 圧力計0-150 白",
+      "value": 10.778674583726515,
+      "stage": "ok",
+      "image_path": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi\\images\\4ec7f6661506c670b6551cdbf23357451284d40bd56080f6db46f34a5ddb9cbf.png",
+      "raw_data_json": "{\"stage\": \"ok\", \"value\": 10.778674583726515, \"ratio\": 0.07188394920701764, \"angle_deg\": 19.408866177114167, \"min_value\": 0.0, \"max_value\": 150.0, \"center\": [640, 480], \"zero_pt\": [439, 683], \"full_pt\": [845, 683], \"n_ticks\": 16, \"scale_source\": \"ocr_tick\", \"scale_confident\": false, \"scale_diagnostics\": {\"ocr\": {\"available\": true, \"stable\": true, \"min_value\": 0.0, \"max_value\": 150.0, \"attempts\": [{\"label\": \"input_ticks\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"original\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe1.5\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe2.5\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}], \"numbers\": [{\"value\": 50.0, \"x\": 490.5, \"y\": 328.5, \"score\": 0.99999}, {\"value\": 100.0, \"x\": 789.0, \"y\": 328.0, \"score\": 0.99998}, {\"value\": 0.0, \"x\": 490.0, \"y\": 626.5, \"score\": 0.97522}, {\"value\": 150.0, \"x\": 789.5, \"y\": 625.0, \"score\": 0.99999}]}, \"vlm\": {\"enabled\": false, \"available\": false, \"min_value\": null, \"max_value\": null}, \"decision\": {\"relation\": \"disabled\", \"fallback_used\": false, \"min_source\": \"ocr\", \"max_source\": \"ocr\", \"reason\": \"VLMを無効化してOCRのみで判定\"}}, \"center_source\": \"hough\", \"cropped\": false, \"orientation_angle\": 0, \"error\": null, \"route_id\": \"R-MULTI\", \"inspection_id\": \"I-MULTI-20261112\", \"inspection_name\": \"Multi meter flow\", \"pipeline_version\": \"v5-358-g7fd3ffc\", \"status\": \"low_confidence\", \"input_method\": \"auto\", \"failure_stage\": null, \"failure_code\": null, \"failure_detail\": null, \"reading_id\": \"7736f8b1-b713-41a6-b9fd-c0badba48bbb\", \"log_path\": null, \"overlay_path\": \"../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/7736f8b1-b713-41a6-b9fd-c0badba48bbb.jpg\"}",
+      "image_sha256": "4ec7f6661506c670b6551cdbf23357451284d40bd56080f6db46f34a5ddb9cbf",
+      "reading_id": "7736f8b1-b713-41a6-b9fd-c0badba48bbb",
+      "status": "low_confidence",
+      "input_method": "auto",
+      "confidence": null,
+      "failure_stage": null,
+      "failure_code": null,
+      "failure_detail": null,
+      "pipeline_version": "v5-358-g7fd3ffc",
+      "log_path": null,
+      "overlay_path": "../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/7736f8b1-b713-41a6-b9fd-c0badba48bbb.jpg",
+      "device_id": "SYN-001",
+      "device_id_source": "sidecar_qr",
+      "device_id_issue": null,
+      "captured_at": "2026-11-12T00:00:00Z",
+      "received_at": "2026-11-12T05:52:58Z",
+      "image_rel": "images/4ec7f6661506c670b6551cdbf23357451284d40bd56080f6db46f34a5ddb9cbf.png",
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI"
+    },
+    {
+      "id": 2,
+      "timestamp": "2026-11-12 14:53:28",
+      "device_name": "合成 圧力計0-150 黒",
+      "value": 21.622575078034853,
+      "stage": "ok",
+      "image_path": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi\\images\\f1a381f49d8b6f97313e2bf4c20f3220940be7cb9b75fe8a94ae217f69e39619.png",
+      "raw_data_json": "{\"stage\": \"ok\", \"value\": 21.622575078034853, \"ratio\": 0.1442239079245661, \"angle_deg\": 43.290755012926525, \"min_value\": 0.0, \"max_value\": 150.0, \"center\": [640, 480], \"zero_pt\": [498, 727], \"full_pt\": [784, 730], \"n_ticks\": 76, \"scale_source\": \"ocr_tick\", \"scale_confident\": false, \"scale_diagnostics\": {\"ocr\": {\"available\": true, \"stable\": true, \"min_value\": 0.0, \"max_value\": 150.0, \"attempts\": [{\"label\": \"input_ticks\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"original\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe1.5\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe2.5\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}], \"numbers\": [{\"value\": 50.0, \"x\": 479.0, \"y\": 342.0, \"score\": 1.0}, {\"value\": 100.0, \"x\": 802.0, \"y\": 341.5, \"score\": 0.99999}, {\"value\": 0.0, \"x\": 535.0, \"y\": 659.0, \"score\": 0.99987}, {\"value\": 150.0, \"x\": 745.25, \"y\": 658.0, \"score\": 0.99999}]}, \"vlm\": {\"enabled\": false, \"available\": false, \"min_value\": null, \"max_value\": null}, \"decision\": {\"relation\": \"disabled\", \"fallback_used\": false, \"min_source\": \"ocr\", \"max_source\": \"ocr\", \"reason\": \"VLMを無効化してOCRのみで判定\"}}, \"center_source\": \"hough\", \"cropped\": false, \"orientation_angle\": 0, \"error\": null, \"route_id\": \"R-MULTI\", \"inspection_id\": \"I-MULTI-20261112\", \"inspection_name\": \"Multi meter flow\", \"pipeline_version\": \"v5-358-g7fd3ffc\", \"status\": \"low_confidence\", \"input_method\": \"auto\", \"failure_stage\": null, \"failure_code\": null, \"failure_detail\": null, \"reading_id\": \"08a65170-0a3d-4fae-a35e-4b58c6b29ae2\", \"log_path\": null, \"overlay_path\": \"../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/08a65170-0a3d-4fae-a35e-4b58c6b29ae2.jpg\"}",
+      "image_sha256": "f1a381f49d8b6f97313e2bf4c20f3220940be7cb9b75fe8a94ae217f69e39619",
+      "reading_id": "08a65170-0a3d-4fae-a35e-4b58c6b29ae2",
+      "status": "low_confidence",
+      "input_method": "auto",
+      "confidence": null,
+      "failure_stage": null,
+      "failure_code": null,
+      "failure_detail": null,
+      "pipeline_version": "v5-358-g7fd3ffc",
+      "log_path": null,
+      "overlay_path": "../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/08a65170-0a3d-4fae-a35e-4b58c6b29ae2.jpg",
+      "device_id": "SYN-003",
+      "device_id_source": "sidecar_qr",
+      "device_id_issue": null,
+      "captured_at": "2026-11-12T00:00:00Z",
+      "received_at": "2026-11-12T05:52:58Z",
+      "image_rel": "images/f1a381f49d8b6f97313e2bf4c20f3220940be7cb9b75fe8a94ae217f69e39619.png",
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI"
+    },
+    {
+      "id": 3,
+      "timestamp": "2026-11-12 14:53:51",
+      "device_name": "合成 圧力計0-150 クリーム",
+      "value": 36.75019680108267,
+      "stage": "ok",
+      "image_path": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi\\images\\4bc107c39223d282c56272dad5a35b8ccb5f208c2f6f9fbe49ed15b56f342c8c.png",
+      "raw_data_json": "{\"stage\": \"ok\", \"value\": 36.75019680108267, \"ratio\": 0.2450734836696178, \"angle_deg\": 58.56719033973933, \"min_value\": 0.0, \"max_value\": 150.0, \"center\": [640, 480], \"zero_pt\": [392, 621], \"full_pt\": [896, 624], \"n_ticks\": 14, \"scale_source\": \"ocr_tick\", \"scale_confident\": false, \"scale_diagnostics\": {\"ocr\": {\"available\": true, \"stable\": true, \"min_value\": 0.0, \"max_value\": 150.0, \"attempts\": [{\"label\": \"input_ticks\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"original\", \"min_value\": 0.0, \"max_value\": 150.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe1.5\", \"min_value\": 0.0, \"max_value\": 100.0, \"n_used\": 3, \"n_total\": 3}, {\"label\": \"clahe2.5\", \"min_value\": 0.0, \"max_value\": 100.0, \"n_used\": 3, \"n_total\": 3}], \"numbers\": [{\"value\": 50.0, \"x\": 503.5, \"y\": 322.5, \"score\": 0.99998}, {\"value\": 100.0, \"x\": 774.0, \"y\": 319.5, \"score\": 0.99997}, {\"value\": 0.0, \"x\": 458.0, \"y\": 584.5, \"score\": 0.95934}, {\"value\": 150.0, \"x\": 821.5, \"y\": 587.5, \"score\": 0.99996}]}, \"vlm\": {\"enabled\": false, \"available\": false, \"min_value\": null, \"max_value\": null}, \"decision\": {\"relation\": \"disabled\", \"fallback_used\": false, \"min_source\": \"ocr\", \"max_source\": \"ocr\", \"reason\": \"VLMを無効化してOCRのみで判定\"}}, \"center_source\": \"hough\", \"cropped\": false, \"orientation_angle\": 0, \"error\": null, \"route_id\": \"R-MULTI\", \"inspection_id\": \"I-MULTI-20261112\", \"inspection_name\": \"Multi meter flow\", \"pipeline_version\": \"v5-358-g7fd3ffc\", \"status\": \"low_confidence\", \"input_method\": \"auto\", \"failure_stage\": null, \"failure_code\": null, \"failure_detail\": null, \"reading_id\": \"dc0b1e9b-2603-4c28-87b9-c96746819d47\", \"log_path\": null, \"overlay_path\": \"../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/dc0b1e9b-2603-4c28-87b9-c96746819d47.jpg\"}",
+      "image_sha256": "4bc107c39223d282c56272dad5a35b8ccb5f208c2f6f9fbe49ed15b56f342c8c",
+      "reading_id": "dc0b1e9b-2603-4c28-87b9-c96746819d47",
+      "status": "low_confidence",
+      "input_method": "auto",
+      "confidence": null,
+      "failure_stage": null,
+      "failure_code": null,
+      "failure_detail": null,
+      "pipeline_version": "v5-358-g7fd3ffc",
+      "log_path": null,
+      "overlay_path": "../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/dc0b1e9b-2603-4c28-87b9-c96746819d47.jpg",
+      "device_id": "SYN-002",
+      "device_id_source": "sidecar_qr",
+      "device_id_issue": null,
+      "captured_at": "2026-11-12T00:00:00Z",
+      "received_at": "2026-11-12T05:52:58Z",
+      "image_rel": "images/4bc107c39223d282c56272dad5a35b8ccb5f208c2f6f9fbe49ed15b56f342c8c.png",
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI"
+    },
+    {
+      "id": 4,
+      "timestamp": "2026-11-12 14:54:06",
+      "device_name": "合成 圧力計0-16 白",
+      "value": 5.7134523262373484,
+      "stage": "ok",
+      "image_path": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi\\images\\afdc948f9518fd41d3c7cdb59c70404c6684cc919ee90999216e7177da82958f.png",
+      "raw_data_json": "{\"stage\": \"ok\", \"value\": 5.7134523262373484, \"ratio\": 0.35712452765291847, \"angle_deg\": 95.6738075704916, \"min_value\": 0.0, \"max_value\": 16.0, \"center\": [640, 480], \"zero_pt\": [437, 675], \"full_pt\": [855, 688], \"n_ticks\": 33, \"scale_source\": \"ocr_tick\", \"scale_confident\": false, \"scale_diagnostics\": {\"ocr\": {\"available\": true, \"stable\": true, \"min_value\": 0.0, \"max_value\": 16.0, \"attempts\": [{\"label\": \"input_ticks\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}, {\"label\": \"original\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}, {\"label\": \"clahe1.5\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}, {\"label\": \"clahe2.5\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}], \"numbers\": [{\"value\": 8.0, \"x\": 640.0, \"y\": 267.0, \"score\": 1.0}, {\"value\": 4.0, \"x\": 445.5, \"y\": 396.0, \"score\": 0.99999}, {\"value\": 12.0, \"x\": 834.5, \"y\": 397.0, \"score\": 0.99998}, {\"value\": 0.0, \"x\": 490.5, \"y\": 625.5, \"score\": 0.99961}, {\"value\": 16.0, \"x\": 790.5, \"y\": 625.0, \"score\": 0.99998}]}, \"vlm\": {\"enabled\": false, \"available\": false, \"min_value\": null, \"max_value\": null}, \"decision\": {\"relation\": \"disabled\", \"fallback_used\": false, \"min_source\": \"ocr\", \"max_source\": \"ocr\", \"reason\": \"VLMを無効化してOCRのみで判定\"}}, \"center_source\": \"hough\", \"cropped\": false, \"orientation_angle\": 0, \"error\": null, \"route_id\": \"R-MULTI\", \"inspection_id\": \"I-MULTI-20261112\", \"inspection_name\": \"Multi meter flow\", \"pipeline_version\": \"v5-358-g7fd3ffc\", \"status\": \"low_confidence\", \"input_method\": \"auto\", \"failure_stage\": null, \"failure_code\": null, \"failure_detail\": null, \"reading_id\": \"8ccfdfd8-98cc-43c8-b0e5-1e56d2128803\", \"log_path\": null, \"overlay_path\": \"../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/8ccfdfd8-98cc-43c8-b0e5-1e56d2128803.jpg\"}",
+      "image_sha256": "afdc948f9518fd41d3c7cdb59c70404c6684cc919ee90999216e7177da82958f",
+      "reading_id": "8ccfdfd8-98cc-43c8-b0e5-1e56d2128803",
+      "status": "low_confidence",
+      "input_method": "auto",
+      "confidence": null,
+      "failure_stage": null,
+      "failure_code": null,
+      "failure_detail": null,
+      "pipeline_version": "v5-358-g7fd3ffc",
+      "log_path": null,
+      "overlay_path": "../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/8ccfdfd8-98cc-43c8-b0e5-1e56d2128803.jpg",
+      "device_id": "SYN-004",
+      "device_id_source": "sidecar",
+      "device_id_issue": null,
+      "captured_at": "2026-11-12T00:00:00Z",
+      "received_at": "2026-11-12T05:52:58Z",
+      "image_rel": "images/afdc948f9518fd41d3c7cdb59c70404c6684cc919ee90999216e7177da82958f.png",
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI"
+    },
+    {
+      "id": 5,
+      "timestamp": "2026-11-12 14:54:27",
+      "device_name": "合成 圧力計0-16 クリーム",
+      "value": 7.903010583075185,
+      "stage": "ok",
+      "image_path": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi\\images\\f0c0595aec39c9ba554beb5ddf0ca4fc6be10524bbff3626984cc2024138e0a3.png",
+      "raw_data_json": "{\"stage\": \"ok\", \"value\": 7.903010583075185, \"ratio\": 0.4943047662041822, \"angle_deg\": 118.66548419675298, \"min_value\": 0.0, \"max_value\": 16.0, \"center\": [640, 480], \"zero_pt\": [392, 621], \"full_pt\": [885, 624], \"n_ticks\": 33, \"scale_source\": \"ocr_tick\", \"scale_confident\": false, \"scale_diagnostics\": {\"ocr\": {\"available\": true, \"stable\": true, \"min_value\": 0.0, \"max_value\": 16.0, \"attempts\": [{\"label\": \"input_ticks\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"original\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe1.5\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}, {\"label\": \"clahe2.5\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}], \"numbers\": [{\"value\": 8.0, \"x\": 640.0, \"y\": 267.0, \"score\": 0.99999}, {\"value\": 4.0, \"x\": 460.5, \"y\": 378.5, \"score\": 0.9671}, {\"value\": 12.0, \"x\": 821.0, \"y\": 375.0, \"score\": 0.99996}, {\"value\": 16.0, \"x\": 821.5, \"y\": 583.0, \"score\": 0.99996}]}, \"vlm\": {\"enabled\": false, \"available\": false, \"min_value\": null, \"max_value\": null}, \"decision\": {\"relation\": \"disabled\", \"fallback_used\": false, \"min_source\": \"ocr\", \"max_source\": \"ocr\", \"reason\": \"VLMを無効化してOCRのみで判定\"}}, \"center_source\": \"hough\", \"cropped\": false, \"orientation_angle\": 0, \"error\": null, \"route_id\": \"R-MULTI\", \"inspection_id\": \"I-MULTI-20261112\", \"inspection_name\": \"Multi meter flow\", \"pipeline_version\": \"v5-358-g7fd3ffc\", \"status\": \"low_confidence\", \"input_method\": \"auto\", \"failure_stage\": null, \"failure_code\": null, \"failure_detail\": null, \"reading_id\": \"97fe6cbb-1503-4d8f-a3c1-3635854e32e5\", \"log_path\": null, \"overlay_path\": \"../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/97fe6cbb-1503-4d8f-a3c1-3635854e32e5.jpg\"}",
+      "image_sha256": "f0c0595aec39c9ba554beb5ddf0ca4fc6be10524bbff3626984cc2024138e0a3",
+      "reading_id": "97fe6cbb-1503-4d8f-a3c1-3635854e32e5",
+      "status": "low_confidence",
+      "input_method": "auto",
+      "confidence": null,
+      "failure_stage": null,
+      "failure_code": null,
+      "failure_detail": null,
+      "pipeline_version": "v5-358-g7fd3ffc",
+      "log_path": null,
+      "overlay_path": "../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/97fe6cbb-1503-4d8f-a3c1-3635854e32e5.jpg",
+      "device_id": "SYN-005",
+      "device_id_source": "sidecar_qr",
+      "device_id_issue": null,
+      "captured_at": "2026-11-12T00:00:00Z",
+      "received_at": "2026-11-12T05:52:58Z",
+      "image_rel": "images/f0c0595aec39c9ba554beb5ddf0ca4fc6be10524bbff3626984cc2024138e0a3.png",
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI"
+    },
+    {
+      "id": 6,
+      "timestamp": "2026-11-12 14:54:45",
+      "device_name": "合成 圧力計0-16 クリーム",
+      "value": 7.903010583075185,
+      "stage": "ok",
+      "image_path": "C:\\Users\\dorum\\AppData\\Local\\Temp\\sotuken_multi_31ho1ewi\\images\\3a86ce9ccd7dff7ac7484c7945213c058c9f9f5a1d1b65d76587bfcc51e62dbf.png",
+      "raw_data_json": "{\"stage\": \"ok\", \"value\": 7.903010583075185, \"ratio\": 0.4943047662041822, \"angle_deg\": 118.66548419675298, \"min_value\": 0.0, \"max_value\": 16.0, \"center\": [640, 480], \"zero_pt\": [392, 621], \"full_pt\": [885, 624], \"n_ticks\": 33, \"scale_source\": \"ocr_tick\", \"scale_confident\": false, \"scale_diagnostics\": {\"ocr\": {\"available\": true, \"stable\": true, \"min_value\": 0.0, \"max_value\": 16.0, \"attempts\": [{\"label\": \"input_ticks\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"original\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 4, \"n_total\": 4}, {\"label\": \"clahe1.5\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}, {\"label\": \"clahe2.5\", \"min_value\": 0.0, \"max_value\": 16.0, \"n_used\": 5, \"n_total\": 5}], \"numbers\": [{\"value\": 8.0, \"x\": 640.0, \"y\": 267.0, \"score\": 0.99999}, {\"value\": 4.0, \"x\": 460.5, \"y\": 378.5, \"score\": 0.9671}, {\"value\": 12.0, \"x\": 821.0, \"y\": 375.0, \"score\": 0.99996}, {\"value\": 16.0, \"x\": 821.5, \"y\": 583.0, \"score\": 0.99996}]}, \"vlm\": {\"enabled\": false, \"available\": false, \"min_value\": null, \"max_value\": null}, \"decision\": {\"relation\": \"disabled\", \"fallback_used\": false, \"min_source\": \"ocr\", \"max_source\": \"ocr\", \"reason\": \"VLMを無効化してOCRのみで判定\"}}, \"center_source\": \"hough\", \"cropped\": false, \"orientation_angle\": 0, \"error\": null, \"route_id\": \"R-MULTI\", \"inspection_id\": \"I-MULTI-20261112\", \"inspection_name\": \"Multi meter flow\", \"pipeline_version\": \"v5-358-g7fd3ffc\", \"status\": \"low_confidence\", \"input_method\": \"auto\", \"failure_stage\": null, \"failure_code\": null, \"failure_detail\": null, \"reading_id\": \"2815fcac-b2dd-4d85-94eb-7f9819cfec5d\", \"log_path\": null, \"overlay_path\": \"../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/2815fcac-b2dd-4d85-94eb-7f9819cfec5d.jpg\"}",
+      "image_sha256": "3a86ce9ccd7dff7ac7484c7945213c058c9f9f5a1d1b65d76587bfcc51e62dbf",
+      "reading_id": "2815fcac-b2dd-4d85-94eb-7f9819cfec5d",
+      "status": "low_confidence",
+      "input_method": "auto",
+      "confidence": null,
+      "failure_stage": null,
+      "failure_code": null,
+      "failure_detail": null,
+      "pipeline_version": "v5-358-g7fd3ffc",
+      "log_path": null,
+      "overlay_path": "../../../../AppData/Local/Temp/sotuken_multi_31ho1ewi/overlays/2815fcac-b2dd-4d85-94eb-7f9819cfec5d.jpg",
+      "device_id": "SYN-005",
+      "device_id_source": "pc_qr",
+      "device_id_issue": null,
+      "captured_at": "2026-11-12T00:00:00Z",
+      "received_at": "2026-11-12T05:52:58Z",
+      "image_rel": "images/3a86ce9ccd7dff7ac7484c7945213c058c9f9f5a1d1b65d76587bfcc51e62dbf.png",
+      "inspection_id": "I-MULTI-20261112",
+      "inspection_name": "Multi meter flow",
+      "route_id": "R-MULTI"
+    }
+  ],
+  "arrived_after_ocr": [],
+  "progress": [
+    {
+      "機器ID": "SYN-001",
+      "機器名": "合成 圧力計0-150 白",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-003",
+      "機器名": "合成 圧力計0-150 黒",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-002",
+      "機器名": "合成 圧力計0-150 クリーム",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-004",
+      "機器名": "合成 圧力計0-16 白",
+      "撮影状態": "撮影済み",
+      "スマホ申告": ""
+    },
+    {
+      "機器ID": "SYN-006",
+      "機器名": "合成 圧力計0-16 黒",
+      "撮影状態": "未撮影",
+      "スマホ申告": "未撮影"
+    },
+    {
+      "機器ID": "SYN-005",
+      "機器名": "",
+      "撮影状態": "追加",
+      "スマホ申告": "追加"
+    }
+  ],
+  "devices": [
+    {
+      "機器ID": "SYN-001",
+      "機器名": "合成 圧力計0-150 白",
+      "写真の枚数": 1,
+      "最後の撮影時刻": "2026-11-12T00:00:00Z",
+      "情報の出所": "スマホ(QR)"
+    },
+    {
+      "機器ID": "SYN-002",
+      "機器名": "合成 圧力計0-150 クリーム",
+      "写真の枚数": 1,
+      "最後の撮影時刻": "2026-11-12T00:00:00Z",
+      "情報の出所": "スマホ(QR)"
+    },
+    {
+      "機器ID": "SYN-003",
+      "機器名": "合成 圧力計0-150 黒",
+      "写真の枚数": 1,
+      "最後の撮影時刻": "2026-11-12T00:00:00Z",
+      "情報の出所": "スマホ(QR)"
+    },
+    {
+      "機器ID": "SYN-004",
+      "機器名": "合成 圧力計0-16 白",
+      "写真の枚数": 1,
+      "最後の撮影時刻": "2026-11-12T00:00:00Z",
+      "情報の出所": "なし"
+    },
+    {
+      "機器ID": "SYN-005",
+      "機器名": "合成 圧力計0-16 クリーム",
+      "写真の枚数": 2,
+      "最後の撮影時刻": "2026-11-12T00:00:00Z",
+      "情報の出所": "PC(画像のQR)、スマホ(QR)"
+    }
+  ],
+  "ollama_before": {
+    "code": 0,
+    "stdout": "NAME    ID    SIZE    PROCESSOR    CONTEXT    RUNNER    UNTIL \n",
+    "stderr": ""
+  },
+  "ollama_after": {
+    "code": 0,
+    "stdout": "NAME    ID    SIZE    PROCESSOR    CONTEXT    RUNNER    UNTIL \n",
+    "stderr": ""
+  },
+  "ollama_stop": {
+    "code": 0,
+    "stdout": "",
+    "stderr": "\u001b[?2026h\u001b[?25l\u001b[1G\u001b[K\u001b[?25h\u001b[?2026l\u001b[?25l\u001b[2K\u001b[1G\u001b[?25h"
+  }
+}

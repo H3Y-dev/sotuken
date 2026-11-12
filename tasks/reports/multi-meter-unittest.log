@@ -1,0 +1,246 @@
+....................[INFO] === 機器ID割り当て処理を開始します ===
+[INFO] モード: DRY-RUN（ファイルの書き換えは行いません）
+[INFO] 合成メーター: 30 台 (予想: 30台)
+[INFO] 企業提供メーター: 2 台 (JSW-001, JSW-002)
+[INFO] 一般メーター: 5 台 (GEN-001〜GEN-005)
+[INFO] 合計機器台数: 37 台 (合成=30, 企業=2, 一般=5)
+[INFO] [DRY-RUN] devices.csv 出力先: C:\Users\dorum\AppData\Local\Temp\tmpu2spsdq2\devices.csv (行数: 37)
+[INFO] [DRY-RUN] バックアップ予定: C:\Users\dorum\AppData\Local\Temp\tmpu2spsdq2\synthetic\groundtruth_synthetic.before_ids.json
+[INFO] [DRY-RUN] groundtruth_synthetic.json 更新予定件数: 4, サイドカー予定件数: 4
+[INFO] 合成データ処理結果: groundtruth_synthetic.json=4件, サイドカーJSON=4件
+[INFO] 対象外（スキップ）: images/other_meter.jpg
+[INFO] [DRY-RUN] eval/groundtruth.json 更新予定件数: 6, 対象外: 1
+[INFO] 実写groundtruth処理結果: 更新=6件, 対象外=1件
+[INFO] === 機器ID割り当て処理が完了しました ===
+.[INFO] === 機器ID割り当て処理を開始します ===
+[INFO] モード: 本番実行
+[INFO] 合成メーター: 30 台 (予想: 30台)
+[INFO] 企業提供メーター: 2 台 (JSW-001, JSW-002)
+[INFO] 一般メーター: 5 台 (GEN-001〜GEN-005)
+[INFO] 合計機器台数: 37 台 (合成=30, 企業=2, 一般=5)
+[INFO] devices.csv を出力しました: C:\Users\dorum\AppData\Local\Temp\tmpsrh47dm4\devices.csv (全 37 行)
+[INFO] バックアップを作成しました: C:\Users\dorum\AppData\Local\Temp\tmpsrh47dm4\synthetic\groundtruth_synthetic.before_ids.json
+[INFO] groundtruth_synthetic.json を更新しました (更新件数: 4)
+[INFO] 合成データ処理結果: groundtruth_synthetic.json=4件, サイドカーJSON=4件
+[INFO] 対象外（スキップ）: images/other_meter.jpg
+[INFO] eval/groundtruth.json を更新しました (更新件数: 6)
+[INFO] 実写groundtruth処理結果: 更新=6件, 対象外=1件
+[INFO] === 機器ID割り当て処理が完了しました ===
+[INFO] === 機器ID割り当て処理を開始します ===
+[INFO] モード: 本番実行
+[INFO] 合成メーター: 30 台 (予想: 30台)
+[INFO] 企業提供メーター: 2 台 (JSW-001, JSW-002)
+[INFO] 一般メーター: 5 台 (GEN-001〜GEN-005)
+[INFO] 合計機器台数: 37 台 (合成=30, 企業=2, 一般=5)
+[INFO] devices.csv を出力しました: C:\Users\dorum\AppData\Local\Temp\tmpsrh47dm4\devices.csv (全 37 行)
+[INFO] バックアップを作成しました: C:\Users\dorum\AppData\Local\Temp\tmpsrh47dm4\synthetic\groundtruth_synthetic.before_ids.json
+[INFO] groundtruth_synthetic.json を更新しました (更新件数: 4)
+[INFO] 合成データ処理結果: groundtruth_synthetic.json=4件, サイドカーJSON=4件
+[INFO] 対象外（スキップ）: images/other_meter.jpg
+[INFO] eval/groundtruth.json を更新しました (更新件数: 6)
+[INFO] 実写groundtruth処理結果: 更新=6件, 対象外=1件
+[INFO] === 機器ID割り当て処理が完了しました ===
+.........................................................[INFO] 2026-11-12 14:53:33,641 [RapidOCR] base.py:23: Using engine_name: onnxruntime
+[INFO] 2026-11-12 14:53:33,736 [RapidOCR] download_file.py:60: File exists and is valid: C:\卒研\git_stk\sotuken\venv\Lib\site-packages\rapidocr\models\PP-OCRv6_det_small.onnx
+[INFO] 2026-11-12 14:53:33,737 [RapidOCR] main.py:63: Using C:\卒研\git_stk\sotuken\venv\Lib\site-packages\rapidocr\models\PP-OCRv6_det_small.onnx
+[INFO] 2026-11-12 14:53:33,794 [RapidOCR] base.py:23: Using engine_name: onnxruntime
+[INFO] 2026-11-12 14:53:33,796 [RapidOCR] download_file.py:60: File exists and is valid: C:\卒研\git_stk\sotuken\venv\Lib\site-packages\rapidocr\models\ch_ppocr_mobile_v2.0_cls_mobile.onnx
+[INFO] 2026-11-12 14:53:33,796 [RapidOCR] main.py:63: Using C:\卒研\git_stk\sotuken\venv\Lib\site-packages\rapidocr\models\ch_ppocr_mobile_v2.0_cls_mobile.onnx
+[INFO] 2026-11-12 14:53:33,843 [RapidOCR] base.py:23: Using engine_name: onnxruntime
+[INFO] 2026-11-12 14:53:33,861 [RapidOCR] download_file.py:60: File exists and is valid: C:\卒研\git_stk\sotuken\venv\Lib\site-packages\rapidocr\models\PP-OCRv6_rec_small.onnx
+[INFO] 2026-11-12 14:53:33,861 [RapidOCR] main.py:63: Using C:\卒研\git_stk\sotuken\venv\Lib\site-packages\rapidocr\models\PP-OCRv6_rec_small.onnx
+[WARNING] 2026-11-12 14:53:34,104 [RapidOCR] main.py:132: The text detection result is empty
+[WARNING] 2026-11-12 14:53:34,233 [RapidOCR] main.py:132: The text detection result is empty
+[WARNING] 2026-11-12 14:53:34,372 [RapidOCR] main.py:132: The text detection result is empty
+[WARNING] 2026-11-12 14:53:34,524 [RapidOCR] main.py:132: The text detection result is empty
+......................................................................................2026-11-12 14:53:40.891 WARNING streamlit.runtime.caching.cache_data_api: No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:53:41.092 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:53:42.593 No runtime found, using MemoryCacheStorageManager
+......[INFO] Repaired 1 legacy reading_id rows
+...2026-11-12 14:53:42.900 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:53:42.968 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+C:\卒研\git_stk\sotuken\venv\Lib\site-packages\streamlit\elements\vega_charts.py:358: AltairDeprecationWarning:
+Deprecated since `altair=5.5.0`. Use altair.theme instead.
+Most cases require only the following change:
+
+    # Deprecated
+    alt.themes.enable('quartz')
+
+    # Updated
+    alt.theme.enable('quartz')
+
+If your code registers a theme, make the following change:
+
+    # Deprecated
+    def custom_theme():
+        return {'height': 400, 'width': 700}
+    alt.themes.register('theme_name', custom_theme)
+    alt.themes.enable('theme_name')
+
+    # Updated
+    @alt.theme.register('theme_name', enable=True)
+    def custom_theme():
+        return alt.theme.ThemeConfig(
+            {'height': 400, 'width': 700}
+        )
+
+See the updated User Guide for further details:
+    https://altair-viz.github.io/user_guide/api.html#theme
+    https://altair-viz.github.io/user_guide/customization.html#chart-themes
+  with alt.themes.enable("none") if alt.themes.active == "default" else nullcontext():  # type: ignore[attr-defined,unused-ignore]
+2026-11-12 14:53:44.039 No runtime found, using MemoryCacheStorageManager
+.............................2026-11-12 14:53:46.218 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:53:46.437 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:53:47.797 No runtime found, using MemoryCacheStorageManager
+.2026-11-12 14:53:47.799 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:53:48.027 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:53:48.140 No runtime found, using MemoryCacheStorageManager
+.2026-11-12 14:53:48.141 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:53:48.360 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:53:48.443 No runtime found, using MemoryCacheStorageManager
+.2026-11-12 14:53:48.444 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:53:48.729 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:53:48.955 No runtime found, using MemoryCacheStorageManager
+........................................................................................................2026-11-12 14:54:31.393 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:54:31.395 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:54:31.899 No runtime found, using MemoryCacheStorageManager
+......................2026-11-12 14:54:39.399 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:54:39.400 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:54:39.495 No runtime found, using MemoryCacheStorageManager
+......................................................................[受信口] 127.0.0.1 - HTTP要求
+...........................----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49879)
+Exception occurred during processing of request from ('127.0.0.1', 49878)
+Traceback (most recent call last):
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 755, in __init__
+    self.handle()
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\http\server.py", line 424, in handle_one_request
+    method()
+Traceback (most recent call last):
+  File "C:\Users\dorum\.t3\worktrees\sotuken\t3-d6c2bd21\manager\receiver.py", line 535, in do_POST
+    self._send_json(400, {"error": f"受信バイト数（{len(body)}）が Content-Length（{content_length}）と一致しません"})
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\dorum\.t3\worktrees\sotuken\t3-d6c2bd21\manager\receiver.py", line 283, in _send_json
+    self.wfile.write(body)
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 834, in write
+    self._sock.sendall(b)
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 755, in __init__
+    self.handle()
+ConnectionAbortedError: [WinError 10053] 確立された接続がホスト コンピューターのソウトウェアによって中止されました。
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+----------------------------------------
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\http\server.py", line 424, in handle_one_request
+    method()
+  File "C:\Users\dorum\.t3\worktrees\sotuken\t3-d6c2bd21\manager\receiver.py", line 535, in do_POST
+    self._send_json(400, {"error": f"受信バイト数（{len(body)}）が Content-Length（{content_length}）と一致しません"})
+  File "C:\Users\dorum\.t3\worktrees\sotuken\t3-d6c2bd21\manager\receiver.py", line 283, in _send_json
+    self.wfile.write(body)
+  File "C:\Users\dorum\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\Lib\socketserver.py", line 834, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] 確立された接続がホスト コンピューターのソウトウェアによって中止されました。
+----------------------------------------
+..............................................2026-11-12 14:55:08.856 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+.2026-11-12 14:55:08.895 No runtime found, using MemoryCacheStorageManager
+2026-11-12 14:55:08.940 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-11-12 14:55:09.202 No runtime found, using MemoryCacheStorageManager
+.........................................................usage: python.exe -m unittest [-h] -o OUTPUT [--local-read]
+                              [--needle-angle {segment,tip}] [--limit LIMIT]
+                              groundtruth
+python.exe -m unittest: error: argument --limit: limit must be non-negative, got -1
+.........Loaded 2 entries from C:\Users\dorum\AppData\Local\Temp\tmprhl9d57d\mock_synthetic_input\groundtruth_synthetic.json
+Wrote 2 entries to C:\Users\dorum\AppData\Local\Temp\tmprhl9d57d\mock_synthetic_output\正解_QR付き.json
+Evaluating QR read rates with cv2.QRCodeDetector...
+Wrote read rate report to C:\Users\dorum\AppData\Local\Temp\tmprhl9d57d\mock_synthetic_output\QR読み取り率.md
+Wrote README documentation to C:\Users\dorum\AppData\Local\Temp\tmprhl9d57d\mock_synthetic_output\README.md
+
+--- QR READ RATE SUMMARY ---
+  正面        :   2 /   2 (100.0%)
+  全体        :   2 /   2 (100.0%)
+Total failures: 0
+[画像保存] ハッシュ計算または恒久保存に失敗: [Errno 2] No such file or directory: 'C:/tmp/c.jpg'
+[画像保存] ハッシュ計算または恒久保存に失敗: [Errno 2] No such file or directory: 'C:/tmp/c.jpg'
+[画像保存] ハッシュ計算または恒久保存に失敗: [Errno 2] No such file or directory: 'C:/tmp/b.jpg'
+[画像保存] ハッシュ計算または恒久保存に失敗: [Errno 2] No such file or directory: 'C:/tmp/a.jpg'
+  [削減見込み] 行 ID=1: 239 B -> 157 B (削減: 82 B, 除外キー: processed_img)
+
+=== 実行結果 ===
+【DRY-RUN モード】DBへの書き込みは行われていません。
+処理対象行数: 1 行
+スキップ行数: 3 行
+削減見込み合計: 82 B
+  [削減見込み] 行 ID=1: 239 B -> 157 B (削減: 82 B, 除外キー: processed_img)
+
+=== 実行結果 ===
+【DRY-RUN モード】DBへの書き込みは行われていません。
+処理対象行数: 1 行
+スキップ行数: 3 行
+削減見込み合計: 82 B
+全行の更新をコミットしました。VACUUM を実行中...
+VACUUM が完了しました。
+
+=== 実行結果 ===
+処理した行数: 1 行
+スキップした行数: 3 行
+実行前ファイルサイズ: 12.00 KB (12,288 bytes)
+実行後ファイルサイズ: 12.00 KB (12,288 bytes)
+削減量: 0 B (0 bytes, 0.0% 削減)
+バックアップを作成中: C:\Users\dorum\AppData\Local\Temp\tmpz0cxp6cg\test_manager.db.bak_20261112_145516 ...
+バックアップ完了: C:\Users\dorum\AppData\Local\Temp\tmpz0cxp6cg\test_manager.db.bak_20261112_145516 (12.00 KB)
+全行の更新をコミットしました。VACUUM を実行中...
+VACUUM が完了しました。
+
+=== 実行結果 ===
+処理した行数: 1 行
+スキップした行数: 3 行
+実行前ファイルサイズ: 12.00 KB (12,288 bytes)
+実行後ファイルサイズ: 12.00 KB (12,288 bytes)
+削減量: 0 B (0 bytes, 0.0% 削減)
+作成されたバックアップ: C:\Users\dorum\AppData\Local\Temp\tmpz0cxp6cg\test_manager.db.bak_20261112_145516
+[1/2] img_0.png stage=error err=-
+[2/2] img_1.png stage=ok err=0.00
+..[1/1] img_0.png stage=error err=-
+.Warning: Truncating incomplete final line in C:\Users\dorum\AppData\Local\Temp\tmpz0kjnfc7\results.jsonl to offset 107
+[1/2] img_0.png (already completed, skipping)
+[2/2] img_1.png stage=ok err=0.00
+.[1/3] img_0.png stage=ok err=10.00
+[2/3] img_1.png stage=ok err=0.00
+[3/3] img_2.png stage=ok err=10.00
+[1/5] img_0.png (already completed, skipping)
+[2/5] img_1.png (already completed, skipping)
+[3/5] img_2.png (already completed, skipping)
+[4/5] img_3.png stage=ok err=20.00
+[5/5] img_4.png stage=ok err=30.00
+..........................[INFO] Repaired 1 legacy reading_id rows
+.........[INFO] Repaired 2 legacy reading_id rows
+..[INFO] Repaired 3 legacy reading_id rows
+.........................................2026-11-12 14:55:24.495 No runtime found, using MemoryCacheStorageManager
+.2026-11-12 14:55:24.592 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+.2026-11-12 14:55:26.779 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+.2026-11-12 14:55:26.969 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+.2026-11-12 14:55:27.075 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+.2026-11-12 14:55:27.158 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+.
+----------------------------------------------------------------------
+Ran 629 tests in 115.859s
+
+OK
+[画像保存] ハッシュ計算または恒久保存に失敗: [Errno 2] No such file or directory: 'C:/tmp/a.jpg'
+[USB吸い出し] 既に受信済みのためスキップ（端末側のファイルを削除）: 20261021T100000_dup.jpg (端末: serial-1)
+[USB吸い出し] 吸い出し完了: 20261021T100000_test1.jpg (端末: serial-1)
+[USB吸い出し] 画像サイズ不一致（期待: 9999, 実際: 13）: 20261021T100000_bad2.jpg (端末: serial-1)
+[USB吸い出し] JSONサイズ不一致（期待: 9999, 実際: 20）: 20261021T100000_bad1.json (端末: serial-1)
+[USB吸い出し] 吸い出し完了: 20261021T100000_dev1.jpg (端末: serial-dev1)
+[USB吸い出し] 吸い出し完了: 20261021T100000_dev2.jpg (端末: serial-dev2)
+[USB吸い出し] 吸い出し完了: 20261021T100003_complete.png (端末: serial-1)
+[USB吸い出し] 吸い出し完了: 20261021T100000_test1.jpg (端末: serial-1)
