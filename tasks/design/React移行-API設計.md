@@ -47,7 +47,7 @@ Bの窓口をスマホ用の8765番に追加してはならない。新規 `pc_a
        ^
        | 内部鍵。スマホ用トークンとは独立
 PC API P2: 127.0.0.1:8766 / API + 同梱React静的ファイル
-       ^ 同一origin / PC専用セッション
+       ^ 同一origin / X-PC-Token
        | PCブラウザ
 
 受信/USB --> 既存incoming --> 既存watch_inbox P3 --> manager.db
@@ -76,7 +76,7 @@ Reading = {id:string, reading_id:string|null, device_name:string,
  status:string|null, stage:string, confidence:number|null,
  failure_stage:string|null, inspection_id:string|null, inspection_name:string|null,
  route_id:string|null, image_id:string|null, overlay_image_id:string|null}
-Page<T> = {items:T[], total:number, next_cursor:string|null}
+Page<T> = {items:T[], total:number}
 Pairing = {active:boolean, payload:string|null, expires_at:number|null,
  remaining_seconds:number, owner_instance_id:string, observed_at:string}
 UsbStatus = {enabled:boolean, running:boolean, adb_found:boolean,
@@ -88,29 +88,24 @@ Error = {error:{code:string, message:string, request_id:string,
 
 unitなどDBにない属性は既存公開値から取得できる場合のみ設定し、それ以外はnull。状態値を新しい成功/失敗判定に置き換えない。Pairingのinactiveは期限切れ・中止・交換済みを区別しない（既存APIで区別不能）。ブラウザは期限を過ぎたQRをローカルでも隠し、再作成を案内する。
 
-HTTPエラーは400 invalid_request/cursor_invalid、401 unauthenticated、403 forbidden_origin/csrf_failed、404 not_found、409 owner_conflict/stale_snapshot、413 too_large、422 validation_failed、503 owner_unavailable/db_busy。Retry-Afterは503で1秒。内部例外・ファイルパス・鍵をmessageに含めない。リトライはGETのみとし、QR開始や手動処理を通信失敗時に自動再実行しない。
+HTTPエラーは400 invalid_request、401 unauthenticated、403 forbidden_origin、404 not_found、409 owner_conflict、413 too_large、422 validation_failed、503 owner_unavailable/db_busy。Retry-Afterは503で1秒。内部例外・ファイルパス・鍵をmessageに含めない。リトライはGETのみとし、QR開始や手動処理を通信失敗時に自動再実行しない。
 
 ### 最初の検証に必要なAPI
 
 | メソッド・パス | 入力 | 出力 | 対応する既存Python処理 |
 |---|---|---|---|
-| POST /session | PC専用の一度限りの起動鍵 | `{csrf_token:string}`、セッションCookie | 新規認証処理 |
-| GET /session | Cookie | `{csrf_token:string}` | 新規。再読込時の復元 |
-| DELETE /session | Cookie・CSRF | 204 | 新規。セッション失効 |
 | GET /runtime | なし | `{receiver_running:boolean, receiver_url:string|null, owner_instance_id:string, observed_at:string}` | owner経由init_receiver_for_appの公開状態だけ |
-| GET /readings | F、limit、cursor | Page<Reading> | MeterManager.get_history(include_raw=False)→filter_readings |
+| GET /readings | F | Page<Reading> | MeterManager.get_history(include_raw=False)→filter_readings |
 | GET /readings/{id} | 数字のDB id文字列 | Reading | get_historyからID一致、未登録404 |
 | GET /images/{image_id} | IDのみ | image/jpeg または image/pngのバイナリ | DBのimage_path/overlay_pathを新規の安全な解決器で解決 |
 | GET /pairing | なし | Pairing | owner経由pairing_status / pairing_payload |
-| POST /pairing | 空JSON、CSRF | Pairing | owner経由start_pairing。作成済みなら409、作り直しは明示中止後 |
-| DELETE /pairing | CSRF | 204（既に無効でも成功） | owner経由cancel_pairing |
+| POST /pairing | 空JSON、X-PC-Token | Pairing | owner経由start_pairing。作成済みなら409、作り直しは明示中止後 |
+| DELETE /pairing | X-PC-Token | 204（既に無効でも成功） | owner経由cancel_pairing |
 | GET /usb/status | なし | UsbStatus | owner経由get_usb_pull_status。Noneはenabled=false |
 
 F = device_name（完全一致、未指定はすべて）、date_from/date_to（YYYY-MM-DD、両端を含む、逆転は422）、inspection_id（完全一致）。機器名は最大256文字、IDは最大128文字、未知の条件は400。初期検証にない検索・ソート条件は追加しない。日付の境界・タイムゾーンの解釈はfilter_readings/_reading_timeに合わせ、特にオフセット付き日時の境界を試験する。
 
-ページングはカーソル方式、limit既定50、1〜200。初回にget_historyの一貫した読み取り結果を取り、サーバーでFを適用してから、撮影日時（既存の日時解決順）降順・DB id降順で整列する。型変換できない日時は422ではなく503 data_invalidとして記録し、黙って行を除かない。totalは全絞り込み結果の件数。
-
-最初の検証では結果スナップショットをAPIメモリ内に60秒保持する。カーソルはランダムな参照キーと次位置を持ち、セッション・F・limitに紐付ける。上限10スナップショット/セッション、全体100、超過は409 snapshot_limit。期限切れは409 stale_snapshotで先頭を再取得する。同じカーソルは同じ結果を返す。ポーリングは先頭を新規取得し、旧ページのカーソルを破棄する。全件読み込みのメモリと速度は検証上のリスクであり、DBクエリの最適化を先に足さない。固定データの想定上限10,000行で測定し、満たせなければNo-Goとする。
+検証ではページングせず、既存exportの規則で絞り込んだ結果を全件返す。上限は10,000件、超過は422 validation_failed。totalは全絞り込み結果の件数。Streamlitと同じ結果を返し、カーソル・結果スナップショットは実装しない。日時変換に失敗した行を黙って除かず503 data_invalidとする。
 
 ### 後段: 6画面向け（初回には実装しない）
 
@@ -139,11 +134,11 @@ F = device_name（完全一致、未指定はすべて）、date_from/date_to（
 
 ## 4. 認証・境界・画像配信
 
-PC APIは127.0.0.1:8766だけにbindする。ブラウザも `http://127.0.0.1:8766` に統一し、Hostはこの文字列と完全一致させる。別Host・不正な複数Host・転送ヘッダー経由の書き換えは拒否する。Originは同一originのみ許可し、nullと他originを拒否する。GETのOrigin欠落はCookie認証とHost検証を通す。更新はOrigin必須。CORS許可を返さない。
+PC APIは127.0.0.1:8766だけにbindする。ブラウザも `http://127.0.0.1:8766` に統一し、Hostは `127.0.0.1:8766` と厳密に一致させる。複数Hostと転送ヘッダーによる書き換えを拒否する。Originがあれば同一originのみ許可する。CORS許可は返さない。
 
-起動側が暗号学的乱数の一度限りPC起動鍵を生成する。URL fragmentでブラウザに渡し、JSが即座にhistory.replaceStateで消してPOST /sessionのJSON本文で交換する。クエリ・アクセスログ・localStorageに残さない。有効期間60秒、1回限り、照合は定数時間。ローカルの同一OSユーザー権限を信頼境界とし、別ユーザーから読めない場所で鍵を受け渡す。スマホ用X-Sotuken-Tokenを起動鍵として受け入れない。
+検証段階では起動時に256bitの暗号学的乱数トークンを生成し、全PC API要求にX-PC-Tokenを必須とする。照合は定数時間。スマホ用X-Sotuken-Tokenは認証に使わず、そのヘッダーを含む要求も拒否する。カスタムヘッダー必須とCORS不許可をCSRF対策とする。Cookie・セッション交換・CSRFトークンは検証では実装しない。
 
-交換後はHttpOnly、SameSite=Strict、Path=/のランダムCookie。HTTPループバックでのSecure Cookieの挙動に依存せず、ネットワーク公開を禁止する。セッションは8時間またはAPI終了まで。更新はセッションに紐づくCSRFトークンをX-CSRF-Tokenで必須とし、JSON Content-Typeも検証する。POST /session自体は起動鍵・Host・Origin検証で保護する。静的配信には外部スクリプトを禁止するCSP、APIと画像にはno-store、nosniffを付ける。
+初回HTMLと同梱静的資産は認証前に取得できる配信用ルートとし、Host検証は必須。APIが配信するindex.htmlのmeta要素へ起動時トークンを埋め込み、同一originのJSが読み取ってfetchのヘッダーに設定する。画像もfetchで取得しBlob URLで表示する。トークンはURL・ログ・localStorageへ残さない。HTML・API・画像はno-store、nosniffを付け、外部スクリプト・フレーム埋め込みを禁止するCSPを設定する。同じOSユーザーの権限を信頼境界とする。内部鍵はこのHTMLへ含めない。
 
 内部窓口は別の256bit内部鍵を要求する。PC APIのサービス認証専用とし、Cookie・CSRFトークン・スマホトークンは受け入れない。内部HTTPにも厳密なHost検証、Originヘッダー付き要求の拒否、接続元ループバック制限を入れる。内部鍵はAPIとownerの起動時だけ共有し、ブラウザには渡さない。8765側に管理ルートや汎用中継を足さない。
 
@@ -153,7 +148,7 @@ image_idはDB idと種別original/overlayからサーバーが作る不透明ID�
 
 API読み取りではMeterManager/ReadingStorageのコンストラクターを無条件に呼ばない。現行ReadingStorageは初期化時に_init_dbを呼ぶ（storage.py:67）。新規アダプターから既存DBをSQLite URI mode=roで開き、query_onlyを有効にし、get_all_readingsの列対応と同じ公開DTOへ写す。これは新API内の最小限の状態アクセスであり、DDLやマイグレーションを実行しない。
 
-接続は要求またはスナップショット作成ごとに短時間で閉じる。別スレッドで接続を使い回さない。画像配信・HTTP応答・集計中にDBロックを保持しない。取り込みの書き込みを優先し、APIのbusy timeoutは250ms、busy時は503で次周期に再試行する。WALへの切替やスキーマ・既存書き込み処理の変更は行わない。現行DBのjournal_modeを試験時に記録する。後段の更新は既存storage/routes関数の短いトランザクションだけを利用する。
+接続は要求ごとに短時間で閉じる。別スレッドで接続を使い回さない。画像配信・HTTP応答・集計中にDBロックを保持しない。取り込みの書き込みを優先し、APIのbusy timeoutは250ms、busy時は503で次周期に再試行する。WALへの切替やスキーマ・既存書き込み処理の変更は行わない。現行DBのjournal_modeを試験時に記録する。後段の更新は既存storage/routes関数の短いトランザクションだけを利用する。
 
 ownerは正規化したDB絶対パスとincomingをキーにOSロックを取得し、管理ポートと受信口の所有を確認する。PIDファイルの存在だけで排他しない。Windowsではファイルロックまたは名前付きmutexのプロセス寿命を使う。USBとwatch_inboxも同じ入力先に対して1所有者のみ。APIも8766のbindと同じDBキーのロックで単一起動にする。既存watch_inboxが外部起動されるため、検証ランチャーで既存の所有者を記録・確認し、二つ目を起動しない。所有者不明の場合は検証を開始しない。取り込み本体へ新しい重複判定は追加しない。
 
@@ -161,34 +156,35 @@ ownerは正規化したDB絶対パスとincomingをキーにOSロックを取得
 
 ## 6. Go / No-Goと試験手順
 
-判定値は変更しない。①固定データで件数・値・画像の対応がStreamlit版と一致、②受信が5秒以内に画面反映、③切断・再接続と画面往復を各10回で状態消失・重複処理0件。1項目でも未達・未測定ならNo-Go。失敗写真を結果から除外しない。
-
-5秒ポーリングでは、受信直後に周期が外れ、取り込み時間も加わるため5秒を超える可能性がある。これは未検証の性能リスクである。計測区間をDB確定後へ読み替えず、受信HTTPが成功応答した時刻からブラウザが行と画像を表示した時刻まで測る。初回は5秒のまま測り、超過ならNo-Goとして理由を残し、周期変更は別の合意事項とする。
+①固定データで件数・値・画像の対応がStreamlit版と一致、②a DBに行が確定してからReact画面に行と画像が表示されるまで5秒以内、②b 受信HTTP成功から画面表示までが同じ写真でStreamlit版より遅くない（差1秒以内）、③切断・再接続と画面往復を各10回で状態消失・重複処理0件。1項目でも未達・未測定ならNo-Go。失敗写真を結果から除外しない。取り込みには1枚約10秒かかるため、DB確定後の表示遅延と受信からの全体時間を分けて測る。
 
 1. 実DBと分離した固定DB・画像・incomingを用意する。正常、要確認、失敗、値null、名前なし、同名機器、同時刻、日付境界、点検IDあり/なし、元画像欠落、overlayあり/なしを含める。両画面が同じDB絶対パスと画像を参照することを確認する。Streamlitの全件数・絞り込み件数・値・画像ハッシュを基準表として保存する。試験成果物は実装段階の専用ディレクトリへ出す。
-2. `test_readings_matches_streamlit_filters`、`test_latest_and_groups_before_pagination`、`test_cursor_snapshot_no_duplicates`で既存export関数との一致とページ全走査の欠落・重複0件を確認する。画像は`test_image_id_maps_to_expected_bytes`でハッシュ照合する。画面側は`test_records_real_api_render`で件数・値・選択画像を確認する。
-3. owner、API、watch_inboxを各1つ起動する。実スマホから別々の写真を送信し、受信成功・DB保存・DOM表示・画像loadの時刻と同じ写真IDを記録する。`test_receive_to_render_within_5s`をポーリング直後・直前・中間の各位相で実施し、全件5秒以内を確認する。USBは吸い出し開始から別途計測し、HTTP受信と混同しない。
+2. `test_readings_matches_streamlit_filters`、`test_latest_and_groups_all_results`、`test_readings_limit_10000`で既存export関数との一致と全件結果の欠落・重複0件と10,000件超過時の422を確認する。画像は`test_image_id_maps_to_expected_bytes`でハッシュ照合する。画面側は`test_records_real_api_render`で件数・値・選択画像を確認する。
+3. owner、API、watch_inboxを各1つ起動する。実スマホから別々の写真を送信し、受信成功・DB保存・DOM表示・画像loadの時刻と同じ写真IDを記録する。`test_db_commit_to_render_within_5s`をポーリング直後・直前・中間の各位相で実施し、DB確定から全件5秒以内を確認する。加えて同じ写真を同じ取り込み条件で両版に送信し、受信HTTP成功から行・画像表示完了までの差が1秒以内であることを確認する（`test_receive_to_render_matches_streamlit`）。USBは吸い出し開始から別途計測し、HTTP受信と混同しない。
 4. `test_pairing_expiry_hides_qr`は時計を差し替えて期限境界の直前・直後、交換後、中止後、URL変更後を自動試験する。実機でも期限まで待ち、古いQRの交換失敗と再作成後の成功を確認する。消費後の応答喪失も自動再交換しない。
 5. `test_usb_disconnect_reconnect_keeps_counts`でAdbRunnerを差し替えた10回の切断・復帰を自動試験する。実機でもUSBを各10回抜き差しし、毎回固有写真1枚と既送信写真を含める。pulled_total、DBの写真ハッシュ、処理回数を照合する。状態は画面のキャッシュでなくownerから取得し、復帰後の正常化を確認する。
 6. `test_navigation_10_roundtrips_preserves_runtime`で記録と接続・設定の往復を10回行う。owner_instance_id、QRの期限、USB累計を照合する。招待は期限前の往復で継続し、期限後に消えることを確認する。StreamlitとReactを同時表示してQR中止が両方に反映することも調べる。
 7. `test_api_reads_during_ingest`で並行取り込み中の読み取りを実行し、DB busyの回復と欠落0件を確認する。`test_second_owner_rejected`、`test_api_restart_does_not_restart_services`で二重起動と再起動を確認する。
-8. `test_reject_phone_token_on_pc_api`、`test_host_origin_csrf_matrix`、`test_image_traversal_symlink_junction_denied`で境界を確認する。Node未導入のWindowsで同梱静的ファイルから起動する試験も必須とする。
+8. `test_reject_phone_token_on_pc_api`、`test_host_origin_pc_token_matrix`、`test_image_traversal_symlink_junction_denied`で境界を確認する。Node未導入のWindowsで同梱静的ファイルから起動する試験も必須とする。
 
 自動試験名は提案であり、現時点では未作成・未実行。実機切断やタイミング試験をモック試験の成功で代用しない。期限の具体日と実験に使える時間は依頼文にないため、本書で日付を創作しない。実装開始時に記録し、期限に達した時点で測定済みの結果だけでGo/No-Goを出す。
 
-## 7. 実装タスク（各行を1委任として順番に実施）
+## 7. 実装タスク（残り3委任、このowner実装を1回目とする）
 
 | 順序 | 所有範囲と作業 | 受入条件 |
 |---|---|---|
-| 1 | 新規pc_api/owner.pyと対応試験。管理窓口・既存run_pcの同一プロセス実行・内部鍵・排他・終了処理 | 既存app.py/run_pc.pyを変えず、StreamlitのQR/USBが動く。二重ownerを拒否し、停止時にスレッドが残らない |
-| 2 | 新規PC APIの認証・静的配信・内部クライアントと試験 | 127.0.0.1限定、スマホ鍵拒否、Host/Origin/CSRF試験合格。owner不在は503で起動し直さない |
-| 3 | 新規読み取り専用アダプター、readings・images APIと試験 | スキーマ差分0、固定データ一致、ページ重複0、画像脱出拒否、並行取り込みを妨げない |
-| 4 | pairing/runtime/usb APIと試験 | 期限・消費・URL変更が既存と一致。実状態を中継し、画面からサービスを再起動しない |
-| 5 | Reactの既存記録・接続画面とAPI clientのみ接続、静的ビルド同梱 | ブラウザ側で全件の絞り込みをせず、1/2/5秒ポーリングをcleanup付きで実行。新画面0、Nodeなし起動成功 |
-| 6 | 結合試験と実機検証、結果表 | 第6節全項目の証拠・時刻・ハッシュ・回数を残し、Go/No-Goを明示。未測定を成功扱いしない |
+| 1 | ownerと管理窓口、内部鍵、排他、終了処理と試験 | app.py・run_pc.py・manager配下を変えず同一プロセスで既存起動処理を呼ぶ。二重起動拒否、終了時スレッド残留なし |
+| 2 | PC APIの認証・静的配信・内部クライアント、readings・images・pairing・runtime・usbと試験 | PCトークン必須、ループバックとHost検証、スマホ鍵拒否、全件上限、読み取り専用DB、画像脱出拒否、実状態中継、API二重起動拒否 |
+| 3 | Reactの既存画面接続、静的ビルド同梱、結合試験・計測 | 新画面0、Nodeなし起動、第6節の証拠とGo/No-Go、未測定を成功扱いしない |
 
 後段の6画面移植はGo後に、ホーム集計、点検結果、機器推移、ルートCRUD、手動読み取りの順で各1委任に分ける。各委任は具体DTO確定・既存関数との比較・認証/入力検証・当該画面試験までを担当し、他の画面や読み取り本体を変更しない。初回検証の不合格を画面追加で埋め合わせない。
 
 ## 8. 設計の限界
 
 本書ではコードの静的確認のみを行った。新構成での同一プロセス起動、Windows排他、5秒以内の反映、実機USB復帰、Node未導入PCでの配布は未検証である。外部技術調査は実施していない。性能・並行動作・配布の可否は第6節の試験で判断する。
+
+## 9. Go後の本移行で入れるもの
+
+一度限りの起動鍵をURL fragmentで渡し、JSが直ちにhistory.replaceStateで消してPOST /sessionで交換する。起動鍵は60秒・1回限り、定数時間照合とする。交換後はHttpOnly・SameSite=Strict・Path=/のCookie、8時間またはAPI終了までのセッションとする。更新にはセッションに紐づくX-CSRF-TokenとJSON Content-Type、同一Originを必須とする。GET /sessionで再読込時の復元、DELETE /sessionで失効する。検証用のHTMLへのPCトークン埋め込みはこの方式へ置き換える。
+
+カーソルと60秒の結果スナップショット、limit既定50（1〜200）、セッション・条件への紐付け、期限切れ時の再取得、保有数制限は本移行で設計・実装する。第3節の後段6画面のページング契約はこの段階に適用する。
