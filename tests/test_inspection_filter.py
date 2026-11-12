@@ -134,7 +134,8 @@ class InspectionFilterTest(unittest.TestCase):
                              device_id_source=source, captured_at=f'2026-11-06T{hour}:00:00Z')
                 for device_id, source, hour in [('A', 'sidecar_qr', '09'), ('A', 'manual', '10'),
                                                 ('B', 'pc_qr', '11'), (None, None, '12'),
-                                                ('C', 'qr', '13'), ('D', 'sidecar_manual', '14')]]
+                                                ('C', 'qr', '13'), ('D', 'sidecar_manual', '14'),
+                                                ('E', 'list', '15'), ('F', 'sidecar_list', '16')]]
         summary = {r['機器ID']: r for r in inspection_devices(rows)}
         self.assertEqual(summary['A']['写真の枚数'], 2)
         self.assertEqual(summary['A']['最後の撮影時刻'], '2026-11-06T10:00:00Z')
@@ -142,6 +143,8 @@ class InspectionFilterTest(unittest.TestCase):
         self.assertEqual(summary['B']['情報の出所'], 'PC(画像のQR)')
         self.assertEqual(summary['C']['情報の出所'], 'スマホ(QR)')
         self.assertEqual(summary['D']['情報の出所'], 'スマホ(手入力)')
+        self.assertEqual(summary['E']['情報の出所'], 'スマホ(一覧)')
+        self.assertEqual(summary['F']['情報の出所'], 'スマホ(一覧)')
         self.assertEqual(summary['機器IDなし']['情報の出所'], 'なし')
         self.assertEqual(summary['機器IDなし']['写真の枚数'], 1)
 

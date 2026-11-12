@@ -15,6 +15,11 @@ class InspectionManifestTest {
         val p = photo.copy(deviceId = "A", deviceIdSource = "manual")
         assertEquals(expected, buildManifestJson(i, listOf(p), summarizeInspection(listOf(p), listOf(RouteDevice("A", "機器")))) { "a".repeat(64) })
     }
+    @Test fun listSourceSurvivesManifest() {
+        val listed = photo.copy(deviceId = "A", deviceIdSource = "list")
+        val listedManifest = Json.parseToJsonElement(buildManifestJson(inspection, listOf(listed), summarizeInspection(listOf(listed), null)) { null }).jsonObject
+        assertEquals("list", listedManifest.getValue("photos").jsonArray[0].jsonObject.getValue("device_id_source").jsonPrimitive.content)
+    }
     @Test fun noRouteHasEmptyMissingAndExtra() {
         val summary = summarizeInspection(listOf(photo.copy(deviceId = "extra")), listOf(RouteDevice("missing", "未撮影")))
         val obj = Json.parseToJsonElement(buildManifestJson(inspection, listOf(photo), summary) { null }).jsonObject

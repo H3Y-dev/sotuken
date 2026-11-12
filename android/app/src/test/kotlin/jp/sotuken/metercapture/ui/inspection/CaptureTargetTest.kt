@@ -15,7 +15,13 @@ class CaptureTargetTest {
         assertNull(target.toMeta().operatorValue)
         assertNull(target.toMeta().operatorNote)
     }
-    @Test fun routeTargetHasManualSource() = assertEquals(CaptureTarget("A-1", "圧力計", "manual"), targetFromRoute(route.first()))
+    @Test fun routeTargetHasListSource() {
+        val target = targetFromRoute(route.first())
+        assertEquals(CaptureTarget("A-1", "圧力計", "list"), target)
+        assertEquals("list", target.toMeta().deviceIdSource)
+        assertEquals(target, targetFromPhoto(photo().copy(deviceIdSource = "list")))
+        assertFalse(shouldKeepQrTarget(target, route.first()))
+    }
     @Test fun manualTargetWithoutIdHasNoSource() = assertEquals(CaptureTarget(null, "圧力計", null), manualTarget(" 圧力計 ", "").getOrThrow())
     @Test fun manualTargetRejectsInvalidId() { assertTrue(manualTarget("圧力計", "A/1").isFailure) }
     @Test fun manualTargetRejectsInvalidName() {
@@ -29,6 +35,10 @@ class CaptureTargetTest {
     @Test fun afterCaptureOfExtraClearsTarget() = assertNull(targetAfterCapture(route, listOf(photo(deviceId = "Z-9")), CaptureTarget("Z-9", "追加", "manual")))
     @Test fun targetSourceLabelIdentifiesSources() {
         val routeIds = setOf("A-1", "A-2")
+        assertEquals("一覧から", targetSourceLabel(CaptureTarget("X-9", "計器", "list"), routeIds))
+        assertEquals("一覧から", deviceSourceLabel(photo().copy(deviceIdSource = "list"), emptySet()))
+        assertEquals("手入力", deviceSourceLabel(photo().copy(deviceIdSource = "manual"), emptySet()))
+        assertEquals("一覧から", deviceSourceLabel(photo().copy(deviceIdSource = "manual"), routeIds))
         assertEquals("QR", targetSourceLabel(CaptureTarget("A-1", "圧力計", "qr"), routeIds))
         assertEquals("一覧から", targetSourceLabel(CaptureTarget("A-1", "圧力計", "manual"), routeIds))
         assertEquals("手入力", targetSourceLabel(CaptureTarget("X-9", "その他", "manual"), routeIds))

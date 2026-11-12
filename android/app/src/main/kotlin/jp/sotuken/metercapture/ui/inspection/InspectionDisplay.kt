@@ -40,6 +40,7 @@ fun buildCaptureUiState(inspection: Inspection, routeDevices: List<RouteDevice>?
 fun targetSourceLabel(target: CaptureTarget?, routeIds: Set<String>): String = when {
     target?.deviceId == null -> "機器IDなし"
     target.source == "qr" -> "QR"
+    target.source == "list" -> "一覧から"
     target.source == "manual" && target.deviceId in routeIds -> "一覧から"
     else -> "手入力"
 }
@@ -47,6 +48,7 @@ fun targetSourceLabel(target: CaptureTarget?, routeIds: Set<String>): String = w
 fun deviceSourceLabel(item: QueueItem, routeIds: Set<String>): String = when {
     item.deviceId == null -> "機器IDなし"
     item.deviceIdSource == "qr" -> "QR"
+    item.deviceIdSource == "list" -> "一覧から"
     item.deviceIdSource == "manual" && item.deviceId in routeIds -> "一覧から"
     else -> "手入力"
 }

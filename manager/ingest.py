@@ -39,7 +39,7 @@ def _sidecar_identity(sidecar):
         device_id = None
     if device_id is not None and not validate_device_id(device_id):
         device_id, issue = None, "id_invalid"
-    source = {"qr": "sidecar_qr", "manual": "sidecar_manual"}.get(
+    source = {"qr": "sidecar_qr", "manual": "sidecar_manual", "list": "sidecar_list"}.get(
         getattr(sidecar, "device_id_source", None), "sidecar") if device_id else None
     return device_id, source, issue
 
