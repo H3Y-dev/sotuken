@@ -168,10 +168,10 @@ class TestSidecarDeviceMetadata(unittest.TestCase):
                 self.assertIsNone(metadata.device_id_issue)
 
     def test_device_id_source_is_validated(self):
-        for source in ("qr", "manual", None, "QR", "other", "", 123, [], {}):
+        for source in ("qr", "manual", "list", None, "QR", "other", "", 123, [], {}):
             with self.subTest(source=source):
                 metadata = self.load_metadata({"device_id": "P-101", "device_id_source": source})
-                self.assertEqual(metadata.device_id_source, source if source in ("qr", "manual") else None)
+                self.assertEqual(metadata.device_id_source, source if source in ("qr", "manual", "list") else None)
 
     def test_device_id_source_requires_device_id(self):
         for device_id in (None, "", "unknown", "不正"):

@@ -241,7 +241,7 @@ class TestIngestDeviceIdentity(unittest.TestCase):
     def test_valid_sidecar_id_takes_priority_without_decoding_qr(self):
         self.write_qrs(build_payload("QR-001", "QR meter"))
         for source, expected in (("qr", "sidecar_qr"), ("manual", "sidecar_manual"),
-                                 (None, "sidecar")):
+                                 ("list", "sidecar_list"), (None, "sidecar")):
             with self.subTest(source=source):
                 with self.storage.connection() as conn:
                     conn.execute("DELETE FROM meter_readings")
