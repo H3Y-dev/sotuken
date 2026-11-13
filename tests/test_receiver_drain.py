@@ -38,6 +38,21 @@ class ReceiverDrainTests(unittest.TestCase):
                     finally:
                         conn.close()
 
+    def test_success_response_drains_unread_body(self):
+        # 200 応答でも、ハンドラが読まない本文が残っていると Windows の
+        # loopback TCP が RST を返し、クライアントが応答を読めなくなる。
+        for attempt in range(20):
+            with self.subTest(attempt=attempt):
+                conn = self.connect()
+                try:
+                    conn.request('GET', '/health', b'x' * 4096,
+                                 {'X-Sotuken-Token': 'secret'})
+                    response = conn.getresponse()
+                    self.assertEqual(200, response.status)
+                    self.assertTrue(response.read())
+                finally:
+                    conn.close()
+
     def test_delayed_body_can_finish_after_error_response(self):
         conn = self.connect()
         try:
