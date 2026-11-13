@@ -26,6 +26,7 @@ class OwnerConflict(RuntimeError):
 
 class InternalServer(HTTPServer):
     allow_reuse_address = False
+    request_queue_size = 64
 
     def server_bind(self):
         if os.name == 'nt':
