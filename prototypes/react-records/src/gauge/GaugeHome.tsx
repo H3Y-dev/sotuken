@@ -27,6 +27,7 @@ function Row({ ins }: { ins: Inspection }) {
   const route = ins.meters.filter((m) => !m.offRoute);
   const extra = ins.meters.filter((m) => m.offRoute);
   const chips: { kind: Kind | "tag"; text: string }[] = [
+    ...(s.outOfTolerance.length ? [{ kind: "warn" as const, text: `許容範囲外 ${s.outOfTolerance.length}` }] : []),
     ...(s.missing.length ? [{ kind: "missing" as const, text: `未撮影 ${s.missing.length}` }] : []),
     ...(s.fail.length ? [{ kind: "fail" as const, text: `失敗 ${s.fail.length}` }] : []),
     ...(s.warn.length ? [{ kind: "warn" as const, text: `要確認 ${s.warn.length}` }] : []),
@@ -96,8 +97,9 @@ function Row({ ins }: { ins: Inspection }) {
             )}
             <dt className="text-steel">記録</dt>
             <dd className="g-num text-xl font-bold text-ink">
-              {s.recorded}/{s.captured}<span className="ml-1 text-base font-normal text-steel">台</span>
+              {ins.routeId ? s.routeRecorded : s.recorded}/{ins.routeId ? s.routeCaptured : s.captured}<span className="ml-1 text-base font-normal text-steel">台</span>
             </dd>
+          {ins.routeId && s.offRoute.length > 0 && <><dt className="text-steel">ルート外</dt><dd className="g-num">{s.offRouteRecorded}/{s.offRoute.length}台</dd></>}
           </dl>
 
           <div>

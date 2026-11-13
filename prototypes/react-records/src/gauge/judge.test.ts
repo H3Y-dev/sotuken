@@ -108,3 +108,32 @@ describe("値の書き方と目盛りの検査", () => {
     expect(validRange([0, Infinity])).toBe(false);
   });
 });
+
+
+describe("A-1 集計", () => {
+  it("許容外は読取成功・記録済みのまま対処対象", () => {
+    const s = summarize({ ...multi, receive: "complete", meters: [{ ...base, stage: 4, status: "ok", value: 40, scale: [0, 60], tolerance: [0, 35] }] });
+    expect(s.recorded).toBe(1);
+    expect(s.readSuccess).toBe(1);
+    expect(s.needsAction).toBe(true);
+    expect(s.allOk).toBe(false);
+  });
+  it("許容未設定は完了を妨げない", () => {
+    const s = summarize({ ...multi, receive: "complete", meters: [{ ...base, stage: 4, status: "ok", tolerance: null }] });
+    expect(s.needsAction).toBe(false);
+    expect(s.allOk).toBe(true);
+  });
+  it("失敗を記録から除外しルート外を分ける", () => {
+    const s = summarize(multi);
+    expect(s.routeRecorded).toBe(4);
+    expect(s.offRouteRecorded).toBe(1);
+    for (const i of inspections) {
+      const c = summarize(i);
+      expect(c.recorded).toBeLessThanOrEqual(c.readSuccess);
+      expect(c.readSuccess).toBeLessThanOrEqual(c.arrived);
+      expect(c.arrived).toBeLessThanOrEqual(c.captured);
+    }
+    const failed = summarize(ins("I-20261111-PM"));
+    expect(failed.recorded).toBe(ins("I-20261111-PM").meters.filter(m => m.stage >= 4 && m.value !== null && judge(m).kind !== "fail").length);
+  });
+});

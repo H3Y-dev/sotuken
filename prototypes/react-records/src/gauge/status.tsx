@@ -12,12 +12,13 @@ export const KIND: Record<Kind, { label: string; Icon: typeof CircleCheck }> = {
   wait: { label: "途中", Icon: Clock },
 };
 
-export function StatusBadge({ kind, label }: { kind: Kind; label?: string }) {
-  const { Icon, label: l } = KIND[kind];
+export function StatusBadge({ kind, label, outOfTolerance = false, unset = false }: { kind: Kind; label?: string; outOfTolerance?: boolean; unset?: boolean }) {
+  const neutral = kind === "ok" && unset;
+  const { Icon, label: l } = KIND[outOfTolerance ? "warn" : neutral ? "wait" : kind];
   return (
-    <Badge variant={kind} size="field">
+    <Badge variant={outOfTolerance ? "warn" : neutral ? "tag" : kind} size="field">
       <Icon aria-hidden />
-      {label ?? l}
+      {outOfTolerance ? "許容範囲外" : neutral ? "読取済" : label ?? l}
     </Badge>
   );
 }

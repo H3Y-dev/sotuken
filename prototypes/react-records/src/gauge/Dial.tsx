@@ -58,7 +58,9 @@ export function Dial({
     kind !== "missing" && range && validTolerance(tolerance)
       ? [clamp(norm(tolerance[0]), 0, 1), clamp(norm(tolerance[1]), 0, 1)]
       : null;
-  const ticks = mini ? 6 : 31;
+  const out = kind === "ok" && value !== null && validTolerance(tolerance) && (value < tolerance[0] || value > tolerance[1]);
+  const mark = out ? "warn" : kind === "ok" && !validTolerance(tolerance) ? "wait" : kind;
+  const ticks = mini && kind === "missing" ? 0 : mini ? 6 : 31;
   const major = mini ? 1 : 5;
   const center =
     kind === "missing" ? "未撮影" : kind === "fail" ? "読めず" : kind === "wait" && value === null ? "待ち" : !range ? "目盛り未設定" : null;
@@ -109,8 +111,8 @@ export function Dial({
       {/* 両端の数字は、目盛りの外側の下の切れ目に置き、目盛り・中心と重ねない */}
       {!mini && showNeedle && range && (
         <g fill="var(--g-steel)" fontSize="12" fontFamily="var(--g-font-num)" textAnchor="middle">
-          <text x={pt(50, -0.07)[0]} y={pt(50, -0.07)[1] + 4}>{range[0]}</text>
-          <text x={pt(50, 1.07)[0]} y={pt(50, 1.07)[1] + 4}>{range[1]}</text>
+          <text x={pt(38, -0.04)[0]} y={pt(38, -0.04)[1] + 4}>{range[0]}</text>
+          <text x={pt(38, 1.04)[0]} y={pt(38, 1.04)[1] + 4}>{range[1]}</text>
         </g>
       )}
 
@@ -141,7 +143,7 @@ export function Dial({
           {center}
         </text>
       )}
-      <StateMark kind={kind} x={CX} y={mini ? 97 : 99} s={mini ? 30 : 15} />
+      <StateMark kind={mark} x={CX} y={mini ? 97 : 99} s={mini ? 30 : 15} />
     </svg>
   );
 }

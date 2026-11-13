@@ -1,3 +1,5 @@
+@import "@fontsource-variable/geist";
+
 /* 計器盤（方向性A）。値の正本は DESIGN.md。色はここの変数だけを使い、部品に直書きしない。
    Tailwind の読み込みと色の名前の割り当て（@theme）は index.css に1回だけ置く。
    ここは .gauge の中だけに効く指定なので、別の画面へ移っても何も残らない。 */
@@ -30,7 +32,7 @@
   --radius-xl: 6px;
 
   --g-font-text: "BIZ UDPGothic", "BIZ UDゴシック", "BIZ UDGothic", "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
-  --g-font-num: var(--g-font-text); /* 同じ書体で、数字だけ tabular-nums で桁をそろえる */
+  --g-font-num: "Geist Variable", "Yu Gothic UI", sans-serif;
 
   /* shadcn/ui の意味の名前。部品が var(--foreground) などを直接使う所のため */
   --background: var(--g-panel);
@@ -86,7 +88,7 @@
   border-left: 10px solid transparent;
   border-image: repeating-linear-gradient(45deg, var(--g-warn) 0 6px, var(--g-warn-tint) 6px 10px) 0 0 0 10;
 }
-.gauge .g-edge[data-kind="fail"] { border-left: 10px solid var(--g-fail); border-image: none; }
+.gauge .g-edge[data-kind="fail"] { border-image: linear-gradient(var(--g-fail), var(--g-fail)) 0 0 0 10; }
 /* 未撮影は全体を紺の破線で囲む。枠線（border）ではなく内側の outline で描き、
    左端10pxの幅と中の文字の位置を、ほかの状態とそろえたままにする */
 .gauge .g-edge[data-kind="missing"] { border-image: none; outline: 2px dashed var(--g-ink); outline-offset: -2px; }

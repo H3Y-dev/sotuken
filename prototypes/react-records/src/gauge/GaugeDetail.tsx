@@ -63,7 +63,7 @@ function MeterCard({ m, id }: { m: MeterResult; id: string }) {
   const tol = range(m);
   const label = [
     who(m),
-    kind === "wait" ? reasons[0] : KIND[kind].label,
+    outOfTolerance ? "許容範囲外" : kind === "ok" && !tol ? "読取済。許容範囲 未設定" : kind === "wait" ? reasons[0] : KIND[kind].label,
     hasValue ? `読み取り値 ${m.value}${unit ? ` ${unit}` : ""}` : "",
     hasValue && tol ? `許容 ${tol}` : "",
     hasValue && outOfTolerance ? "許容範囲外" : "",
@@ -72,7 +72,7 @@ function MeterCard({ m, id }: { m: MeterResult; id: string }) {
     .join("。");
 
   return (
-    <Card id={id} tabIndex={-1} data-kind={kind} className="g-edge g-target gap-4 rounded-lg px-5 py-4 text-base ring-hairline">
+    <Card id={id} tabIndex={-1} data-kind={outOfTolerance ? "warn" : kind === "ok" && !tol ? "wait" : kind} className="g-edge g-target gap-4 rounded-lg px-5 py-4 text-base ring-hairline">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-lg font-bold">{m.name || "名前なし"}</span>
@@ -82,7 +82,7 @@ function MeterCard({ m, id }: { m: MeterResult; id: string }) {
           </span>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          <StatusBadge kind={kind} label={kind === "wait" ? reasons[0] : undefined} />
+          <StatusBadge kind={kind} outOfTolerance={outOfTolerance} unset={!tol} label={kind === "wait" ? reasons[0] : undefined} />
           {m.offRoute && <OffRouteBadge />}
         </div>
       </div>
@@ -100,6 +100,8 @@ function MeterCard({ m, id }: { m: MeterResult; id: string }) {
                   <span className="whitespace-nowrap text-steel">単位未設定</span>
                 )}
               </span>
+              {!tol && <span className="text-steel">許容範囲 未設定</span>}
+              {outOfTolerance && <span className="text-steel">読み取り成功・記録済み</span>}
               {tol && (
                 <span className="text-steel">
                   許容 <span className="g-num">{tol}</span>
@@ -156,7 +158,7 @@ function Attention({ ins }: { ins: Inspection }) {
   if (!items.length) return null;
 
   return (
-    <section aria-label="対処が必要なこと" className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-3">
+    <section aria-label="対処が必要なこと" className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3">
       {items.map((it) => {
         const Icon = it.kind === "tag" ? CirclePlus : it.kind === "note" ? Info : KIND[it.kind].Icon;
         return (
@@ -170,7 +172,7 @@ function Attention({ ins }: { ins: Inspection }) {
                     <button
                       type="button"
                       onClick={() => jump(cardId(ins, l.m))}
-                      className="min-h-8 cursor-pointer text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
+                      className="min-h-11 cursor-pointer text-left underline decoration-hairline underline-offset-4 hover:decoration-ink"
                     >
                       {l.text}
                     </button>
@@ -202,7 +204,7 @@ function Pipeline({ ins }: { ins: Inspection }) {
       {steps.map((st, i) => (
         <li key={st.label} className="flex items-center gap-2">
           <div className="flex min-w-[150px] flex-col rounded-md border border-hairline bg-card px-4 py-2">
-            <span className="text-steel">{st.label}</span>
+            <span className="text-steel">{st.label}{ins.routeId && i > 0 ? "（ルート外を含む）" : ""}</span>
             <span className="g-num text-[28px] leading-tight font-bold text-ink">
               {st.n}
               <span className="text-lg font-normal text-steel">/{st.of}台</span>
@@ -229,7 +231,7 @@ export function GaugeDetail({ ins }: { ins: Inspection }) {
   const grid = "grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4";
 
   return (
-    <section className="flex flex-col gap-6 pt-4">
+    <section className="flex flex-col gap-3 pt-2">
       <a href="#gauge" className={cn(buttonVariants({ variant: "ghost", size: "field" }), "-ml-4 w-fit text-ink")}>
         <ArrowLeft data-icon="inline-start" aria-hidden />
         点検の一覧へ戻る

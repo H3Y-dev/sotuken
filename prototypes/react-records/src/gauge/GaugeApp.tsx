@@ -31,10 +31,10 @@ export default function GaugeApp() {
             <span className="text-lg">点検記録</span>
           </a>
           <nav aria-label="画面" className="flex gap-1">
-            <a href="#gauge" aria-current={id ? undefined : "page"} className="rounded-md px-3 py-1.5 text-text no-underline aria-[current=page]:bg-panel aria-[current=page]:font-bold">
+            <a href="#gauge" aria-current={id ? undefined : "page"} className="inline-flex min-h-11 items-center rounded-md px-3 py-1.5 text-text no-underline aria-[current=page]:bg-panel aria-[current=page]:font-bold">
               点検の一覧
             </a>
-            <a href="#" className="rounded-md px-3 py-1.5 text-steel no-underline hover:text-text">
+            <a href="#" className="inline-flex min-h-11 items-center rounded-md px-3 py-1.5 text-steel no-underline hover:text-text">
               機器の記録（旧試作）
             </a>
           </nav>

@@ -51,28 +51,31 @@ export function summarize(ins: Inspection) {
   const fail = byKind("fail");
   const wait = byKind("wait");
   const reached = (s: number) => ins.meters.filter((m) => m.stage >= s).length;
+  const recorded = (m: MeterResult) => m.stage >= 4 && m.value !== null && judge(m).kind !== "fail";
   return {
+    routeRecorded: route.filter(recorded).length,
+    offRouteRecorded: offRoute.filter(recorded).length,
     routeTotal: route.length,
     routeCaptured: route.filter((m) => m.stage > 0).length,
     photos: ins.meters.reduce((n, m) => n + m.photos, 0),
     captured: reached(1),
     arrived: reached(2),
     /** 値を読み取れた台数（記録待ちも含む。失敗は含まない） */
-    readSuccess: judged.filter((j) => j.m.value !== null && j.kind !== "fail" && j.kind !== "missing").length,
-    recorded: reached(4),
+    readSuccess: judged.filter((j) => j.m.stage >= 3 && j.m.value !== null && j.kind !== "fail" && j.kind !== "missing").length,
+    recorded: ins.meters.filter(recorded).length,
     missing,
     offRoute,
     warn,
     fail,
     wait,
-    /** 読み取りは成功したが許容範囲の外（補助の注意。対処が必要には数えない） */
+    /** 読み取りは成功したが許容範囲の外（読み取り成功のまま対処対象） */
     outOfTolerance: judged.filter((j) => j.outOfTolerance).map((j) => j.m),
-    /** 全台が正常（許容範囲の外も読み取り成功なので正常に含む） */
-    allOk: judged.every((j) => j.kind === "ok"),
+    /** 全台読み取り成功かつ許容範囲外なし（未設定は完了を妨げない） */
+    allOk: judged.every((j) => j.kind === "ok" && !j.outOfTolerance),
     /** 人が見て手を打つべきものがあるか。途中（wait）は待てば進むので含めない */
     needsAction:
       missing.length + offRoute.length + warn.length + fail.length > 0 ||
-      ins.receive === "short",
+      ins.receive === "short" || judged.some((j) => j.outOfTolerance),
   };
 }
 
