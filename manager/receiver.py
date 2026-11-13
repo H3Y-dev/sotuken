@@ -279,16 +279,22 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         for name, value in (extra_headers or {}).items():
             self.send_header(name, value)
+        self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
-        if status_code >= 400:
-            self.close_connection = True
-            self.wfile.flush()
-            try:
-                self.connection.shutdown(socket.SHUT_WR)
-            except OSError:
-                return
-            self._drain_request_body()
+        self.wfile.flush()
+
+        # HTTP/1.0 の既定では応答後に接続を閉じる。閉じる前に未読の
+        # リクエスト本文を読み捨てないと、Windows の loopback TCP は
+        # RST (WinError 10054) を返し、クライアントが応答を読めない。
+        # 200 でもボディ付き GET などで未読が残り得るため、
+        # ステータスコードにかかわらず同じ後始末を行う。
+        self.close_connection = True
+        try:
+            self.connection.shutdown(socket.SHUT_WR)
+        except OSError:
+            pass
+        self._drain_request_body()
 
     def _check_ip_allowed(self) -> bool:
         check_fn = getattr(self.server, "check_client_ip", is_private_client_ip)

@@ -30,18 +30,15 @@ class PairingTests(unittest.TestCase):
 
     def request(self, token, raw=None, path='/pair', method='POST', headers=None):
         conn = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
-        body = raw if raw is not None else json.dumps({'token': token})
-        conn.request(method, path, body, headers or {'Content-Type': 'application/json'})
-        resp = conn.getresponse()
         try:
-            data = json.loads(resp.read())
-        except (ConnectionResetError, ConnectionAbortedError):
-            if resp.status not in (400, 413):
-                raise
-            data = {}
-        result = resp.status, data
-        conn.close()
-        return result
+            body = raw if raw is not None else json.dumps({'token': token})
+            conn.request(method, path, body, headers or {'Content-Type': 'application/json'})
+            resp = conn.getresponse()
+            # 400/413 でもエラーJSON本文を最後まで読めることを確認する。
+            # ここで接続リセットを握りつぶすと、未読本文による回帰を見逃す。
+            return resp.status, json.loads(resp.read())
+        finally:
+            conn.close()
 
     def invite(self):
         return self.server.start_pairing(self.url)
@@ -169,6 +166,25 @@ class PairingTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertNotIn('token', data)
         self.assertNotIn('secret', json.dumps(data))
+
+    def test_get_health_with_body_does_not_reset(self):
+        self.invite()
+        for _ in range(10):
+            status, data = self.request('', path='/health', method='GET',
+                                        headers={'X-Sotuken-Token': 'permanent-secret'})
+            self.assertEqual(status, 200)
+            self.assertTrue(data.get('ok'))
+
+    def test_health_after_error_responses_succeeds(self):
+        self.invite()
+        for body, expected in [('x' * 2049, 413), ('[]', 400), ('{"token":4}', 400), ('{', 400)]:
+            status, data = self.request('', raw=body)
+            self.assertEqual(status, expected)
+            self.assertIn('error', data)  # エラーJSON本文を最後まで読める
+            status, health = self.request('', path='/health', method='GET',
+                                          headers={'X-Sotuken-Token': 'permanent-secret'})
+            self.assertEqual(status, 200)
+            self.assertTrue(health.get('ok'))
 
     def test_payload_and_png_are_distinct_from_device_qr(self):
         invite = self.invite()
