@@ -1,8 +1,9 @@
 import { useId } from "react";
-import type { Kind } from "./judge";
+import { validRange, validTolerance, type Kind } from "./judge";
 
 // 文字盤の絵。仕様は DESIGN.md の「文字盤の絵」。
-// 240°の目盛り、許容範囲の帯、読み取り値の針。下の切れ目に状態の形（● ▲ ■ ◌）を置く。
+// 240°の目盛り、許容範囲の帯、読み取り値の針。下の切れ目に状態の形（● ▲ ■ ◌ ◎）を置く。
+// 目盛りの範囲・許容範囲は任意項目。未設定・不正なら針・帯を描かず、仮の範囲で補わない。
 
 const CX = 60, CY = 60, SWEEP = 240;
 const ang = (t: number) => ((-SWEEP / 2 + SWEEP * t) * Math.PI) / 180;
@@ -11,6 +12,7 @@ const arc = (r: number, t0: number, t1: number) => {
   const [x0, y0] = pt(r, t0), [x1, y1] = pt(r, t1);
   return `M${x0} ${y0}A${r} ${r} 0 ${(t1 - t0) * SWEEP > 180 ? 1 : 0} 1 ${x1} ${y1}`;
 };
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function StateMark({ kind, x, y, s }: { kind: Kind; x: number; y: number; s: number }) {
   if (kind === "ok") return <circle cx={x} cy={y} r={s * 0.5} fill="var(--g-ok)" />;
@@ -19,10 +21,14 @@ export function StateMark({ kind, x, y, s }: { kind: Kind; x: number; y: number;
   if (kind === "fail") return <rect x={x - s * 0.45} y={y - s * 0.45} width={s * 0.9} height={s * 0.9} fill="var(--g-fail)" />;
   if (kind === "missing")
     return <circle cx={x} cy={y} r={s * 0.45} fill="none" stroke="var(--g-ink)" strokeWidth={2.5} strokeDasharray="3 2.5" />;
-  return null;
+  // 途中: 鋼色の二重丸（◎）。塗りの丸（正常）・破線の丸（未撮影）と形で分かれる
+  return (
+    <g fill="none" stroke="var(--g-steel)">
+      <circle cx={x} cy={y} r={s * 0.42} strokeWidth={s * 0.12} />
+      <circle cx={x} cy={y} r={s * 0.14} fill="var(--g-steel)" strokeWidth={0} />
+    </g>
+  );
 }
-
-const CENTER_TEXT: Partial<Record<Kind, string>> = { missing: "未撮影", fail: "読めず", wait: "待ち" };
 
 export function Dial({
   kind,
@@ -35,20 +41,27 @@ export function Dial({
 }: {
   kind: Kind;
   value: number | null;
-  scale: [number, number];
-  tolerance: [number, number];
+  scale: [number, number] | null;
+  tolerance: [number, number] | null;
   size?: number;
   mini?: boolean;
   label: string;
 }) {
   const hatch = useId();
-  const [min, max] = scale;
-  const norm = (v: number) => (v - min) / (max - min);
-  const showNeedle = value !== null && (kind === "ok" || kind === "warn");
+  const range = validRange(scale) ? scale : null;
+  const norm = (v: number) => (range ? (v - range[0]) / (range[1] - range[0]) : 0);
+  const drawn = kind !== "missing" && kind !== "fail";
+  const showNeedle = drawn && range !== null && value !== null;
   // 振り切れは、本物の計器と同じく端を少し越えた所で止める
-  const t = showNeedle ? Math.min(1.04, Math.max(-0.04, norm(value!))) : 0;
+  const t = showNeedle ? clamp(norm(value), -0.04, 1.04) : 0;
+  const band =
+    kind !== "missing" && range && validTolerance(tolerance)
+      ? [clamp(norm(tolerance[0]), 0, 1), clamp(norm(tolerance[1]), 0, 1)]
+      : null;
   const ticks = mini ? 6 : 31;
   const major = mini ? 1 : 5;
+  const center =
+    kind === "missing" ? "未撮影" : kind === "fail" ? "読めず" : kind === "wait" && value === null ? "待ち" : !range ? "目盛り未設定" : null;
 
   return (
     <svg
@@ -73,21 +86,17 @@ export function Dial({
         r={57}
         fill="var(--g-dial)"
         stroke={kind === "missing" ? "var(--g-ink)" : "var(--g-rule)"}
-        strokeWidth={kind === "missing" ? 2.5 : 1.5}
-        strokeDasharray={kind === "missing" ? "6 5" : undefined}
+        strokeWidth={kind === "missing" ? (mini ? 3.5 : 2.5) : 1.5}
+        strokeDasharray={kind === "missing" ? (mini ? "5 4" : "6 5") : undefined}
       />
       {kind === "fail" && <circle cx={CX} cy={CY} r={55} fill={`url(#${hatch})`} />}
 
-      {kind !== "missing" && (
-        <path
-          d={arc(43, norm(tolerance[0]), norm(tolerance[1]))}
-          fill="none"
-          stroke="var(--g-band)"
-          strokeWidth={mini ? 12 : 8}
-        />
+      {band && band[1] > band[0] && (
+        <path d={arc(43, band[0], band[1])} fill="none" stroke="var(--g-band)" strokeWidth={mini ? 12 : 8} />
       )}
 
-      <g stroke={kind === "missing" ? "var(--g-rule)" : "var(--g-ink)"} strokeLinecap="butt">
+      {/* 目盛りの範囲が無いときは目盛りを罫の色に落とし、値を表さない絵だと分かるようにする */}
+      <g stroke={kind === "missing" || !range ? "var(--g-rule)" : "var(--g-ink)"} strokeLinecap="butt">
         {Array.from({ length: ticks }, (_, i) => {
           const tt = i / (ticks - 1);
           const isMajor = i % major === 0;
@@ -97,10 +106,11 @@ export function Dial({
         })}
       </g>
 
-      {!mini && showNeedle && (
+      {/* 両端の数字は、目盛りの外側の下の切れ目に置き、目盛り・中心と重ねない */}
+      {!mini && showNeedle && range && (
         <g fill="var(--g-steel)" fontSize="12" fontFamily="var(--g-font-num)" textAnchor="middle">
-          <text x={pt(37, 0)[0]} y={pt(37, 0)[1] + 4}>{min}</text>
-          <text x={pt(37, 1)[0]} y={pt(37, 1)[1] + 4}>{max}</text>
+          <text x={pt(50, -0.07)[0]} y={pt(50, -0.07)[1] + 4}>{range[0]}</text>
+          <text x={pt(50, 1.07)[0]} y={pt(50, 1.07)[1] + 4}>{range[1]}</text>
         </g>
       )}
 
@@ -118,17 +128,17 @@ export function Dial({
         </>
       )}
 
-      {!mini && CENTER_TEXT[kind] && (
+      {!mini && center && (
         <text
           x={CX}
           y={kind === "missing" ? 66 : 84}
           textAnchor="middle"
-          fontSize="15"
+          fontSize={center.length > 3 ? 12 : 15}
           fontWeight="700"
           fontFamily="var(--g-font-text)"
-          fill={kind === "fail" ? "var(--g-fail)" : "var(--g-ink)"}
+          fill={kind === "fail" ? "var(--g-fail)" : center.length > 3 ? "var(--g-steel)" : "var(--g-ink)"}
         >
-          {CENTER_TEXT[kind]}
+          {center}
         </text>
       )}
       <StateMark kind={kind} x={CX} y={mini ? 97 : 99} s={mini ? 30 : 15} />

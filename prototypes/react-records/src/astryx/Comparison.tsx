@@ -1,13 +1,22 @@
-import { useState } from 'react';
+import { useInsertionEffect, useState } from 'react';
 import { Card } from '@astryxdesign/core/Card';
 import { VStack } from '@astryxdesign/core/VStack';
 import { Badge } from '@astryxdesign/core/Badge';
 import { Table, TableHeader, TableBody, TableRow, TableCell, TableHeaderCell } from '@astryxdesign/core/Table';
-import '@astryxdesign/core/astryx.css';
+// Astryx の CSS は :root や要素への指定を含むので、この画面を表示している間だけ差し込む
+// （ほかの画面へ移ったら外し、変数・リセットが残らないようにする）
+import astryxCss from '@astryxdesign/core/astryx.css?inline';
 import { data } from '../mock/data';
 import { filterReadings, latestPerDevice } from '../lib/records';
 
 export default function Comparison() {
+  useInsertionEffect(() => {
+    const style = document.createElement('style');
+    style.dataset.astryx = '';
+    style.textContent = astryxCss;
+    document.head.append(style);
+    return () => style.remove();
+  }, []);
   const [inspection, setInspection] = useState('all');
   const [device, setDevice] = useState('all');
   const [start, setStart] = useState('');

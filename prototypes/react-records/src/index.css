@@ -1,2 +1,46 @@
 @import "tailwindcss";
+/* Tailwind はここで1回だけ読む（画面ごとに読むと、後から読んだ方の値が全画面に残る）。
+   計器盤の色・角丸・書体は、.gauge の中でだけ値が入る変数（--g-*）に割り当てる。
+   .gauge の外では変数が未定義になり、既存の画面（#・#astryx）には何も効かない。
+   角丸と書体は Tailwind の既定値を予備値にして、既存の画面の見た目を変えない。 */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive, var(--fail));
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-panel: var(--g-panel);
+  --color-dial: var(--g-dial);
+  --color-ink: var(--g-ink);
+  --color-text: var(--g-text);
+  --color-steel: var(--g-steel);
+  --color-rule: var(--g-rule);
+  --color-hairline: var(--g-hairline);
+  --color-ok: var(--g-ok);
+  --color-ok-tint: var(--g-ok-tint);
+  --color-warn: var(--g-warn);
+  --color-warn-tint: var(--g-warn-tint);
+  --color-fail: var(--g-fail);
+  --color-fail-tint: var(--g-fail-tint);
+
+  --radius-sm: var(--g-radius-sm, 0.25rem);
+  --radius-md: var(--g-radius-md, 0.375rem);
+  --radius-lg: var(--g-radius-lg, 0.5rem);
+  --radius-xl: var(--g-radius-xl, 0.75rem);
+  --font-sans: var(--g-font-text, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
+  --font-heading: var(--g-font-text);
+  --font-mono: var(--g-font-num, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+}
 :root{--background:#f3f4f1;--foreground:#24333c;--card:#fff;--card-foreground:#24333c;--primary:#2B4A6F;--primary-foreground:#fff;--secondary:#edf1f2;--secondary-foreground:#24333c;--muted:#eef1ef;--muted-foreground:#63727b;--accent:#edf1f2;--accent-foreground:#24333c;--border:#cdd6d6;--input:#cdd6d6;--ring:#2B4A6F;--radius:.35rem;--warn:#936b24;--fail:#a54035;--ok:#3f6f5c}*{box-sizing:border-box}body{margin:0;background:var(--background);color:var(--foreground);font-family:system-ui,'Yu Gothic',sans-serif}main{max-width:1280px;margin:auto;padding:36px 32px 80px}header,.section-title{display:flex;justify-content:space-between;align-items:center;gap:20px}header{border-bottom:3px solid var(--primary);padding-bottom:22px;margin-bottom:24px}h1{font-size:2rem;font-weight:700;margin:.2rem 0}h2{font-size:1.2rem;font-weight:700;margin:.25rem 0}small{font-size:.66rem;color:var(--primary);font-weight:700;letter-spacing:.08em}p{font-size:.875rem;color:var(--muted-foreground);margin:12px 0}.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.actions label{display:flex;align-items:center;gap:7px;font-size:.85rem}.actions span{font-size:.8rem;color:var(--muted-foreground)}section{margin-top:38px}.section-title{margin-bottom:14px}.filters{display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:16px}.filters label{display:grid;gap:7px;font-size:.8rem;font-weight:600}.status{color:white}.status.ok{background:var(--ok)}.status.failed{background:var(--fail)}.status.low_confidence{background:var(--warn)}.clickable{cursor:pointer}.chart{height:280px}.overlay{position:fixed;inset:0;background:#16232ecc;display:grid;place-items:center;z-index:50;padding:20px}.modal{background:white;border-radius:5px;padding:24px;width:min(500px,100%)}.modal svg{width:100%;margin:16px 0}@media(max-width:700px){main{padding:20px 14px}header,.section-title{align-items:flex-start;flex-direction:column}.filters{grid-template-columns:1fr 1fr}}

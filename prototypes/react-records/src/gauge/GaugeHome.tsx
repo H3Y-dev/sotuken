@@ -9,10 +9,12 @@ import { Dial } from "./Dial";
 import { KIND, ReceiveBadge } from "./status";
 
 const meterLabel = (m: Inspection["meters"][number], kind: Kind) =>
-  `${m.seq ? `No.${m.seq} ` : m.offRoute ? "ルート外 " : ""}${m.id || "名前なし"} ${KIND[kind].label}${m.value !== null && kind !== "fail" ? ` ${m.value}${m.unit}` : ""}`;
+  `${m.seq ? `No.${m.seq} ` : m.offRoute ? "ルート外 " : ""}${m.id || "名前なし"} ${KIND[kind].label}${m.value !== null && kind !== "fail" ? ` ${m.value}${m.unit ? ` ${m.unit}` : ""}` : ""}${judge(m).outOfTolerance ? " 許容範囲外" : ""}`;
 
+/** 左端の帯。注意枠・詳細の並びと同じ優先順（未撮影→失敗→要確認・対処→途中→正常） */
 function rowKind(ins: Inspection): Kind {
   const s = summarize(ins);
+  if (s.missing.length) return "missing";
   if (s.fail.length) return "fail";
   if (s.needsAction) return "warn";
   if (ins.receive === "receiving") return "wait";
@@ -30,10 +32,10 @@ function Row({ ins }: { ins: Inspection }) {
     ...(s.warn.length ? [{ kind: "warn" as const, text: `要確認 ${s.warn.length}` }] : []),
     ...(s.offRoute.length ? [{ kind: "tag" as const, text: `ルート外 ${s.offRoute.length}` }] : []),
   ];
-  const dial = (m: Inspection["meters"][number]) => {
+  const dial = (m: Inspection["meters"][number], idx: number) => {
     const k = judge(m).kind;
     return (
-      <li key={m.id + m.seq}>
+      <li key={`${m.seq ?? "x"}-${m.id}-${idx}`}>
         <Dial mini size={52} kind={k} value={m.value} scale={m.scale} tolerance={m.tolerance} label={meterLabel(m, k)} />
       </li>
     );
@@ -44,7 +46,7 @@ function Row({ ins }: { ins: Inspection }) {
       <a href={`#gauge/${encodeURIComponent(ins.id)}`} className="group block rounded-lg no-underline">
         <Card
           data-kind={kind}
-          className="g-edge grid grid-cols-[104px_minmax(240px,1fr)_360px_130px_190px_24px] items-center gap-x-6 rounded-lg px-5 py-4 text-base ring-rule/60 group-hover:ring-ink"
+          className="g-edge grid grid-cols-[104px_minmax(240px,1fr)_360px_130px_190px_24px] items-center gap-x-6 rounded-lg px-5 py-4 text-base ring-hairline group-hover:ring-ink"
         >
           <div className="flex flex-col">
             <span className="text-steel">{day(ins.startedAt)}</span>
@@ -94,12 +96,12 @@ function Row({ ins }: { ins: Inspection }) {
             )}
             <dt className="text-steel">記録</dt>
             <dd className="g-num text-xl font-bold text-ink">
-              {s.recorded}/{s.captured}<span className="ml-1 text-base font-normal text-steel">件</span>
+              {s.recorded}/{s.captured}<span className="ml-1 text-base font-normal text-steel">台</span>
             </dd>
           </dl>
 
           <div>
-            <ReceiveBadge receive={ins.receive} missingPhotos={ins.missingPhotos} arrived={s.arrived} total={s.captured} />
+            <ReceiveBadge ins={ins} />
           </div>
 
           <ChevronRight aria-hidden className="size-6 text-steel group-hover:text-ink" />

@@ -1,9 +1,9 @@
-import { CircleCheck, CircleDashed, Clock, SquareX, TriangleAlert, CirclePlus } from "lucide-react";
+import { CircleCheck, CircleDashed, Clock, SquareX, TriangleAlert, CirclePlus, Inbox } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { Receive } from "../mock/inspections";
-import type { Kind } from "./judge";
+import type { Inspection } from "../mock/inspections";
+import { summarize, type Kind } from "./judge";
 
-// 状態は「色・文字・形」の3つで示す。形は文字盤の下の印と同じ（● ▲ ■ ◌）。
+// 状態は「色・文字・形」の3つで示す。形は文字盤の下の印と同じ（● ▲ ■ ◌ ◎）。
 export const KIND: Record<Kind, { label: string; Icon: typeof CircleCheck }> = {
   ok: { label: "正常", Icon: CircleCheck },
   warn: { label: "要確認", Icon: TriangleAlert },
@@ -31,8 +31,20 @@ export function OffRouteBadge() {
   );
 }
 
-export function ReceiveBadge({ receive, missingPhotos, arrived, total }: { receive: Receive; missingPhotos: number; arrived: number; total: number }) {
-  if (receive === "complete") return <StatusBadge kind="ok" label="受信 完了" />;
-  if (receive === "short") return <StatusBadge kind="warn" label={`不足あり ${missingPhotos}枚未着`} />;
-  return <StatusBadge kind="wait" label={`受信中 ${arrived}/${total}`} />;
+/**
+ * 写真の受信（通信）と、点検の完了は分けて示す。緑の「点検 完了」は、写真が全部届き、
+ * 全台が正常のときだけ。届いていても未撮影・失敗・要確認があれば控えめな札にする。
+ */
+export function ReceiveBadge({ ins }: { ins: Inspection }) {
+  const s = summarize(ins);
+  if (ins.receive === "short") return <StatusBadge kind="warn" label={`不足あり ${ins.missingPhotos}枚未着`} />;
+  if (ins.receive === "receiving") return <StatusBadge kind="wait" label={`受信中 ${s.arrived}/${s.captured}`} />;
+  if (s.allOk) return <StatusBadge kind="ok" label="点検 完了" />;
+  if (s.missing.length + s.fail.length + s.warn.length === 0) return <StatusBadge kind="wait" label="写真受信済み（処理中）" />;
+  return (
+    <Badge variant="tag" size="field">
+      <Inbox aria-hidden />
+      写真受信済み（要対処）
+    </Badge>
+  );
 }

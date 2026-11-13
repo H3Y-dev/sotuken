@@ -1,6 +1,8 @@
 // 点検のダミーデータ。2026-11-12 の複数機器QR点検の通し試験
 // （ルート5台・撮り忘れ1台・ルート外1台・出所4種）を手本にした架空の値。
-// 単位・目盛りの範囲・許容範囲は今のDBに無い。見本のために仮に置いている。
+// 単位・目盛りの範囲は、DBの devices 表に既にある（unit / min_value / max_value）。
+// DBに無いのは許容範囲だけで、今後 devices 表に任意の列として足す予定（QRには入れない）。
+// どれも任意項目なので、未設定（null）の機器も混ぜて、画面が壊れないことを確かめられるようにしている。
 
 /** 0=未撮影 1=撮影済み（PC未着） 2=PCに到着（読み取り待ち） 3=読み取り済み（記録待ち） 4=DBに記録 */
 export type Stage = 0 | 1 | 2 | 3 | 4;
@@ -15,9 +17,12 @@ export interface MeterResult {
   /** 機器ID。空はQRも一覧も手入力もなかった写真（名前なし） */
   id: string;
   name: string;
-  unit: string;
-  scale: [number, number];
-  tolerance: [number, number];
+  /** devices.unit。未設定は null か空文字 */
+  unit: string | null;
+  /** 目盛りの範囲 [devices.min_value, devices.max_value]。未設定は null */
+  scale: [number, number] | null;
+  /** 許容範囲。今のDBに無い（任意の列として足す予定）。未設定は null */
+  tolerance: [number, number] | null;
   stage: Stage;
   value: number | null;
   status: ReadStatus | null;
@@ -59,8 +64,8 @@ export const inspections: Inspection[] = [
       { seq: 1, id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: [0.6, 1.0], stage: 4, value: 0.82, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:07") },
       { seq: 2, id: "A-102", name: "ボイラー2 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: [0.6, 1.0], stage: 4, value: 0.79, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:12") },
       { seq: 3, id: "A-103", name: "給水タンク 水位", unit: "%", scale: [0, 100], tolerance: [40, 85], stage: 4, value: 62.5, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:18") },
-      { seq: 4, id: "A-104", name: "燃料ガス 供給圧力", unit: "kPa", scale: [0, 10], tolerance: [2.0, 4.5], stage: 2, value: null, status: null, sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:24") },
-      { seq: 5, id: "A-105", name: "排ガス 温度", unit: "°C", scale: [0, 400], tolerance: [150, 260], stage: 1, value: null, status: null, sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:30") },
+      { seq: 4, id: "A-104", name: "燃料ガス 供給圧力", unit: "kPa", scale: [0, 10], tolerance: [2.0, 4.5], stage: 3, value: 3.12, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:24") },
+      { seq: 5, id: "A-105", name: "排ガス 温度", unit: "°C", scale: [0, 400], tolerance: [150, 260], stage: 2, value: null, status: "failed", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:30") },
       { seq: 6, id: "A-106", name: "復水 戻り温度", unit: "°C", scale: [0, 120], tolerance: [50, 90], stage: 1, value: null, status: null, sources: ["manual"], photos: 1, capturedAt: t("12", "13:36") },
     ],
   },
@@ -134,9 +139,10 @@ export const inspections: Inspection[] = [
     receive: "complete",
     missingPhotos: 0,
     meters: [
-      { id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: [0.6, 1.0], stage: 4, value: 0.88, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("10", "15:12") },
-      { id: "", name: "", unit: "", scale: [0, 100], tolerance: [0, 100], stage: 4, value: 47.0, status: "ok", sources: [], photos: 1, capturedAt: t("10", "15:17") },
+      { id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: null, stage: 4, value: 0.88, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("10", "15:12") },
+      { id: "", name: "", unit: null, scale: null, tolerance: null, stage: 4, value: 47.0, status: "ok", sources: [], photos: 1, capturedAt: t("10", "15:17") },
       { id: "A-103", name: "給水タンク 水位", unit: "%", scale: [0, 100], tolerance: [40, 85], stage: 4, value: 71.0, status: "ok", sources: ["manual"], photos: 1, capturedAt: t("10", "15:21") },
+      { id: "A-110", name: "攪拌機 回転数カウンタ", unit: "", scale: [0, 2000], tolerance: null, stage: 4, value: 1240, status: "ok", sources: ["list"], photos: 1, capturedAt: t("10", "15:23") },
     ],
   },
 ];

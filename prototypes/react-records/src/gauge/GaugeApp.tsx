@@ -50,7 +50,7 @@ export default function GaugeApp() {
         {id && !ins ? (
           <p className="pt-8 text-lg">点検「{id}」は見つかりません。<a href="#gauge" className="text-ink underline">点検の一覧</a>から選んでください。</p>
         ) : ins ? (
-          <GaugeDetail ins={ins} />
+          <GaugeDetail key={ins.id} ins={ins} />
         ) : (
           <GaugeHome />
         )}

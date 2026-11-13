@@ -1,48 +1,6 @@
 /* 計器盤（方向性A）。値の正本は DESIGN.md。色はここの変数だけを使い、部品に直書きしない。
-   この画面だけで読み込む。既存の「機器」画面（index.css）には効かせない。 */
-@import "tailwindcss";
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-
-  --color-panel: var(--g-panel);
-  --color-dial: var(--g-dial);
-  --color-ink: var(--g-ink);
-  --color-text: var(--g-text);
-  --color-steel: var(--g-steel);
-  --color-rule: var(--g-rule);
-  --color-hairline: var(--g-hairline);
-  --color-ok: var(--g-ok);
-  --color-ok-tint: var(--g-ok-tint);
-  --color-warn: var(--g-warn);
-  --color-warn-tint: var(--g-warn-tint);
-  --color-fail: var(--g-fail);
-  --color-fail-tint: var(--g-fail-tint);
-
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 6px;
-  --font-sans: var(--g-font-text);
-  --font-heading: var(--g-font-text);
-  --font-mono: var(--g-font-num);
-}
-
+   Tailwind の読み込みと色の名前の割り当て（@theme）は index.css に1回だけ置く。
+   ここは .gauge の中だけに効く指定なので、別の画面へ移っても何も残らない。 */
 .gauge {
   /* ── 色（名前付きの実値） ── */
   --g-panel: #e3e6e4;      /* 盤面: 計器盤の明るい灰色 */
@@ -59,17 +17,28 @@
   --g-warn-tint: #f4e7c6;
   --g-fail: #a23b24;       /* 失敗: 赤錆色 */
   --g-fail-tint: #f5dcd5;
+  --g-on-ink: #ffffff;     /* 紺インクの上の白 */
+
+  /* 角丸（機械の銘板に合わせて小さく）。--radius-* は部品の任意値 var(--radius-md) 用 */
+  --g-radius-sm: 3px;
+  --g-radius-md: 4px;
+  --g-radius-lg: 6px;
+  --g-radius-xl: 6px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
 
   --g-font-text: "BIZ UDPGothic", "BIZ UDゴシック", "BIZ UDGothic", "Yu Gothic UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
   --g-font-num: var(--g-font-text); /* 同じ書体で、数字だけ tabular-nums で桁をそろえる */
 
-  /* shadcn/ui の意味の名前へ割り当てる */
+  /* shadcn/ui の意味の名前。部品が var(--foreground) などを直接使う所のため */
   --background: var(--g-panel);
   --foreground: var(--g-text);
   --card: var(--g-dial);
   --card-foreground: var(--g-text);
   --primary: var(--g-ink);
-  --primary-foreground: #ffffff;
+  --primary-foreground: var(--g-on-ink);
   --secondary: var(--g-panel);
   --secondary-foreground: var(--g-text);
   --muted: var(--g-panel);
@@ -118,11 +87,14 @@
   border-image: repeating-linear-gradient(45deg, var(--g-warn) 0 6px, var(--g-warn-tint) 6px 10px) 0 0 0 10;
 }
 .gauge .g-edge[data-kind="fail"] { border-left: 10px solid var(--g-fail); border-image: none; }
-.gauge .g-edge[data-kind="missing"] { border: 2px dashed var(--g-ink); border-image: none; padding-left: 28px; }
+/* 未撮影は全体を紺の破線で囲む。枠線（border）ではなく内側の outline で描き、
+   左端10pxの幅と中の文字の位置を、ほかの状態とそろえたままにする */
+.gauge .g-edge[data-kind="missing"] { border-image: none; outline: 2px dashed var(--g-ink); outline-offset: -2px; }
 
 /* 進み具合（撮影→到着→読み取り→記録） */
 .gauge .g-seg { height: 10px; border: 1.5px solid var(--g-rule); background: var(--g-dial); transition: background-color 200ms ease-out; }
-.gauge .g-seg[data-on="true"] { background: var(--g-ink); border-color: var(--g-ink); }
+/* 済みの段は罫の色で控えめに塗る（文字盤に対し3.85:1）。紺は読み取り値と針に残す */
+.gauge .g-seg[data-on="true"] { background: var(--g-rule); border-color: var(--g-rule); }
 .gauge .g-seg[data-on="fail"] { background: var(--g-fail); border-color: var(--g-fail); }
 .gauge .g-seg[data-on="false"] { border-style: dashed; }
 
@@ -133,6 +105,11 @@
   outline: 3px solid var(--g-ink);
   outline-offset: 2px;
 }
+
+/* 注意枠から移ってきたカード。未撮影の破線（outline）と重ならないよう、外側の影で囲む */
+.gauge .g-target { scroll-margin: 24px; }
+.gauge .g-target:focus { box-shadow: 0 0 0 2px var(--g-dial), 0 0 0 5px var(--g-ink); }
+.gauge .g-target:not([data-kind="missing"]):focus { outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .gauge *, .gauge *::before, .gauge *::after { transition: none !important; animation: none !important; }
