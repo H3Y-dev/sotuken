@@ -11,7 +11,7 @@ data class CaptureTarget(val deviceId: String?, val deviceName: String?, val sou
 
 fun CaptureTarget.toMeta(): CaptureMeta = CaptureMeta(deviceName, null, null, deviceId, source)
 fun targetFromQr(qr: DeviceQr): CaptureTarget = CaptureTarget(qr.id, qr.name, "qr")
-fun targetFromRoute(device: RouteDevice): CaptureTarget = CaptureTarget(device.id, device.name, "manual")
+fun targetFromRoute(device: RouteDevice): CaptureTarget = CaptureTarget(device.id, device.name, "list")
 fun targetFromPhoto(item: QueueItem): CaptureTarget = CaptureTarget(item.deviceId, item.deviceName, item.deviceIdSource)
 
 fun manualTarget(name: String, id: String): Result<CaptureTarget> = runCatching {

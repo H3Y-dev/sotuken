@@ -62,6 +62,11 @@ class RoutesManifestTest(unittest.TestCase):
         self.assertEqual(inspection_status(self.storage, 'I-1')['missing_photos'], ['b.jpg'])
 
     def test_manifest_validation(self):
+        for source in ('list', 'manual'):
+            manifest = self.manifest()
+            manifest['photos'][0]['device_id_source'] = source
+            save_manifest(self.storage, 'I-1', manifest)
+            self.assertEqual(get_manifest(self.storage, 'I-1'), manifest)
         for field, value in [('v', True), ('inspection_id', 'other'), ('photos', [{}]), ('missing', [12])]:
             with self.subTest(field=field), self.assertRaises(ValueError):
                 save_manifest(self.storage, 'I-1', dict(self.manifest(), **{field: value}))

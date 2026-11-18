@@ -41,6 +41,9 @@ class DeviceIdSidecarTest {
         )
     }
 
+    @Test fun listSourceSurvivesSidecar() {
+        assertEquals("list", parse(SenderPayloads.buildSidecarJson(item("A-101", "list")))["device_id_source"]?.jsonPrimitive?.content)
+    }
     @Test fun manualInputHasNeitherKey() {
         val json = SenderPayloads.buildSidecarJson(item(null, null))
         assertFalse(json.contains("device_id"))

@@ -23,7 +23,7 @@ class SidecarMetadata:
     scale_min: Optional[float] = None
     scale_max: Optional[float] = None
     device_id: Optional[str] = None
-    device_id_source: Optional[Literal["qr", "manual"]] = None
+    device_id_source: Optional[Literal["qr", "manual", "list"]] = None
     device_id_issue: Optional[Literal["id_invalid"]] = None
     inspection_id: Optional[str] = None
     inspection_name: Optional[str] = None
@@ -105,7 +105,7 @@ def load_sidecar(image_or_json_path: str) -> Optional[SidecarMetadata]:
         device_id_issue = "id_invalid"
 
     device_id_source = data.get("device_id_source")
-    if device_id is None or device_id_source not in ("qr", "manual"):
+    if device_id is None or device_id_source not in ("qr", "manual", "list"):
         device_id_source = None
 
     device_name = data.get("device_name")

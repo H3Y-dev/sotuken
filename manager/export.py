@@ -53,6 +53,7 @@ def inspection_devices(readings):
     groups = {}
     sources = {"qr": "スマホ(QR)", "sidecar_qr": "スマホ(QR)",
                "manual": "スマホ(手入力)", "sidecar_manual": "スマホ(手入力)",
+               "list": "スマホ(一覧)", "sidecar_list": "スマホ(一覧)",
                "pc_qr": "PC(画像のQR)"}
     for reading in readings:
         device_id = _field(reading, "device_id") or None

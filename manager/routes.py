@@ -105,7 +105,7 @@ def validate_manifest(inspection_id, data):
             raise ValueError('sha256が不正です')
         if photo.get('device_id') is not None:
             validate_device_id(photo['device_id'])
-        if photo.get('device_id_source') not in (None, 'qr', 'manual', 'sidecar', 'sidecar_qr', 'sidecar_manual', 'pc_qr'):
+        if photo.get('device_id_source') not in (None, 'qr', 'manual', 'list', 'sidecar', 'sidecar_qr', 'sidecar_manual', 'sidecar_list', 'pc_qr'):
             raise ValueError('機器IDの出所が不正です')
         if normalize_captured_at(photo.get('captured_at')) is None:
             raise ValueError('撮影日時が不正です')
