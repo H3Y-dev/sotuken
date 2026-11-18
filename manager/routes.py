@@ -151,18 +151,20 @@ def received_hashes(storage, incoming_dir=None):
     return hashes
 
 
-def inspection_status(storage, inspection_id, incoming_dir=None):
+def inspection_status(storage, inspection_id, incoming_dir=None, *, hashes=None):
     manifest = get_manifest(storage, inspection_id)
     if manifest is None:
         return dict(state='受信中', matched=0, missing_photos=[])
-    hashes = received_hashes(storage, incoming_dir)
+    if hashes is None:
+        hashes = received_hashes(storage, incoming_dir)
     missing = [p['file_name'] for p in manifest['photos'] if p.get('sha256') is None or p['sha256'].lower() not in hashes]
     return dict(state='不足あり' if missing else '完了', matched=len(manifest['photos']) - len(missing), missing_photos=missing)
 
 
-def arrived_manifest_devices(storage, manifest, readings, incoming_dir=None):
+def arrived_manifest_devices(storage, manifest, readings, incoming_dir=None, *, hashes=None):
     """Use received photo hashes before OCR has produced a reading row."""
-    hashes = received_hashes(storage, incoming_dir)
+    if hashes is None:
+        hashes = received_hashes(storage, incoming_dir)
     recorded = {r.image_sha256.lower() for r in readings if r.image_sha256}
     return [dict(device_id=p.get('device_id')) for p in (manifest or {}).get('photos', [])
             if p.get('sha256') is not None and p['sha256'].lower() in hashes and p['sha256'].lower() not in recorded]

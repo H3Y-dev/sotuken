@@ -105,9 +105,10 @@ def _is_json_content_type(header_value):
 
 
 class PCAPI:
-    def __init__(self, db_path='manager.db', *, image_dirs=(), static_dir=None,
+    def __init__(self, db_path='manager.db', *, incoming_dir=None, image_dirs=(), static_dir=None,
                  owner_port=8767, internal_key='', port=8766, clock=time.monotonic):
         self.storage = ReadOnlyStorage(db_path)
+        self.incoming_dir = Path(incoming_dir).resolve() if incoming_dir is not None and str(incoming_dir).strip() else None
         self.image_dirs = tuple(Path(p).resolve() for p in image_dirs if str(p).strip())
         # An empty allowlist would silently 404 every image; refuse instead.
         if not self.image_dirs or len(self.image_dirs) != len(tuple(image_dirs)):
@@ -239,6 +240,9 @@ class PCAPI:
                 raise APIError(400, 'invalid_request')
             body = self.owner(method, '/internal/pairing')
             return (204, None, None) if method == 'DELETE' else (200, body, None)
+        if path == '/api/v1/inspections' or path.startswith('/api/v1/inspections/'):
+            from pc_api.inspection_routes import dispatch_inspection
+            return dispatch_inspection(self, method, url)
         if method != 'GET':
             raise APIError(400, 'invalid_request')
         if path in ('/api/v1/runtime', '/api/v1/usb/status'):
@@ -364,7 +368,8 @@ class PCAPI:
                 except APIError as exc:
                     status, body, mime = exc.status, {'error': {'code':exc.code, 'message':exc.code, 'request_id':secrets.token_hex(8)}}, None
                 except sqlite3.Error as exc:
-                    code = 'db_busy' if 'locked' in str(exc) or 'busy' in str(exc) else 'data_invalid'
+                    msg = str(exc).lower()
+                    code = 'db_busy' if 'locked' in msg or 'busy' in msg else 'data_invalid'
                     status, body, mime = 503, {'error':{'code':code, 'message':code, 'request_id':secrets.token_hex(8)}}, None
                 except Exception:
                     # Unexpected: no detail to the client (no paths, keys, or messages).
@@ -426,7 +431,8 @@ def main():
         if launch_key_out.is_symlink() or not launch_key_out.is_file():
             parser.error(f'--launch-key-out must be an existing regular file: {args.launch_key_out}')
     try:
-        api = PCAPI(args.db, image_dirs=[args.incoming_dir, args.images_dir, args.overlays_dir],
+        api = PCAPI(args.db, incoming_dir=args.incoming_dir,
+                    image_dirs=[args.incoming_dir, args.images_dir, args.overlays_dir],
                     static_dir=args.static_dir, owner_port=args.owner_port, port=args.port,
                     internal_key=Path(args.internal_key_file).read_text(encoding='utf-8').strip())
     except ValueError as exc:

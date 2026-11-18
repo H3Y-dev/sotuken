@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 
+from manager.receiver import get_default_incoming_dir
 from pc_api.owner import Owner
 
 DEFAULT_STATIC_DIR = Path(__file__).resolve().parent / 'static'
@@ -120,7 +121,7 @@ class VerificationLauncher:
         self,
         *,
         db_path='manager.db',
-        incoming_dir='incoming',
+        incoming_dir=None,
         images_dir='images',
         overlays_dir='overlays',
         static_dir=DEFAULT_STATIC_DIR,
@@ -131,7 +132,7 @@ class VerificationLauncher:
         print_url=False,
     ):
         self.db_path = Path(db_path).resolve()
-        self.incoming_dir = Path(incoming_dir).resolve()
+        self.incoming_dir = Path(incoming_dir or get_default_incoming_dir()).resolve()
         self.images_dir = Path(images_dir).resolve()
         self.overlays_dir = Path(overlays_dir).resolve()
         self.static_dir = Path(static_dir).resolve() if static_dir else None
@@ -157,6 +158,12 @@ class VerificationLauncher:
         )
         self.owner.start()
         try:
+            server_incoming = getattr((self.owner.receiver_info or {}).get('server'), 'incoming_dir', None)
+            actual_incoming = (
+                Path(server_incoming).resolve()
+                if isinstance(server_incoming, (str, os.PathLike))
+                else self.incoming_dir
+            )
             with tempfile.TemporaryDirectory(prefix='sotuken-key-') as key_dir:
                 key_file = _write_private_key_file(Path(key_dir), self.owner.internal_key)
                 launch_key_file = _write_private_key_file(Path(key_dir), '', 'launch-key.txt')
@@ -167,7 +174,7 @@ class VerificationLauncher:
                     '--db',
                     str(self.db_path),
                     '--incoming-dir',
-                    str(self.incoming_dir),
+                    str(actual_incoming),
                     '--images-dir',
                     str(self.images_dir),
                     '--overlays-dir',
@@ -230,7 +237,7 @@ def launch_verification(**kwargs):
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--db', default='manager.db')
-    parser.add_argument('--incoming-dir', default='incoming')
+    parser.add_argument('--incoming-dir', default=None)
     parser.add_argument('--images-dir', default='images')
     parser.add_argument('--overlays-dir', default='overlays')
     parser.add_argument('--static-dir', default=str(DEFAULT_STATIC_DIR))
