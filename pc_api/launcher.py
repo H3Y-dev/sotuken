@@ -29,15 +29,33 @@ def _write_private_key_file(directory: Path, key: str) -> Path:
     finally:
         os.close(fd)
     if os.name == 'nt':
-        # Restrict ACL to the current user when icacls is available.
         user = os.environ.get('USERNAME')
-        if user:
-            subprocess.run(
+        if not user:
+            key_path.unlink(missing_ok=True)
+            raise RuntimeError('USERNAME is not set; cannot restrict key file ACL.')
+        try:
+            res = subprocess.run(
                 ['icacls', str(key_path), '/inheritance:r', '/grant:r', f'{user}:(R,W)'],
                 capture_output=True,
                 check=False,
             )
+        except OSError as exc:
+            key_path.unlink(missing_ok=True)
+            raise RuntimeError(f'icacls failed while securing key file: {exc}') from exc
+        if res.returncode != 0:
+            key_path.unlink(missing_ok=True)
+            raise RuntimeError(f'icacls failed with exit code {res.returncode}.')
     return key_path
+
+
+def _ensure_port_available(port: int) -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        if os.name == 'nt':
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            sock.bind(('127.0.0.1', port))
+        except OSError as exc:
+            raise RuntimeError(f'Port 127.0.0.1:{port} is already in use.') from exc
 
 
 def _wait_tcp(port: int, proc: subprocess.Popen, timeout: float = 10.0) -> None:
@@ -55,6 +73,7 @@ def _wait_tcp(port: int, proc: subprocess.Popen, timeout: float = 10.0) -> None:
 
 def _check_watch_inbox_pid(pid: int | None) -> None:
     if pid is None:
+        print('watch_inbox の確認を省略しました（--watch-inbox-pid 未指定）', file=sys.stderr)
         return
     if pid <= 0:
         raise ValueError(f'Invalid --watch-inbox-pid: {pid}')
@@ -63,15 +82,37 @@ def _check_watch_inbox_pid(pid: int | None) -> None:
             ['tasklist', '/FI', f'PID eq {pid}', '/NH'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             check=False,
         )
         if str(pid) not in res.stdout:
             raise RuntimeError(f'Recorded watch_inbox PID {pid} is not running.')
+        cmd_res = subprocess.run(
+            [
+                'powershell',
+                '-NoProfile',
+                '-Command',
+                f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine",
+            ],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            check=False,
+        )
+        cmdline = cmd_res.stdout.strip() if cmd_res.returncode == 0 else ''
     else:
         try:
             os.kill(pid, 0)
         except OSError as exc:
             raise RuntimeError(f'Recorded watch_inbox PID {pid} is not running.') from exc
+        try:
+            cmdline = Path(f'/proc/{int(pid)}/cmdline').read_bytes().replace(b'\x00', b' ').decode('utf-8', errors='replace')
+        except OSError:
+            cmdline = ''
+    if 'manager.watch_inbox' not in cmdline:
+        raise ValueError(f'PID {pid} is not manager.watch_inbox (cmdline: {cmdline!r})')
 
 
 class VerificationLauncher:
@@ -104,6 +145,7 @@ class VerificationLauncher:
         if not self.db_path.is_file():
             raise FileNotFoundError(f'DB file not found: {self.db_path}')
         _check_watch_inbox_pid(self.watch_inbox_pid)
+        _ensure_port_available(self.port)
         self.owner = Owner(
             db_path=self.db_path,
             incoming=self.incoming_dir,
@@ -197,21 +239,29 @@ def main(argv=None) -> int:
         usb=args.usb_pull,
         watch_inbox_pid=args.watch_inbox_pid,
     )
+    exit_code = 0
     launcher.start()
     try:
         if args.no_streamlit:
             while launcher.api_proc and launcher.api_proc.poll() is None:
                 time.sleep(0.5)
+            if launcher.api_proc is not None and launcher.api_proc.returncode:
+                exit_code = launcher.api_proc.returncode
         else:
             import run_pc
             if launcher.db_path != (Path.cwd() / 'manager.db').resolve():
                 raise ValueError('run_pc requires manager.db in the current working directory.')
-            run_pc.main()
+            saved_argv = sys.argv
+            sys.argv = [sys.argv[0]] + (['--usb-pull'] if args.usb_pull else [])
+            try:
+                run_pc.main()
+            finally:
+                sys.argv = saved_argv
     except KeyboardInterrupt:
         pass
     finally:
         launcher.stop()
-    return 0
+    return exit_code
 
 
 if __name__ == '__main__':
