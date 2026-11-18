@@ -508,13 +508,17 @@ internal fun sendStatusKind(item: QueueItem, currentReceiverId: String? = null, 
 internal fun reasonFromLastError(lastError: String?): String? {
     val text = lastError?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     fun after(prefixes: List<String>): String? = prefixes.firstOrNull { text.startsWith(it) }?.let { text.removePrefix(it).trim() }
+    // 詳細がすでに理由の言葉なら、そのまま使う（例「PC未接続: 接続できません」。QueueSendWorker.kt:67 が作る。
+    // classifyFailureMessage は英語の手がかりしか見ないので、渡すと「応答がありません」に化ける）
+    val known = setOf("接続できません", "合言葉が違います", "送信先の形式が違います", "応答がありません")
+    fun classify(detail: String) = if (detail in known) detail else classifyFailureMessage(detail)
     if (text.startsWith("送信先未設定")) return "送信先が未設定です"
-    after(listOf("PC未接続:", "PC未接続："))?.let { return classifyFailureMessage(it) }
+    after(listOf("PC未接続:", "PC未接続："))?.let { return classify(it) }
     after(listOf("HTTP失敗:", "追い送り失敗:"))?.let { detail ->
         return when {
             detail.contains("Image file does not exist") -> "写真のファイルが見つかりません"
             listOf("HTTP 400", "HTTP 409", "HTTP 413").any { detail.contains(it) } -> "PCが写真を受け付けませんでした"
-            else -> classifyFailureMessage(detail)
+            else -> classify(detail)
         }
     }
     return "端末への保存に失敗しました"
@@ -642,10 +646,10 @@ fun formatStartedLabel(startedAt: String, zone: ZoneId = ZoneId.systemDefault())
 |---|---|---|
 | R1 | `null` か空白 | 出さない（「理由：」の行ごと出さない） |
 | R2 | `送信先未設定`（`queue/SendRouter.kt:38`） | `送信先が未設定です` |
-| R3 | `PC未接続: <詳細>`（`queue/SendRouter.kt:43`） | `classifyFailureMessage(<詳細>)` の結果。次の4つのどれかになる: `接続できません`／`合言葉が違います`／`送信先の形式が違います`／`応答がありません` |
+| R3 | `PC未接続: <詳細>`（`queue/SendRouter.kt:43`） | 詳細が下の4語のどれかなら、その語をそのまま使う（例: `PC未接続: 接続できません` → `接続できません`。`queue/QueueSendWorker.kt:67` が作る、いちばん多い形）。それ以外は `classifyFailureMessage(<詳細>)` の結果。どちらにしても次の4つのどれかになる: `接続できません`／`合言葉が違います`／`送信先の形式が違います`／`応答がありません` |
 | R4 | `HTTP失敗: <詳細>`（`queue/SendRouter.kt:77`）・`追い送り失敗: <詳細>`（`:123`）で、詳細に `Image file does not exist` を含む（`queue/sender/HttpSender.kt:32`） | `写真のファイルが見つかりません` |
 | R5 | 同じく、詳細に `HTTP 400`・`HTTP 409`・`HTTP 413` を含む（`HttpSender.kt` の Upload／Manifest failed） | `PCが写真を受け付けませんでした` |
-| R6 | 同じく、上の2つ以外 | `classifyFailureMessage(<詳細>)` の結果（R3 と同じ4つ） |
+| R6 | 同じく、上の2つ以外 | R3 と同じ扱い（詳細が4語のどれかならそのまま、それ以外は `classifyFailureMessage(<詳細>)`） |
 | R7 | 上のどれでもない（`queue/SendRouter.kt:96-97` の送信箱への保存失敗 `Folder sender failed` や、例外の英文） | `端末への保存に失敗しました` |
 | R8 | 送信待ちで、PCにつながらない未送信の写真（`errorTextFor` の `PENDING` の分岐） | `reasonFromLastError(lastError)` が null なら、接続の理由（`health.reason`。すでに `classifyFailureMessage` 済み）。それも空なら `接続できません` |
 | R9 | PC が未着と返した写真（`inspection.pcMissingFileNames` に入っている `SENT`） | `PCで写真が見つかりません` |
@@ -968,9 +972,9 @@ val startedLabel: String = "",
 
 | PR | ブランチ | 中身 | 触るファイル | 受入条件 | 確認する画面 |
 |---|---|---|---|---|---|
-| 1 | `feat/android-gauge-1` | テーマとトークンの導入だけ | 新規 `ui/theme/GaugeTheme.kt`（4.1節のとおり）／新規 `res/values/colors.xml`（`<color name="gauge_panel">#FFE3E6E4</color>` の1つだけ）／`res/values/themes.xml`（`<item name="android:windowBackground">@color/gauge_panel</item>` を1行足す）／`ui/inspection/InspectionApp.kt:115` の `MaterialTheme {` を `GaugeTheme {` に／`ui/MeterCaptureApp.kt:104` も同じ（両方変えないと従来画面が紫に戻る） | テスト・ビルドが通る。日本語の文字列の差分が0（`git diff` に日本語の行の変更が無い）。画面の地が `#E3E6E4`、主ボタンが紺、ダイアログの地が `#F8F8F5`。紫が1か所も残らない | 点検の一覧、新しい点検、送信先の設定ダイアログ、従来の画面 |
-| 2 | `feat/android-gauge-2` | 共通部品とヘッダー・接続帯 | 新規 `ui/components/GaugeKind.kt`・`GaugeDraw.kt`・`StatusBadge.kt`・`GaugeCard.kt`・`GaugeButtons.kt`・`TickRule.kt`（4.2節）／`ui/ConnectionBar.kt`（6.2節）／`ui/inspection/InspectionScaffold.kt`（6.1節） | テスト・ビルドが通る。文言の差分0。接続帯の4状態の色が6.2節のとおり（送信先の設定を空にする・PCの受信口を止める・付ける、で確かめる）。見出しの下に目盛りの定規 | 点検の一覧（帯「接続中」「届かない」「未設定」の3枚） |
-| 3 | `feat/android-gauge-3` | **(b) 言葉をそろえる**（未着理由・台・ルート）と、送信状況の行の理由 | 5.1節の表のファイル（`ConnectionStatus.kt`・`QueueDisplay.kt`・`QueueListScreen.kt`・`MeterCaptureApp.kt`・`PairingScreen.kt`・`InspectionDisplay.kt`・`InspectionSendStatusScreen.kt`・`ConnectionGuideScreen.kt`・`InspectionCreateScreen.kt`・`RouteListScreen.kt`・`InspectionApp.kt`）／4.3節の `reasonFromLastError`・`undeliveredReason`、`errorTextFor` の書き換え／5.3節の `SendRow.reason`／5.4節のテストの期待値／テストを1つ足す: `QueueDisplayTest` に `reasonFromLastErrorMapsRawErrors`（R1〜R7 を各1行の `assertEquals`。例 `assertEquals("合言葉が違います", reasonFromLastError("PC未接続: Health check failed with HTTP 401: x"))`） | テスト・ビルドが通る。直した期待値は5.4節の行だけ。5.1節の旧文言が `ui/` に残っていない（`grep -rn "未到着\|届いていません\|届かない\|PC受信済み\|機器）\|対象一覧\|一覧外" android/app/src/main/kotlin/jp/sotuken/metercapture/ui` の結果が0行。コメントに残る旧い言葉、例えば `QueueDisplay.kt:7`・`:35`・`:53` も、2章の表に従って書き換える） | 送信状況（未着がある点検。PCを止めて完了→送信待ちで「理由：接続できません」が出る） |
+| 1 | `feat/android-gauge-1` | テーマとトークンの導入だけ | 新規 `ui/theme/GaugeTheme.kt`（4.1節のとおり）／新規 `res/values/colors.xml`（`<color name="gauge_panel">#FFE3E6E4</color>` の1つだけ）／`res/values/themes.xml`（`<item name="android:windowBackground">@color/gauge_panel</item>` を1行足す）／`ui/inspection/InspectionApp.kt:115` の `MaterialTheme {` を `GaugeTheme {` に／`ui/MeterCaptureApp.kt:104` も同じ（両方変えないと従来画面が紫に戻る） | テスト・ビルドが通る。既存ファイルの日本語の文字列リテラルに変更が無い（新規ファイルのコメントは数えない）。画面の地が `#E3E6E4`、主ボタンが紺、ダイアログの地が `#F8F8F5`。紫が1か所も残らない | 点検の一覧、新しい点検、送信先の設定ダイアログ、従来の画面 |
+| 2 | `feat/android-gauge-2` | 共通部品とヘッダー・接続帯 | 新規 `ui/components/GaugeKind.kt`・`GaugeDraw.kt`・`StatusBadge.kt`・`GaugeCard.kt`・`GaugeButtons.kt`・`TickRule.kt`（4.2節）／`ui/ConnectionBar.kt`（6.2節）／`ui/inspection/InspectionScaffold.kt`（6.1節） | テスト・ビルドが通る。既存ファイルの日本語の文字列リテラルに変更が無い。接続帯の4状態の色が6.2節のとおり（送信先の設定を空にする・PCの受信口を止める・付ける、で確かめる）。見出しの下に目盛りの定規 | 点検の一覧（帯「接続中」「届かない」「未設定」の3枚） |
+| 3 | `feat/android-gauge-3` | **(b) 言葉をそろえる**（未着理由・台・ルート）と、送信状況の行の理由 | 5.1節の表のファイル（`ConnectionStatus.kt`・`QueueDisplay.kt`・`QueueListScreen.kt`・`MeterCaptureApp.kt`・`PairingScreen.kt`・`InspectionDisplay.kt`・`InspectionSendStatusScreen.kt`・`ConnectionGuideScreen.kt`・`InspectionCreateScreen.kt`・`RouteListScreen.kt`・`InspectionApp.kt`）／4.3節の `reasonFromLastError`・`undeliveredReason`、`errorTextFor` の書き換え／5.3節の `SendRow.reason`／5.4節のテストの期待値／テストを1つ足す: `QueueDisplayTest` に `reasonFromLastErrorMapsRawErrors`（R1〜R7 を各1行の `assertEquals`。例 `assertEquals("合言葉が違います", reasonFromLastError("PC未接続: Health check failed with HTTP 401: x"))`。それに加えて `assertEquals("接続できません", reasonFromLastError("PC未接続: 接続できません"))` の1行） | テスト・ビルドが通る。直した期待値は5.4節の行だけ。5.1節の旧文言が `ui/` に残っていない。確かめ方: リポジトリ直下で `git grep -n -e 未到着 -e 届いていません -e 届かない -e PC受信済み -e "機器）" -e 対象一覧 -e 一覧外 -- android/app/src/main/kotlin/jp/sotuken/metercapture/ui` を実行し、出てよいのは M1（5.2節）の比較に使う `"PCに届かないため、写真の一覧を送れませんでした"` の1行だけ。コメントに残る旧い言葉、例えば `QueueDisplay.kt:7`・`:35`・`:53` も、2章の表に従って書き換える | 送信状況（未着がある点検。PCを止めて完了→送信待ちで「理由：接続できません」が出る） |
 | 4 | `feat/android-gauge-4` | 撮影と履歴の見た目と、**(a) 履歴の送信状態** | `ui/inspection/InspectionCaptureScreen.kt`（6.6節）／`ui/inspection/InspectionHistoryScreen.kt`（6.7節）／`ui/inspection/InspectionDisplay.kt`（`HistoryRow` の3つの引数、`buildHistoryUiState` の `currentReceiverId`）／`ui/QueueDisplay.kt`（`sendStatusKind`）／`ui/inspection/InspectionApp.kt`（`:184` に受信口IDを渡す、削除ボタン2か所）／テストを2つ足す: `QueueDisplayTest` に `sendStatusKindFollowsLabelOrder`（3.6節の表の写真の行9つを各1行で）、`HistoryUiStateTest` に `historyRowShowsSendStateWhileInProgress`（点検中の写真 → `"完了後に送信"`・`WAIT`、`receiverId = "old"` で `currentReceiverId = "new"` の写真 → `"別のPC宛て（保留）"`・`WARN`） | テスト・ビルドが通る。履歴の全行に送信状態の札が出る。未撮影の機器が破線で囲まれる。点検中の M3 の `Card`・`OutlinedButton` が撮影・履歴の画面に残っていない | 撮影（未撮影あり・保存直後）、履歴（ルートあり、写真2枚以上） |
 | 5 | `feat/android-gauge-5` | 点検の一覧・新しい点検・ルート | `ui/inspection/InspectionHomeScreen.kt`（6.3節）／`ui/inspection/InspectionDisplay.kt`（`HomeCard` の4つの引数、`inspectionBadge`・`extraBadges`・`formatStartedLabel`、`buildHomeUiState`）／`ui/inspection/InspectionCreateScreen.kt`（6.4節）／`ui/inspection/RouteListScreen.kt`（6.5節）／テストを1つ足す: `HomeUiStateTest` に `sentBadgeTurnsNeutralWhenRouteDeviceMissing`（SENT・未撮影0 → `OK` `"送信済み"`、SENT・未撮影1 → `NEUTRAL` `"送信済み（要確認あり）"` と追加の札 `MISSING` `"未撮影 1台"`、`edgeKind == MISSING`） | テスト・ビルドが通る。未撮影・未着がある点検に緑の札が出ない。カード左端が3.6節のとおり | 点検の一覧（作業中・送信待ち・送信済み・未着ありが並んだ状態）、新しい点検、ルート |
 | 6 | `feat/android-gauge-6` | 完了確認・送信状況・接続の案内 | `ui/inspection/InspectionCompleteScreen.kt`（6.8節）／`ui/inspection/InspectionSendStatusScreen.kt`（6.9節）／`ui/inspection/ConnectionGuideScreen.kt`（6.10節）／テストを1つ足す: `SendStatusUiStateTest` に `incompleteBadgeAndMissingRowAreWarn`（SENT_INCOMPLETE → `badgeKind == WARN`、PC未着の行 → `kind == WARN`・`reason == "PCで写真が見つかりません"`） | テスト・ビルドが通る。この3画面に M3 の `Card`・`OutlinedCard`・素の `Button` が残っていない | 完了確認（注意あり）、送信状況（送信済み・未着あり）、接続の案内 |
