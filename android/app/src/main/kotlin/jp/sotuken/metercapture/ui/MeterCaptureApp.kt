@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import jp.sotuken.metercapture.ui.theme.GaugeTheme
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -101,7 +102,7 @@ fun MeterCaptureApp(queueStore: QueueStore, health: ReceiverHealthState = rememb
         .maxByOrNull { it.capturedAt }
         ?.lastError
 
-    MaterialTheme {
+    GaugeTheme {
         Scaffold { innerPadding ->
             Column(
                 modifier = Modifier
