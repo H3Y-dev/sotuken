@@ -1,4 +1,4 @@
-import http.client
+﻿import http.client
 import json
 from pathlib import Path
 import sqlite3
@@ -77,6 +77,18 @@ class PCDevicesTests(unittest.TestCase):
         raw = json.dumps(body).encode('utf-8') if isinstance(body, (dict, list)) else body
         status, parsed, _ = self._raw_request(path, method=method, headers=req_headers, body=raw)
         return status, parsed
+
+    def test_rejected_requests_with_body_return_complete_json(self):
+        cases = [
+            ({'Cookie': self.cookie, 'Origin': self.origin, 'Content-Type': 'application/json'}, 403),
+            ({'Cookie': self.cookie, 'Origin': 'http://evil.example', 'X-CSRF-Token': self.csrf, 'Content-Type': 'application/json'}, 403),
+            ({'Cookie': self.cookie, 'Origin': self.origin, 'X-CSRF-Token': self.csrf, 'Content-Type': 'text/plain'}, 400),
+        ]
+        for _ in range(10):
+            for headers, expected in cases:
+                status, body, _ = self._raw_request('/api/v1/devices', 'POST', headers, b'{}')
+                self.assertEqual(status, expected)
+                self.assertIn('error', body)
 
     def test_list_devices_empty_binary_order_and_limit_1000(self):
         status, body = self._authed('/api/v1/devices')
@@ -368,3 +380,4 @@ class PCDevicesTests(unittest.TestCase):
                 conn_http.close()
         finally:
             launcher.stop()
+

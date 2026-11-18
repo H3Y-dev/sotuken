@@ -351,6 +351,7 @@ class PCAPI:
 
             def handle_api(self):
                 set_cookie = None
+                body_read = 0
                 try:
                     if (self.headers.get_all('Host', []) != [f'127.0.0.1:{api.port}']
                             or any(h in self.headers for h in ('Forwarded', 'X-Forwarded-Host', 'X-Forwarded-For', 'X-Forwarded-Proto'))
@@ -369,8 +370,11 @@ class PCAPI:
                         raise APIError(413, 'too_large')
                     def read_json_body():
                         try:
+                            nonlocal body_read
+                            raw = self.rfile.read(int(length))
+                            body_read = len(raw)
                             return json.loads(
-                                self.rfile.read(int(length)).decode('utf-8'),
+                                raw.decode('utf-8'),
                                 object_pairs_hook=_no_duplicate_keys,
                             )
                         except (ValueError, UnicodeError):
@@ -434,6 +438,32 @@ class PCAPI:
                 except Exception:
                     # Unexpected: no detail to the client (no paths, keys, or messages).
                     status, body, mime = 500, {'error':{'code':'internal_error', 'message':'internal_error', 'request_id':secrets.token_hex(8)}}, None
+                if status >= 400:
+                    try:
+                        lengths = self.headers.get_all('Content-Length', [])
+                        if len(lengths) == 1 and not self.headers.get('Transfer-Encoding'):
+                            remaining = int(lengths[0]) - body_read
+                            if 0 < remaining <= 1024 * 1024:
+                                deadline = time.monotonic() + 1.0
+                                while remaining > 0:
+                                    timeout = deadline - time.monotonic()
+                                    if timeout <= 0:
+                                        break
+                                    self.connection.settimeout(timeout)
+                                    try:
+                                        chunk = self.rfile.read1(min(65536, remaining))
+                                    except OSError:
+                                        timeout = deadline - time.monotonic()
+                                        if timeout <= 0:
+                                            break
+                                        self.connection.settimeout(timeout)
+                                        chunk = self.connection.recv(min(65536, remaining))
+                                    if not chunk:
+                                        break
+                                    remaining -= len(chunk)
+                    except (ValueError, OSError):
+                        pass
+                self.connection.settimeout(None)
                 data = b'' if body is None else body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8')
                 self.send_response(status)
                 self.send_header('Content-Length', str(len(data)))
