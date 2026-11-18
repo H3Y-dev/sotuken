@@ -260,7 +260,8 @@ class ServerTests(unittest.TestCase):
                 self.assertTrue(runtime['receiver_running'])
                 self.assertEqual(runtime['owner_instance_id'],owner.instance_id)
                 self.assertFalse(self.request('/api/v1/usb/status')[1]['enabled'])
-                status, inactive, _ = self.request('/api/v1/pairing','POST',body='{}')
+                json_hdr = {'Content-Type': 'application/json'}
+                status, inactive, _ = self.request('/api/v1/pairing','POST',headers=json_hdr,body='{}')
                 self.assertEqual(status,200)
                 self.assertPairingShape(inactive, active=False)
                 receiver.start_pairing.assert_called_once_with(info['url'])
@@ -270,9 +271,9 @@ class ServerTests(unittest.TestCase):
                 self.assertPairingShape(active, active=True)
                 self.assertEqual((active['payload'], active['expires_at'], active['remaining_seconds']),
                                  ('SOTUKEN-PAIR:sample', 123, 10))
-                self.assertEqual(self.request('/api/v1/pairing','POST',body='{}')[0],409)
-                self.assertEqual(self.request('/api/v1/pairing','POST',body='{"url":"evil"}')[0],400)
-                self.assertEqual(self.request('/api/v1/pairing','DELETE')[0],204)
+                self.assertEqual(self.request('/api/v1/pairing','POST',headers=json_hdr,body='{}')[0],409)
+                self.assertEqual(self.request('/api/v1/pairing','POST',headers=json_hdr,body='{"url":"evil"}')[0],400)
+                self.assertEqual(self.request('/api/v1/pairing','DELETE',headers=json_hdr,body='{}')[0],204)
                 receiver.cancel_pairing.assert_called()
                 owner.usb = Mock()
                 owner.usb.status.return_value = {'running':True,'devices':['test']}
@@ -368,6 +369,44 @@ class ServerTests(unittest.TestCase):
             server.main()
         self.assertEqual(stopped.exception.code, 2)
         self.assertFalse((self.root / 'none.db').exists())
+
+    def test_launch_key_out_requires_existing_file_and_print_url_guards_stdout(self):
+        key_file = self.root / 'internal.key'
+        key_file.write_text('secret', encoding='utf-8')
+        missing_out = self.root / 'missing-launch.key'
+        base_args = [
+            'pc_api.server',
+            '--db', str(self.db),
+            '--incoming-dir', str(self.root),
+            '--images-dir', str(self.images),
+            '--overlays-dir', str(self.root),
+            '--internal-key-file', str(key_file),
+            '--port', '0',
+        ]
+        with patch.object(sys, 'argv', base_args + ['--launch-key-out', str(missing_out)]), \
+                patch('sys.stderr'), self.assertRaises(SystemExit) as stopped:
+            server.main()
+        self.assertEqual(stopped.exception.code, 2)
+        self.assertFalse(missing_out.exists())
+
+        fake_api = Mock()
+        fake_api.port = 8766
+        fake_api.sessions.issue_launch_key.return_value = 'test-launch-key'
+        import io
+        buf = io.StringIO()
+        with patch.object(sys, 'argv', base_args), \
+                patch.object(server, 'PCAPI', return_value=fake_api), \
+                patch('sys.stdout', buf):
+            server.main()
+        self.assertNotIn('test-launch-key', buf.getvalue())
+        self.assertIn('起動URLは対話端末でのみ表示します。--print-url で明示表示', buf.getvalue())
+
+        buf_print = io.StringIO()
+        with patch.object(sys, 'argv', base_args + ['--print-url']), \
+                patch.object(server, 'PCAPI', return_value=fake_api), \
+                patch('sys.stdout', buf_print):
+            server.main()
+        self.assertIn('http://127.0.0.1:8766/#k=test-launch-key', buf_print.getvalue())
 
     def test_api_reads_during_ingest(self):
         # Phase 1: the writer holds the DB (journal_mode=delete) -> 503 db_busy, then a retry sees the row.

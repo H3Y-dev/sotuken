@@ -128,6 +128,7 @@ class VerificationLauncher:
         owner_port=8767,
         usb=False,
         watch_inbox_pid=None,
+        print_url=False,
     ):
         self.db_path = Path(db_path).resolve()
         self.incoming_dir = Path(incoming_dir).resolve()
@@ -138,6 +139,7 @@ class VerificationLauncher:
         self.owner_port = int(owner_port)
         self.usb = bool(usb)
         self.watch_inbox_pid = watch_inbox_pid
+        self.print_url = bool(print_url)
         self.owner: Owner | None = None
         self.api_proc: subprocess.Popen | None = None
         self.launch_url: str | None = None
@@ -189,7 +191,10 @@ class VerificationLauncher:
                 _wait_tcp(self.port, self.api_proc)
                 launch_key = launch_key_file.read_text(encoding='utf-8').strip()
                 self.launch_url = f'http://127.0.0.1:{self.port}/#k={launch_key}'
-                print(self.launch_url, flush=True)
+                if self.print_url or sys.stdout.isatty():
+                    print(self.launch_url, flush=True)
+                else:
+                    print('起動URLは対話端末でのみ表示します。--print-url で明示表示', flush=True)
         except BaseException:
             self.stop()
             raise
@@ -234,6 +239,7 @@ def main(argv=None) -> int:
     parser.add_argument('--usb-pull', action='store_true')
     parser.add_argument('--no-streamlit', action='store_true')
     parser.add_argument('--watch-inbox-pid', type=int, default=None)
+    parser.add_argument('--print-url', action='store_true')
     args = parser.parse_args(argv)
 
     launcher = VerificationLauncher(
@@ -246,6 +252,7 @@ def main(argv=None) -> int:
         owner_port=args.owner_port,
         usb=args.usb_pull,
         watch_inbox_pid=args.watch_inbox_pid,
+        print_url=args.print_url,
     )
     exit_code = 0
     launcher.start()

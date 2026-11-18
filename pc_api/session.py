@@ -51,13 +51,13 @@ class SessionStore:
         self._sessions: dict[str, tuple[str, float]] = {}
 
     def _prune_expired(self, now: float) -> None:
-        self._launch_keys = {k: exp for k, exp in self._launch_keys.items() if now <= exp}
-        self._sessions = {sid: pair for sid, pair in self._sessions.items() if now <= pair[1]}
+        self._launch_keys = {k: exp for k, exp in self._launch_keys.items() if now < exp}
+        self._sessions = {sid: pair for sid, pair in self._sessions.items() if now < pair[1]}
 
     def issue_launch_key(self) -> str:
         key = secrets.token_hex(32)
-        now = self._clock()
         with self._lock:
+            now = self._clock()
             self._prune_expired(now)
             self._launch_keys[key] = now + self._launch_ttl
         return key
@@ -66,8 +66,8 @@ class SessionStore:
         """Consume a valid launch key in constant time and create a (session_id, csrf_token)."""
         if not isinstance(launch_key, str) or not launch_key or not launch_key.isascii():
             return None
-        now = self._clock()
         with self._lock:
+            now = self._clock()
             matched_key: str | None = None
             matched_exp = 0.0
             for candidate, exp in list(self._launch_keys.items()):
@@ -77,7 +77,7 @@ class SessionStore:
             if matched_key is None:
                 return None
             del self._launch_keys[matched_key]
-            if now > matched_exp:
+            if now >= matched_exp:
                 return None
             session_id = secrets.token_hex(32)
             csrf_token = secrets.token_hex(32)
@@ -88,8 +88,8 @@ class SessionStore:
         """Return the CSRF token for an active, unexpired session, else None."""
         if not isinstance(session_id, str) or not session_id or not session_id.isascii():
             return None
-        now = self._clock()
         with self._lock:
+            now = self._clock()
             matched_sid: str | None = None
             matched_pair: tuple[str, float] | None = None
             for candidate, pair in list(self._sessions.items()):
@@ -99,7 +99,7 @@ class SessionStore:
             if matched_sid is None or matched_pair is None:
                 return None
             csrf_token, exp = matched_pair
-            if now > exp:
+            if now >= exp:
                 del self._sessions[matched_sid]
                 return None
             return csrf_token

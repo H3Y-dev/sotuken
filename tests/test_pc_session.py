@@ -94,7 +94,7 @@ class PCSessionTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
         expired_key = self.api.sessions.issue_launch_key()
-        self.clock.advance(60.001)
+        self.clock.advance(60.0)
         status, body, _, _ = self.exchange(expired_key)
         self.assertEqual(status, 401)
         self.assertEqual(body['error']['code'], 'unauthenticated')
@@ -153,10 +153,25 @@ class PCSessionTests(unittest.TestCase):
         _, body, _, set_cookies = self.exchange(key)
         cookie = self.cookie_pair(set_cookies)
 
+        # DELETE without Content-Type: application/json or empty body is rejected.
+        for headers, req_body in (
+            ({'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token']}, b'{}'),
+            ({'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token'], 'Content-Type': 'application/json'}, None),
+        ):
+            status, err, _, _ = self.request('/api/v1/session', method='DELETE', headers=headers, body=req_body)
+            self.assertEqual(status, 400)
+            self.assertEqual(err['error']['code'], 'invalid_request')
+
         status, del_body, _, del_cookies = self.request(
             '/api/v1/session',
             method='DELETE',
-            headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token']},
+            headers={
+                'Origin': self.origin,
+                'Cookie': cookie,
+                'X-CSRF-Token': body['csrf_token'],
+                'Content-Type': 'application/json',
+            },
+            body=b'{}',
         )
         self.assertEqual(status, 204)
         self.assertEqual(del_body, b'')
@@ -170,7 +185,13 @@ class PCSessionTests(unittest.TestCase):
         status, err, _, _ = self.request(
             '/api/v1/session',
             method='DELETE',
-            headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token']},
+            headers={
+                'Origin': self.origin,
+                'Cookie': cookie,
+                'X-CSRF-Token': body['csrf_token'],
+                'Content-Type': 'application/json',
+            },
+            body=b'{}',
         )
         self.assertEqual(status, 401)
         self.assertEqual(err['error']['code'], 'unauthenticated')
@@ -185,7 +206,7 @@ class PCSessionTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(restored['csrf_token'], body['csrf_token'])
 
-        self.clock.advance(0.2)
+        self.clock.advance(0.1)
         status, err, _, _ = self.request('/api/v1/session', method='GET', headers={'Cookie': cookie})
         self.assertEqual(status, 401)
         self.assertEqual(err['error']['code'], 'unauthenticated')
@@ -220,10 +241,29 @@ class PCSessionTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(err['error']['code'], 'forbidden_origin')
 
+        status, err, _, _ = self.request(
+            '/api/v1/pairing',
+            method='POST',
+            headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token'], 'Content-Type': 'text/plain'},
+            body=b'{}',
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(err['error']['code'], 'invalid_request')
+
         status, _, _, _ = self.request(
             '/api/v1/pairing',
             method='POST',
-            headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token']},
+            headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token'], 'Content-Type': 'application/json'},
             body=b'{}',
         )
-        self.assertNotIn(status, (401, 403))
+        self.assertNotIn(status, (400, 401, 403))
+
+        for method in ('PUT', 'PATCH', 'DELETE'):
+            status, err, _, _ = self.request(
+                '/api/v1/pairing',
+                method=method,
+                headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token'], 'Content-Type': 'text/plain'},
+                body=b'{}',
+            )
+            self.assertEqual(status, 400)
+            self.assertEqual(err['error']['code'], 'invalid_request')

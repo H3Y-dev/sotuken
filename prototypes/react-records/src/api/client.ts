@@ -185,7 +185,7 @@ export function startPairing(): Promise<PairingStatus> {
 }
 
 export async function cancelPairing(): Promise<void> {
-  await apiRequest("/api/v1/pairing", { method: "DELETE" });
+  await apiRequest("/api/v1/pairing", { method: "DELETE", body: "{}" });
 }
 
 export function fetchUsbStatus(signal?: AbortSignal): Promise<UsbStatus> {
