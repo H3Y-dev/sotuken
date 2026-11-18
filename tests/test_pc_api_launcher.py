@@ -1,3 +1,4 @@
+from contextlib import redirect_stdout
 import http.client
 import io
 import json
@@ -62,11 +63,18 @@ class LauncherTests(unittest.TestCase):
                 port=port,
                 owner_port=0,
             )
-            launcher.start()
+            stdout_buf = io.StringIO()
+            with redirect_stdout(stdout_buf):
+                launcher.start()
             self.addCleanup(launcher.stop)
 
             self.assertIsNotNone(launcher.api_proc)
             self.assertIsNone(launcher.api_proc.poll())
+            self.assertIsNotNone(launcher.launch_url)
+            self.assertTrue(launcher.launch_url.startswith(f'http://127.0.0.1:{port}/#k='))
+            self.assertNotIn(launcher.launch_url, stdout_buf.getvalue())
+            self.assertIn('起動URLは対話端末でのみ表示します。--print-url で明示表示', stdout_buf.getvalue())
+            launch_key = launcher.launch_url.split('#k=', 1)[1]
 
             conn = http.client.HTTPConnection('127.0.0.1', port, timeout=3)
             try:
@@ -74,13 +82,27 @@ class LauncherTests(unittest.TestCase):
                 res = conn.getresponse()
                 html = res.read().decode('utf-8')
                 self.assertEqual(res.status, 200)
-                self.assertIn('<meta name="pc-token" content="', html)
-                token = html.split('<meta name="pc-token" content="', 1)[1].split('"', 1)[0]
+                self.assertNotIn('<meta name="pc-token"', html)
+
+                conn.request(
+                    'POST',
+                    '/api/v1/session',
+                    body=json.dumps({'launch_key': launch_key}).encode('utf-8'),
+                    headers={
+                        'Host': f'127.0.0.1:{port}',
+                        'Origin': f'http://127.0.0.1:{port}',
+                        'Content-Type': 'application/json',
+                    },
+                )
+                sess_res = conn.getresponse()
+                sess_res.read()
+                self.assertEqual(sess_res.status, 200)
+                cookie = sess_res.getheader('Set-Cookie').split(';', 1)[0]
 
                 conn.request(
                     'GET',
                     '/api/v1/runtime',
-                    headers={'Host': f'127.0.0.1:{port}', 'X-PC-Token': token},
+                    headers={'Host': f'127.0.0.1:{port}', 'Cookie': cookie},
                 )
                 rt_res = conn.getresponse()
                 rt_body = json.loads(rt_res.read())
@@ -199,6 +221,45 @@ class LauncherTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     _write_private_key_file(key_dir, 'secret-key')
                 self.assertFalse((key_dir / 'owner-key.txt').exists())
+
+    def test_print_url_flag_and_tty_control_launch_url_output(self):
+        receiver = Mock()
+        receiver.pairing_status.return_value = None
+        info = dict(running=True, server=receiver, thread=None, url='http://127.0.0.1:8765', external_process=False)
+        port = _free_port()
+        with patch('pc_api.owner.init_receiver_for_app', return_value=info):
+            launcher = VerificationLauncher(
+                db_path=self.db,
+                incoming_dir=self.incoming,
+                images_dir=self.images,
+                overlays_dir=self.overlays,
+                static_dir=self.static,
+                port=port,
+                owner_port=0,
+                print_url=True,
+            )
+            stdout_buf = io.StringIO()
+            with redirect_stdout(stdout_buf):
+                launcher.start()
+            self.addCleanup(launcher.stop)
+            self.assertIn(launcher.launch_url, stdout_buf.getvalue())
+            launcher.stop()
+
+            tty_buf = io.StringIO()
+            tty_buf.isatty = lambda: True
+            launcher_tty = VerificationLauncher(
+                db_path=self.db,
+                incoming_dir=self.incoming,
+                images_dir=self.images,
+                overlays_dir=self.overlays,
+                static_dir=self.static,
+                port=_free_port(),
+                owner_port=0,
+            )
+            with redirect_stdout(tty_buf):
+                launcher_tty.start()
+            self.addCleanup(launcher_tty.stop)
+            self.assertIn(launcher_tty.launch_url, tty_buf.getvalue())
 
 
 if __name__ == '__main__':

@@ -21,8 +21,8 @@ from pc_api.owner import Owner
 DEFAULT_STATIC_DIR = Path(__file__).resolve().parent / 'static'
 
 
-def _write_private_key_file(directory: Path, key: str) -> Path:
-    key_path = directory / 'owner-key.txt'
+def _write_private_key_file(directory: Path, key: str, filename: str = 'owner-key.txt') -> Path:
+    key_path = directory / filename
     fd = os.open(str(key_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         os.write(fd, key.encode('utf-8'))
@@ -128,6 +128,7 @@ class VerificationLauncher:
         owner_port=8767,
         usb=False,
         watch_inbox_pid=None,
+        print_url=False,
     ):
         self.db_path = Path(db_path).resolve()
         self.incoming_dir = Path(incoming_dir).resolve()
@@ -138,8 +139,10 @@ class VerificationLauncher:
         self.owner_port = int(owner_port)
         self.usb = bool(usb)
         self.watch_inbox_pid = watch_inbox_pid
+        self.print_url = bool(print_url)
         self.owner: Owner | None = None
         self.api_proc: subprocess.Popen | None = None
+        self.launch_url: str | None = None
 
     def start(self) -> None:
         if not self.db_path.is_file():
@@ -156,6 +159,7 @@ class VerificationLauncher:
         try:
             with tempfile.TemporaryDirectory(prefix='sotuken-key-') as key_dir:
                 key_file = _write_private_key_file(Path(key_dir), self.owner.internal_key)
+                launch_key_file = _write_private_key_file(Path(key_dir), '', 'launch-key.txt')
                 cmd = [
                     sys.executable,
                     '-m',
@@ -174,6 +178,8 @@ class VerificationLauncher:
                     str(self.owner.port),
                     '--internal-key-file',
                     str(key_file),
+                    '--launch-key-out',
+                    str(launch_key_file),
                 ]
                 if self.static_dir and self.static_dir.is_dir():
                     cmd.extend(['--static-dir', str(self.static_dir)])
@@ -183,6 +189,12 @@ class VerificationLauncher:
                 env['PYTHONPATH'] = f'{repo_root}{os.pathsep}{existing_pp}' if existing_pp else repo_root
                 self.api_proc = subprocess.Popen(cmd, cwd=str(self.db_path.parent), env=env)
                 _wait_tcp(self.port, self.api_proc)
+                launch_key = launch_key_file.read_text(encoding='utf-8').strip()
+                self.launch_url = f'http://127.0.0.1:{self.port}/#k={launch_key}'
+                if self.print_url or sys.stdout.isatty():
+                    print(self.launch_url, flush=True)
+                else:
+                    print('起動URLは対話端末でのみ表示します。--print-url で明示表示', flush=True)
         except BaseException:
             self.stop()
             raise
@@ -198,6 +210,7 @@ class VerificationLauncher:
                         self.api_proc.kill()
                         self.api_proc.wait(timeout=5)
                 self.api_proc = None
+                self.launch_url = None
         finally:
             if self.owner is not None:
                 self.owner.stop()
@@ -226,6 +239,7 @@ def main(argv=None) -> int:
     parser.add_argument('--usb-pull', action='store_true')
     parser.add_argument('--no-streamlit', action='store_true')
     parser.add_argument('--watch-inbox-pid', type=int, default=None)
+    parser.add_argument('--print-url', action='store_true')
     args = parser.parse_args(argv)
 
     launcher = VerificationLauncher(
@@ -238,6 +252,7 @@ def main(argv=None) -> int:
         owner_port=args.owner_port,
         usb=args.usb_pull,
         watch_inbox_pid=args.watch_inbox_pid,
+        print_url=args.print_url,
     )
     exit_code = 0
     launcher.start()

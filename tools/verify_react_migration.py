@@ -331,6 +331,7 @@ def run_verification(screenshots_dir: Path | None = None) -> dict:
 
             with tempfile.TemporaryDirectory(prefix="sotuken-key-") as key_dir:
                 key_file = _write_private_key_file(Path(key_dir), owner.internal_key)
+                launch_key_file = _write_private_key_file(Path(key_dir), "", "launch-key.txt")
                 env = os.environ.copy()
                 existing_pp = env.get("PYTHONPATH", "")
                 env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{existing_pp}" if existing_pp else str(REPO_ROOT)
@@ -355,11 +356,14 @@ def run_verification(screenshots_dir: Path | None = None) -> dict:
                         str(owner.port),
                         "--internal-key-file",
                         str(key_file),
+                        "--launch-key-out",
+                        str(launch_key_file),
                     ],
                     cwd=str(root),
                     env=env,
                 )
                 _wait_tcp(api_port, api_proc)
+                launch_key = launch_key_file.read_text(encoding="utf-8").strip()
 
             chrome_proc = subprocess.Popen(
                 [
@@ -369,7 +373,7 @@ def run_verification(screenshots_dir: Path | None = None) -> dict:
                     f"--user-data-dir={profile_dir}",
                     "--no-sandbox",
                     "--disable-gpu",
-                    f"http://127.0.0.1:{api_port}/",
+                    f"http://127.0.0.1:{api_port}/#k={launch_key}",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -393,19 +397,23 @@ def run_verification(screenshots_dir: Path | None = None) -> dict:
                 label="initial readings render",
             )
 
-            # Check security boundaries: no token leak in storage/URL
+            # Check security boundaries: no token leak in storage/URL/meta and fragment cleared
             sec_check = cdp.eval(
-                """(() => ({
+                f"""(() => ({{
                     localStorageLen: localStorage.length,
                     sessionStorageLen: sessionStorage.length,
-                    hrefHasToken: location.href.includes(document.querySelector('meta[name="pc-token"]')?.content || 'X'),
+                    hasPcTokenMeta: Boolean(document.querySelector('meta[name="pc-token"]')),
+                    locationHash: location.hash,
+                    hrefHasLaunchKey: location.href.includes({json.dumps(launch_key)}),
                     latestIds: [...document.querySelectorAll('[data-reading-id]')].map(e => e.getAttribute('data-reading-id')),
                     historyIds: [...document.querySelectorAll('[data-history-id]')].map(e => e.getAttribute('data-history-id')),
-                }))()"""
+                }}))()"""
             )
             assert sec_check["localStorageLen"] == 0
             assert sec_check["sessionStorageLen"] == 0
-            assert not sec_check["hrefHasToken"]
+            assert not sec_check["hasPcTokenMeta"]
+            assert sec_check["locationHash"] == ""
+            assert not sec_check["hrefHasLaunchKey"]
             assert sec_check["latestIds"] == [str(r["id"]) for r in py_latest], (
                 f"Mismatch latestIds {sec_check['latestIds']} vs {[str(r['id']) for r in py_latest]}"
             )
@@ -704,6 +712,24 @@ def run_verification(screenshots_dir: Path | None = None) -> dict:
                         errors.append(entry)
 
             assert not errors, f"Browser/CSP errors detected: {errors}"
+
+            # 6. Verify reload restores session via GET /api/v1/session, and cleared session shows 401 guidance
+            cdp.call("Page.reload")
+            wait_until(
+                lambda: cdp.eval("document.querySelectorAll('[data-reading-id]').length >= 4"),
+                timeout=8.0,
+                label="reload session restore",
+            )
+            cdp.call("Network.enable")
+            cdp.call("Network.clearBrowserCookies")
+            cdp.call("Page.reload")
+            wait_until(
+                lambda: cdp.eval(
+                    "Boolean(document.querySelector('[data-testid=\"session-error\"]')?.textContent?.includes('再起動してURLを開き直してください'))"
+                ),
+                timeout=8.0,
+                label="unauthenticated 401 guidance",
+            )
 
             return {
                 "parity_latest_count": len(py_latest),

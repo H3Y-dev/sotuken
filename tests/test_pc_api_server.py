@@ -53,13 +53,19 @@ class ServerTests(unittest.TestCase):
         self.api = PCAPI(self.db, image_dirs=[self.images], port=0)
         self.api.start()
         self.addCleanup(self.api.stop)
+        sid, csrf = self.api.sessions.exchange_launch_key(self.api.sessions.issue_launch_key())
+        self.session_cookie = f'pc_session={sid}'
+        self.csrf_token = csrf
 
     def request(self, path='/api/v1/readings', method='GET', headers=None, body=None, auth=True):
         conn = http.client.HTTPConnection('127.0.0.1', self.api.port, timeout=3)
         try:
             headers = dict(headers or {})
             if auth:
-                headers.setdefault('X-PC-Token', self.api.token)
+                headers.setdefault('Cookie', self.session_cookie)
+                if method not in ('GET', 'HEAD'):
+                    headers.setdefault('Origin', f'http://127.0.0.1:{self.api.port}')
+                    headers.setdefault('X-CSRF-Token', self.csrf_token)
             conn.request(method, path, body=body, headers=headers)
             response = conn.getresponse()
             data = response.read()
@@ -69,8 +75,8 @@ class ServerTests(unittest.TestCase):
             conn.close()
 
     def test_authentication(self):
-        for headers in ({}, {'X-PC-Token':'wrong'}, {'X-Sotuken-Token':self.api.token},
-                        {'X-PC-Token':self.api.token, 'X-Sotuken-Token':'phone'}):
+        for headers in ({}, {'Cookie': 'pc_session=wrong'}, {'X-Sotuken-Token': 'phone'},
+                        {'Cookie': self.session_cookie, 'X-Sotuken-Token': 'phone'}):
             status, body, _ = self.request(headers=headers, auth=False)
             self.assertEqual(status, 401)
             self.assertEqual(body['error']['code'], 'unauthenticated')
@@ -205,7 +211,7 @@ class ServerTests(unittest.TestCase):
     def test_static_and_token(self):
         status, body, headers = self.request('/',auth=False)
         self.assertEqual(status,200)
-        self.assertIn(self.api.token.encode(),body)
+        self.assertNotIn(b'pc-token',body)
         self.assertNotIn(b'X-Internal',body)
         self.assertIn("frame-ancestors 'none'",headers['Content-Security-Policy'])
         static = self.root/'dist'
@@ -254,7 +260,8 @@ class ServerTests(unittest.TestCase):
                 self.assertTrue(runtime['receiver_running'])
                 self.assertEqual(runtime['owner_instance_id'],owner.instance_id)
                 self.assertFalse(self.request('/api/v1/usb/status')[1]['enabled'])
-                status, inactive, _ = self.request('/api/v1/pairing','POST',body='{}')
+                json_hdr = {'Content-Type': 'application/json'}
+                status, inactive, _ = self.request('/api/v1/pairing','POST',headers=json_hdr,body='{}')
                 self.assertEqual(status,200)
                 self.assertPairingShape(inactive, active=False)
                 receiver.start_pairing.assert_called_once_with(info['url'])
@@ -264,9 +271,9 @@ class ServerTests(unittest.TestCase):
                 self.assertPairingShape(active, active=True)
                 self.assertEqual((active['payload'], active['expires_at'], active['remaining_seconds']),
                                  ('SOTUKEN-PAIR:sample', 123, 10))
-                self.assertEqual(self.request('/api/v1/pairing','POST',body='{}')[0],409)
-                self.assertEqual(self.request('/api/v1/pairing','POST',body='{"url":"evil"}')[0],400)
-                self.assertEqual(self.request('/api/v1/pairing','DELETE')[0],204)
+                self.assertEqual(self.request('/api/v1/pairing','POST',headers=json_hdr,body='{}')[0],409)
+                self.assertEqual(self.request('/api/v1/pairing','POST',headers=json_hdr,body='{"url":"evil"}')[0],400)
+                self.assertEqual(self.request('/api/v1/pairing','DELETE',headers=json_hdr,body='{}')[0],204)
                 receiver.cancel_pairing.assert_called()
                 owner.usb = Mock()
                 owner.usb.status.return_value = {'running':True,'devices':['test']}
@@ -287,12 +294,12 @@ class ServerTests(unittest.TestCase):
 
     def test_host_variants_and_proxy_headers(self):
         host = f'Host: 127.0.0.1:{self.api.port}'
-        token = f'X-PC-Token: {self.api.token}'
+        cookie = f'Cookie: {self.session_cookie}'
         get = 'GET /api/v1/readings HTTP/1.1'
-        self.assertEqual(self.raw(get, host, token, 'Connection: close'), 200)
-        self.assertEqual(self.raw(get, host, host, token, 'Connection: close'), 403)
-        self.assertEqual(self.raw(get, host, 'Host: evil.example', token, 'Connection: close'), 403)
-        self.assertEqual(self.raw(get, 'Host: 127.0.0.1', token, 'Connection: close'), 403)
+        self.assertEqual(self.raw(get, host, cookie, 'Connection: close'), 200)
+        self.assertEqual(self.raw(get, host, host, cookie, 'Connection: close'), 403)
+        self.assertEqual(self.raw(get, host, 'Host: evil.example', cookie, 'Connection: close'), 403)
+        self.assertEqual(self.raw(get, 'Host: 127.0.0.1', cookie, 'Connection: close'), 403)
         self.assertEqual(self.request(headers={'Host':'127.0.0.1'})[0], 403)
         self.assertEqual(self.request(headers={'Host':f'127.0.0.1:{self.api.port + 1}'})[0], 403)
         for name, value in (('X-Forwarded-For','10.0.0.1'), ('X-Forwarded-Proto','https')):
@@ -362,6 +369,44 @@ class ServerTests(unittest.TestCase):
             server.main()
         self.assertEqual(stopped.exception.code, 2)
         self.assertFalse((self.root / 'none.db').exists())
+
+    def test_launch_key_out_requires_existing_file_and_print_url_guards_stdout(self):
+        key_file = self.root / 'internal.key'
+        key_file.write_text('secret', encoding='utf-8')
+        missing_out = self.root / 'missing-launch.key'
+        base_args = [
+            'pc_api.server',
+            '--db', str(self.db),
+            '--incoming-dir', str(self.root),
+            '--images-dir', str(self.images),
+            '--overlays-dir', str(self.root),
+            '--internal-key-file', str(key_file),
+            '--port', '0',
+        ]
+        with patch.object(sys, 'argv', base_args + ['--launch-key-out', str(missing_out)]), \
+                patch('sys.stderr'), self.assertRaises(SystemExit) as stopped:
+            server.main()
+        self.assertEqual(stopped.exception.code, 2)
+        self.assertFalse(missing_out.exists())
+
+        fake_api = Mock()
+        fake_api.port = 8766
+        fake_api.sessions.issue_launch_key.return_value = 'test-launch-key'
+        import io
+        buf = io.StringIO()
+        with patch.object(sys, 'argv', base_args), \
+                patch.object(server, 'PCAPI', return_value=fake_api), \
+                patch('sys.stdout', buf):
+            server.main()
+        self.assertNotIn('test-launch-key', buf.getvalue())
+        self.assertIn('起動URLは対話端末でのみ表示します。--print-url で明示表示', buf.getvalue())
+
+        buf_print = io.StringIO()
+        with patch.object(sys, 'argv', base_args + ['--print-url']), \
+                patch.object(server, 'PCAPI', return_value=fake_api), \
+                patch('sys.stdout', buf_print):
+            server.main()
+        self.assertIn('http://127.0.0.1:8766/#k=test-launch-key', buf_print.getvalue())
 
     def test_api_reads_during_ingest(self):
         # Phase 1: the writer holds the DB (journal_mode=delete) -> 503 db_busy, then a retry sees the row.

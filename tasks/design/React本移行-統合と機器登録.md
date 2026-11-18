@@ -71,6 +71,8 @@ Go後、①で書き込みAPIを公開する前に入れる。先に共通の認
 
 対象は `pc_api/server.py`、`pc_api/launcher.py`、Reactの起動処理とAPIクライアント。正本第9節の `/session` を既存API接頭辞に合わせ `/api/v1/session` に置く。POSTは同一OriginのJSON `{launch_key:string}` を受け、ランチャーがfragmentで渡した一回限りの60秒鍵を定数時間比較で交換する。画面はfragmentを読み取った直後に `history.replaceState` で消す。応答は200 `{csrf_token:string}` とHttpOnly、SameSite=Strict、Path=/のセッションCookie。GETは200でCSRFトークンを復元し、DELETEは同一Origin・CSRF付きで204、Cookie削除とサーバー側失効を行う。期限は8時間またはAPI終了の早い方。失効・期限切れ・無効鍵は401 `unauthenticated`。Origin・CSRF不一致は403 `forbidden_origin`。既存のPC側読み取りと画像取得、pairing変更にも共通境界を適用し、スマホ受信口とowner内部認証は従来どおり。HTMLへのPCトークン注入を削除する。カーソルと60秒スナップショットは履歴のページングを本番化する②で扱う。①の一覧契約は下記の上限付き全件取得とする。
 
+既知の制約（2026-11-18 メイン判断）: Cookieはポートで分離されないため、`pc_session` は同じ `127.0.0.1` の別ポート（受信口8765・owner 8767）にも送られる。いずれも本システムの自前サービスでCookieを記録・利用しないため受け入れる。外部のサービスを同じPCの `127.0.0.1` で動かす運用になったら、PC画面に専用のホスト名を割り当てる。
+
 ## 4. 機器登録とQRラベル
 
 ### DBとAPI

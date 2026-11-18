@@ -21,14 +21,43 @@ export class ApiError extends Error {
   }
 }
 
-export function getPcToken(): string {
-  if (typeof document === "undefined") return "";
-  return (
-    document
-      .querySelector('meta[name="pc-token"]')
-      ?.getAttribute("content")
-      ?.trim() ?? ""
-  );
+let csrfToken = "";
+
+export function getCsrfToken(): string {
+  return csrfToken;
+}
+
+export async function initSession(): Promise<void> {
+  const hash = window.location.hash;
+  const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+  if (params.has("k")) {
+    const launchKey = params.get("k") ?? "";
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    const res = await fetch("/api/v1/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ launch_key: launchKey }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      csrfToken = "";
+      throw await parseError(res);
+    }
+    const data = (await res.json()) as { csrf_token: string };
+    csrfToken = data.csrf_token;
+    return;
+  }
+
+  const res = await fetch("/api/v1/session", {
+    method: "GET",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    csrfToken = "";
+    throw await parseError(res);
+  }
+  const data = (await res.json()) as { csrf_token: string };
+  csrfToken = data.csrf_token;
 }
 
 const wait = (ms: number, signal?: AbortSignal) =>
@@ -68,13 +97,13 @@ async function apiRequest(
   options: { method?: "GET" | "POST" | "DELETE"; body?: string; signal?: AbortSignal } = {},
 ): Promise<Response> {
   const method = options.method ?? "GET";
-  const token = getPcToken();
   const maxBusyRetries = method === "GET" ? 2 : 0;
 
   for (let attempt = 0; ; attempt++) {
-    const headers: Record<string, string> = {
-      "X-PC-Token": token,
-    };
+    const headers: Record<string, string> = {};
+    if (method !== "GET" && csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
     if (options.body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
@@ -156,7 +185,7 @@ export function startPairing(): Promise<PairingStatus> {
 }
 
 export async function cancelPairing(): Promise<void> {
-  await apiRequest("/api/v1/pairing", { method: "DELETE" });
+  await apiRequest("/api/v1/pairing", { method: "DELETE", body: "{}" });
 }
 
 export function fetchUsbStatus(signal?: AbortSignal): Promise<UsbStatus> {
@@ -185,8 +214,8 @@ export async function fetchImageBlobUrl(
 
 export function describeApiError(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.code === "unauthenticated") {
-      return "画面の認証鍵が更新されました。ページを再読み込みしてください。";
+    if (err.status === 401 || err.code === "unauthenticated") {
+      return "セッションが失効しました。再起動してURLを開き直してください。";
     }
     if (err.code === "owner_unavailable") {
       return "受信・USBの所有プロセスに接続できません（起動状態を確認してください）。";
