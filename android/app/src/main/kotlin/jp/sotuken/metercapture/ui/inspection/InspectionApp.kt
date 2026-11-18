@@ -19,6 +19,7 @@ import java.io.File
 import java.time.Instant
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import jp.sotuken.metercapture.ui.*
+import jp.sotuken.metercapture.ui.theme.GaugeTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -112,7 +113,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
         }
     }
 
-    MaterialTheme {
+    GaugeTheme {
         if (screen == AppScreen.LegacyCapture) {
             Column {
                 TextButton(onClick = { home() }) { Text("点検一覧") }
