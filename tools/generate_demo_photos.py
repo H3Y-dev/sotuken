@@ -14,7 +14,12 @@ import shutil
 import subprocess
 import sys
 
+from PIL import Image
+
+from manager.qr_decode import read_device_qr
+from manager.qr_label import parse_payload
 from tools.demo_catalog import APPEARANCE_KEYS, DEFAULT_CATALOG_PATH, load_catalog
+from tools.embed_qr_into_synthetic import create_qr_plate
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PHOTOS_DIR = REPO_ROOT / "demo" / "photos"
@@ -75,6 +80,100 @@ SHOT_SPECS: dict[int, dict[str, int | float | str]] = {
 
 RENDERER_TIMEOUT_SECONDS = 90
 _DEVICE_NUM_RE = re.compile(r"^DMO-(\d{3})$")
+
+BASE_WIDTH = 1280
+BASE_HEIGHT = 960
+SIDEBAR_WIDTH = 256
+SIDEBAR_BG_COLOR = (0xE5, 0xE7, 0xEB)
+QR_LABEL_POS = (1296, 64)
+QR_PLATE_SIZE = 224
+QR_MAX_DISPLAY_SIZE = 200
+QR_BBOX = [1296, 64, 224, 224]
+
+
+def is_odd_device_id(device_id: str) -> bool:
+    """機器IDの末尾番号が奇数であれば True、偶数であれば False を返す。"""
+    m = _DEVICE_NUM_RE.fullmatch(device_id)
+    if not m:
+        raise ValueError(f"device_id の形式が不正です: {device_id!r}")
+    return int(m.group(1)) % 2 == 1
+
+
+def verify_qr_frame(png_path: Path, device: dict) -> None:
+    """QR付き画像からQRを読み戻し、カタログの機器情報と照合する。"""
+    qr_res = read_device_qr(png_path)
+    if qr_res.status != "found" or qr_res.device_id != device["device_id"]:
+        raise ValueError(
+            f"{device['device_id']}: QR読み取りに失敗しました "
+            f"(status={qr_res.status!r}, device_id={qr_res.device_id!r})"
+        )
+
+    matched_parsed: dict | None = None
+    for text in qr_res.payloads:
+        try:
+            raw_obj = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(raw_obj, dict) and (
+            "acceptable_min" in raw_obj or "acceptable_max" in raw_obj
+        ):
+            raise ValueError(
+                f"{device['device_id']}: QRペイロードに許容範囲キーが含まれています"
+            )
+        parsed = parse_payload(text)
+        if parsed is not None and parsed.get("id") == device["device_id"]:
+            matched_parsed = parsed
+            break
+
+    if matched_parsed is None:
+        raise ValueError(f"{device['device_id']}: parse_payload で対象機器を復元できません")
+
+    if matched_parsed.get("name") != device["device_name"]:
+        raise ValueError(
+            f"{device['device_id']}: QRの機器名が不一致です "
+            f"(期待 {device['device_name']!r}, 実際 {matched_parsed.get('name')!r})"
+        )
+    if matched_parsed.get("unit") != device["unit"]:
+        raise ValueError(
+            f"{device['device_id']}: QRの単位が不一致です "
+            f"(期待 {device['unit']!r}, 実際 {matched_parsed.get('unit')!r})"
+        )
+    for key_qr, key_cat in (("min", "min_value"), ("max", "max_value")):
+        val = matched_parsed.get(key_qr)
+        expected = device[key_cat]
+        if not isinstance(val, (int, float)) or abs(float(val) - float(expected)) > 1e-8:
+            raise ValueError(
+                f"{device['device_id']}: QRの {key_qr} が不一致です "
+                f"(期待 {expected!r}, 実際 {val!r})"
+            )
+
+
+def compose_qr_frame(raw_png: Path, dest_png: Path, device: dict) -> list[int]:
+    """元PNGの右に256pxの帯を足し、QRラベルを合成して読み戻し照合する。"""
+    with Image.open(raw_png) as img:
+        base = img.convert("RGB")
+        if base.size != (BASE_WIDTH, BASE_HEIGHT):
+            raise ValueError(
+                f"{device['device_id']}: 元画像サイズが想定外です "
+                f"(期待 {(BASE_WIDTH, BASE_HEIGHT)}, 実際 {base.size})"
+            )
+        canvas = Image.new("RGB", (BASE_WIDTH + SIDEBAR_WIDTH, BASE_HEIGHT), SIDEBAR_BG_COLOR)
+        canvas.paste(base, (0, 0))
+
+    plate = create_qr_plate(
+        device["device_id"],
+        device["device_name"],
+        plate_size=QR_PLATE_SIZE,
+        qr_display_size=QR_MAX_DISPLAY_SIZE,
+        unit=device["unit"],
+        min_value=device["min_value"],
+        max_value=device["max_value"],
+    )
+    canvas.paste(plate, QR_LABEL_POS)
+    dest_png.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(dest_png, format="PNG")
+    verify_qr_frame(dest_png, device)
+    return list(QR_BBOX)
 
 
 def _sha256_file(path: Path) -> str:
@@ -274,6 +373,8 @@ def build_groundtruth_entry(
     rel_file: str,
     png_sha256: str,
     raw_frame: dict,
+    *,
+    qr_bbox: list[int] | None = None,
 ) -> dict:
     """groundtruth.json の1フレーム分エントリを組み立てる。"""
     spec = SHOT_SPECS[shot]
@@ -295,7 +396,7 @@ def build_groundtruth_entry(
         "lighting": spec["lighting"],
         "glass_scratches": spec["glass_scratches"],
         "sensor_noise": spec["sensor_noise"],
-        "qr_bbox": None,
+        "qr_bbox": qr_bbox,
     }
 
 
@@ -356,6 +457,13 @@ def verify_groundtruth(catalog: list[dict], truth: dict, photos_dir: Path) -> No
                 raise ValueError(f"公開用画像のSHA-256が重複しています: {sha}")
             seen_sha.add(sha)
 
+            expected_bbox = list(QR_BBOX) if is_odd_device_id(device["device_id"]) else None
+            if entry.get("qr_bbox") != expected_bbox:
+                raise ValueError(
+                    f"{device['device_id']} shot {shot}: qr_bbox が不一致です "
+                    f"(期待 {expected_bbox}, 実際 {entry.get('qr_bbox')})"
+                )
+
 
 def generate_demo_photos(
     catalog_path: Path = DEFAULT_CATALOG_PATH,
@@ -384,7 +492,11 @@ def generate_demo_photos(
             )
             rel_file = f"frames/{device['device_id']}-{shot}.png"
             dest_png = photos_dir / rel_file
-            shutil.copyfile(raw_png, dest_png)
+            if is_odd_device_id(device["device_id"]):
+                qr_bbox = compose_qr_frame(raw_png, dest_png, device)
+            else:
+                shutil.copyfile(raw_png, dest_png)
+                qr_bbox = None
             entries.append(
                 build_groundtruth_entry(
                     device=device,
@@ -392,6 +504,7 @@ def generate_demo_photos(
                     rel_file=rel_file,
                     png_sha256=_sha256_file(dest_png),
                     raw_frame=raw_frame,
+                    qr_bbox=qr_bbox,
                 )
             )
 

@@ -266,6 +266,36 @@ class TestEmbedQrSynthetic(unittest.TestCase):
             self.assertTrue((out_dir / "QR読み取り率.md").is_file())
             self.assertTrue((out_dir / "README.md").is_file())
 
+    def test_create_qr_plate_with_unit_and_range(self):
+        """7. 単位・範囲付きcreate_qr_plateが仕様どおりのペイロードを埋め込み、許容範囲キーを含まないことを検証。"""
+        plate = create_qr_plate(
+            "DMO-001",
+            "蒸気主管入口圧力計",
+            plate_size=224,
+            qr_display_size=200,
+            unit="MPa",
+            min_value=0.0,
+            max_value=1.6,
+        )
+        self.assertEqual(plate.size, (224, 224))
+        plate_bgr = cv2.cvtColor(np.array(plate), cv2.COLOR_RGB2BGR)
+        val, _, _ = cv2.QRCodeDetector().detectAndDecode(plate_bgr)
+        self.assertTrue(bool(val))
+        raw_obj = json.loads(val)
+        self.assertNotIn("acceptable_min", raw_obj)
+        self.assertNotIn("acceptable_max", raw_obj)
+        parsed = parse_payload(val)
+        self.assertEqual(
+            parsed,
+            {
+                "id": "DMO-001",
+                "name": "蒸気主管入口圧力計",
+                "unit": "MPa",
+                "min": 0.0,
+                "max": 1.6,
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

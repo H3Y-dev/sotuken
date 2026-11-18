@@ -8,11 +8,21 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from unittest import mock
+
+from PIL import Image
+
+from manager.qr_decode import read_device_qr
+from manager.qr_label import parse_payload
 from tools.demo_catalog import APPEARANCE_KEYS, DEFAULT_CATALOG_PATH, load_catalog
 from tools.generate_demo_photos import (
+    QR_BBOX,
     SHOT_SPECS,
     build_groundtruth_entry,
     build_renderer_args,
+    compose_qr_frame,
+    generate_demo_photos,
+    is_odd_device_id,
     main,
     verify_groundtruth,
     verify_raw_output,
@@ -173,8 +183,11 @@ class TestGenerateDemoPhotos(unittest.TestCase):
                         "true_value": device["min_value"]
                         + (device["max_value"] - device["min_value"]) * pct / 100.0
                     }
-                    entry = build_groundtruth_entry(device, shot, rel, sha, raw_frame)
-                    self.assertIsNone(entry["qr_bbox"])
+                    expected_bbox = list(QR_BBOX) if is_odd_device_id(device["device_id"]) else None
+                    entry = build_groundtruth_entry(
+                        device, shot, rel, sha, raw_frame, qr_bbox=expected_bbox
+                    )
+                    self.assertEqual(entry["qr_bbox"], expected_bbox)
                     self.assertEqual(
                         entry["appearance"], {k: device[k] for k in APPEARANCE_KEYS}
                     )
@@ -186,6 +199,80 @@ class TestGenerateDemoPhotos(unittest.TestCase):
             truth["frames"][0]["appearance"]["dial_color"] = "black"
             with self.assertRaises(ValueError):
                 verify_groundtruth(self.catalog, truth, photos_dir)
+
+    def test_compose_qr_frame_roundtrip_and_no_acceptable_keys(self) -> None:
+        device = self.catalog[0]  # DMO-001 (奇数ID)
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_png = Path(tmp) / "raw.png"
+            dest_png = Path(tmp) / "final.png"
+            base = Image.new("RGB", (1280, 960), (40, 80, 120))
+            base.save(raw_png, format="PNG")
+
+            bbox = compose_qr_frame(raw_png, dest_png, device)
+            self.assertEqual(bbox, [1296, 64, 224, 224])
+
+            with Image.open(dest_png) as out_img:
+                self.assertEqual(out_img.size, (1536, 960))
+                # 左1280x960は元画像そのまま、右256pxの帯は#e5e7eb
+                self.assertEqual(out_img.crop((0, 0, 1280, 960)).tobytes(), base.tobytes())
+                self.assertEqual(out_img.getpixel((1285, 10)), (0xE5, 0xE7, 0xEB))
+
+            res = read_device_qr(dest_png)
+            self.assertEqual(res.status, "found")
+            self.assertEqual(res.device_id, device["device_id"])
+            parsed = next(
+                p for p in (parse_payload(t) for t in res.payloads) if p is not None
+            )
+            self.assertEqual(parsed["id"], device["device_id"])
+            self.assertEqual(parsed["name"], device["device_name"])
+            self.assertEqual(parsed["unit"], device["unit"])
+            self.assertAlmostEqual(parsed["min"], device["min_value"], places=8)
+            self.assertAlmostEqual(parsed["max"], device["max_value"], places=8)
+            for t in res.payloads:
+                obj = json.loads(t)
+                self.assertNotIn("acceptable_min", obj)
+                self.assertNotIn("acceptable_max", obj)
+
+    def test_odd_even_qr_split_matches_design(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            photos_dir = tmp_path / "photos"
+            raw_hashes: dict[tuple[str, int], str] = {}
+
+            def fake_render(device: dict, shot: int, raw_dir: Path, *, renderer_script: Path | None = None):
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                png = raw_dir / "frame.png"
+                color = (int(device["device_id"].split("-")[1]) * 10 % 250, shot * 40, 100)
+                Image.new("RGB", (1280, 960), color).save(png, format="PNG")
+                raw_hashes[(device["device_id"], shot)] = hashlib.sha256(png.read_bytes()).hexdigest()
+                pct = float(SHOT_SPECS[shot]["value_percent"])
+                true_v = device["min_value"] + (device["max_value"] - device["min_value"]) * pct / 100.0
+                return png, {"true_value": true_v}
+
+            with mock.patch("tools.generate_demo_photos.render_frame", side_effect=fake_render):
+                truth = generate_demo_photos(catalog_path=DEFAULT_CATALOG_PATH, photos_dir=photos_dir)
+
+            self.assertEqual(len(truth["frames"]), 80)
+            odd_count = 0
+            even_count = 0
+            for entry in truth["frames"]:
+                dev_id = entry["device_id"]
+                shot = entry["shot"]
+                dest_png = photos_dir / entry["file"]
+                if is_odd_device_id(dev_id):
+                    odd_count += 1
+                    self.assertEqual(entry["qr_bbox"], [1296, 64, 224, 224])
+                    self.assertNotEqual(entry["sha256"], raw_hashes[(dev_id, shot)])
+                else:
+                    even_count += 1
+                    self.assertIsNone(entry["qr_bbox"])
+                    self.assertEqual(entry["sha256"], raw_hashes[(dev_id, shot)])
+                    self.assertEqual(
+                        hashlib.sha256(dest_png.read_bytes()).hexdigest(),
+                        raw_hashes[(dev_id, shot)],
+                    )
+            self.assertEqual(odd_count, 40)
+            self.assertEqual(even_count, 40)
 
     def test_main_rejects_existing_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
