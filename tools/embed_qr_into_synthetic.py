@@ -108,9 +108,14 @@ def create_qr_plate(
     plate_size: int = DEFAULT_PLATE_SIZE,
     qr_display_size: int = 150,
     text_font_size: int = 14,
+    *,
+    unit: str | None = None,
+    min_value: float | int | None = None,
+    max_value: float | int | None = None,
 ) -> Image.Image:
-    """機器IDと機器名から白板QR画像を生成する（200px×200px、下部に機器ID文字）。"""
-    payload = build_payload(device_id, device_name)
+    """機器IDと機器名から白板QR画像を生成する（下部に機器ID文字）。"""
+    payload = build_payload(device_id, device_name, unit, min_value, max_value)
+    has_range = unit is not None or min_value is not None or max_value is not None
 
     qr = qrcode.QRCode(
         error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -119,29 +124,48 @@ def create_qr_plate(
     )
     qr.add_data(payload)
     qr.make(fit=True)
-    raw_qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
 
-    # 白板基底
-    plate = Image.new("RGB", (plate_size, plate_size), (255, 255, 255))
-
-    # QRリサイズと配置（上部中央）
-    resized_qr = raw_qr_img.resize((qr_display_size, qr_display_size), Image.Resampling.NEAREST)
-    qr_x = (plate_size - qr_display_size) // 2
-    qr_y = 10
-    plate.paste(resized_qr, (qr_x, qr_y))
-
-    # 機器ID描画（QRの下に小さく中央揃え）
+    # 機器ID描画用フォント
     try:
         font = find_japanese_font(size=text_font_size)
     except Exception:
         font = ImageFont.load_default()
-
-    draw = ImageDraw.Draw(plate)
     text = device_id
     bbox = font.getbbox(text)
     tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+
+    # 白板基底
+    plate = Image.new("RGB", (plate_size, plate_size), (255, 255, 255))
+
+    if has_range:
+        # モジュール境界が揃うよう希望幅(上限200px)以下で最大の整数倍で描く
+        total_modules = qr.modules_count + qr.border * 2
+        target_max = min(qr_display_size, 200)
+        box_size = max(1, target_max // total_modules)
+        qr_pixel_size = total_modules * box_size
+        qr_exact = qrcode.QRCode(
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=box_size,
+            border=4,
+        )
+        qr_exact.add_data(payload)
+        qr_exact.make(fit=True)
+        qr_img = qr_exact.make_image(fill_color="black", back_color="white").convert("RGB")
+        qr_x = (plate_size - qr_pixel_size) // 2
+        qr_y = max(4, (plate_size - qr_pixel_size - th - 6) // 2)
+        plate.paste(qr_img, (qr_x, qr_y))
+        ty = qr_y + qr_pixel_size + 4
+    else:
+        raw_qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+        resized_qr = raw_qr_img.resize((qr_display_size, qr_display_size), Image.Resampling.NEAREST)
+        qr_x = (plate_size - qr_display_size) // 2
+        qr_y = 10
+        plate.paste(resized_qr, (qr_x, qr_y))
+        ty = qr_y + qr_display_size + 6
+
+    draw = ImageDraw.Draw(plate)
     tx = max(4, (plate_size - tw) // 2)
-    ty = qr_y + qr_display_size + 6
     draw.text((tx, ty), text, fill="black", font=font)
 
     return plate
