@@ -1,0 +1,1400 @@
+<title>メーター3Dデモ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f1f3f5; --panel: #fff; --soft: #f7f8fa; --text: #20252c;
+    --muted: #58616e; --border: #d7dce2; --accent: #304d65;
+    --on-accent: #fff; --focus: #0875cc; --error: #ac2727;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #191c21; --panel: #24282e; --soft: #2c3138; --text: #edf0f4;
+      --muted: #b2bbc6; --border: #444c56; --accent: #b6d3eb;
+      --on-accent: #172b3b; --focus: #87c6ff; --error: #ffabab;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #191c21; --panel: #24282e; --soft: #2c3138; --text: #edf0f4;
+    --muted: #b2bbc6; --border: #444c56; --accent: #b6d3eb;
+    --on-accent: #172b3b; --focus: #87c6ff; --error: #ffabab;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, "Yu Gothic", Meiryo, sans-serif; font-size: 14px; line-height: 1.6; }
+  .meter-app { max-width: 1320px; margin-inline: auto; padding-block: 24px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: .02em; }
+  h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  p { margin: 6px 0 0; }
+  .intro, .help, .status { color: var(--muted); font-size: 12px; }
+  .workbench { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; margin-top: 20px; align-items: start; }
+  .panel { min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .view-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .numeric, output, textarea { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-variant-numeric: tabular-nums; }
+  .stage { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #e7e9ed; overflow: hidden; }
+  .stage canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #post-overlay, #truth-overlay { pointer-events: none; }
+  .view-footer { padding: 12px 16px 14px; border-top: 1px solid var(--border); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; }
+  .legend b { font-size: 15px; margin-right: 3px; }
+  .controls { padding: 16px; }
+  fieldset { padding: 12px 0 14px; margin: 0; border: 0; border-bottom: 1px solid var(--border); min-width: 0; }
+  fieldset:first-of-type { padding-top: 8px; }
+  legend { padding: 0; font-size: 12px; font-weight: 650; color: var(--muted); }
+  .control { margin-top: 10px; }
+  .control-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  output { white-space: nowrap; font-size: 12px; color: var(--muted); }
+  label { cursor: pointer; }
+  select, button, textarea { font: inherit; }
+  select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--soft); color: var(--text); }
+  input[type="range"] { display: block; width: 100%; margin: 6px 0 0; height: 22px; accent-color: var(--accent); cursor: pointer; }
+  input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+  .toggle { display: flex; align-items: center; gap: 8px; margin: 14px 0; }
+  button { padding: 10px 14px; border: 1px solid var(--accent); border-radius: 4px; background: var(--accent); color: var(--on-accent); cursor: pointer; font-weight: 600; }
+  button:hover { filter: brightness(.92); }
+  button:disabled { opacity: .55; cursor: wait; }
+  #export-button { width: 100%; }
+  :is(input, select, button, textarea):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+  .status { min-height: 1.6em; margin-top: 8px; overflow-wrap: anywhere; }
+  .status.error { color: var(--error); }
+  .exports { margin-top: 18px; padding: 16px; }
+  .exports[hidden] { display: none; }
+  .export-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; margin-top: 14px; }
+  figure { margin: 0; min-width: 0; }
+  #export-image { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 4px; }
+  figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .json-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #copy-button { background: var(--soft); color: var(--text); border-color: var(--border); padding: 5px 12px; font-size: 12px; }
+  textarea { display: block; width: 100%; min-height: 300px; height: 100%; max-height: 480px; resize: vertical; border: 1px solid var(--border); border-radius: 4px; background: var(--soft); color: var(--text); padding: 10px; font-size: 12px; line-height: 1.5; }
+  .json-block { min-width: 0; display: flex; flex-direction: column; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  @media (max-width: 850px) {
+    .workbench, .export-grid { grid-template-columns: minmax(0, 1fr); }
+    .controls { padding: 16px; }
+  }
+  @media (max-width: 430px) {
+    .meter-app { padding-block: 16px 28px; }
+    h1 { font-size: 20px; }
+    .workbench { gap: 12px; margin-top: 14px; }
+    .view-header, .view-footer { padding-inline: 12px; }
+  }
+</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<main class="meter-app" lang="ja">
+  <header>
+    <h1>メーター3Dデモ</h1>
+    <p class="intro">アナログメーターの合成画像と、読み取り工程ごとの正解座標を作成します。</p>
+  </header>
+  <div class="workbench">
+    <section class="panel" aria-labelledby="preview-heading">
+      <div class="view-header">
+        <h2 id="preview-heading">3Dプレビュー</h2>
+        <span id="preview-value" class="numeric">100.75 MPa</span>
+      </div>
+      <div id="stage" class="stage">
+        <canvas id="meter-canvas" role="img" aria-label="操作パネルで変更できる3Dアナログメーター"></canvas>
+        <canvas id="post-overlay" aria-hidden="true"></canvas>
+        <canvas id="truth-overlay" aria-hidden="true"></canvas>
+      </div>
+      <div class="view-footer">
+        <div class="legend" aria-label="正解表示の凡例">
+          <span><b>＋</b>中心</span><span><b>○</b>最小値・満尺点</span>
+          <span><b>●</b>針先</span><span><b>□</b>数字付き目盛り</span>
+        </div>
+        <p class="help">正解は形状から計算した座標です。傾けると、盤面と針の高さによる視差を確認できます。</p>
+      </div>
+    </section>
+    <section class="panel controls" aria-labelledby="controls-heading">
+      <h2 id="controls-heading">操作パネル</h2>
+      <fieldset>
+        <legend>メーター</legend>
+        <div class="control">
+          <label for="meter-type">種類</label>
+          <select id="meter-type"><option value="pressure">圧力計</option><option value="temperature">温度計</option></select>
+        </div>
+        <div class="control">
+          <label for="meter-range">範囲</label>
+          <select id="meter-range"><option value="150">0〜150 MPa（主目盛り 50）</option><option value="400">0〜400 MPa（主目盛り 100）</option></select>
+        </div>
+        <div class="control">
+          <div class="control-line"><label for="needle-value">針の値</label><output id="needle-value-output" for="needle-value">100.75 MPa</output></div>
+          <input id="needle-value" type="range" min="0" max="150" step="0.01" value="100.75">
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>カメラ</legend>
+        <div class="control">
+          <div class="control-line"><label for="camera-yaw">カメラ左右</label><output id="camera-yaw-output" for="camera-yaw">−12°</output></div>
+          <input id="camera-yaw" type="range" min="-60" max="60" step="1" value="-12">
+        </div>
+        <div class="control">
+          <div class="control-line"><label for="camera-pitch">上下</label><output id="camera-pitch-output" for="camera-pitch">10°</output></div>
+          <input id="camera-pitch" type="range" min="-60" max="60" step="1" value="10">
+        </div>
+        <div class="control">
+          <div class="control-line"><label for="camera-distance">距離</label><output id="camera-distance-output" for="camera-distance">5.60</output></div>
+          <input id="camera-distance" type="range" min="4.8" max="9" step="0.05" value="5.6">
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>照明・ガラス</legend>
+        <div class="control">
+          <div class="control-line"><label for="light-azimuth">光の方位</label><output id="light-azimuth-output" for="light-azimuth">−35°</output></div>
+          <input id="light-azimuth" type="range" min="-180" max="180" step="1" value="-35">
+        </div>
+        <div class="control">
+          <div class="control-line"><label for="light-elevation">光の高さ</label><output id="light-elevation-output" for="light-elevation">45°</output></div>
+          <input id="light-elevation" type="range" min="0" max="85" step="1" value="45">
+        </div>
+        <div class="control">
+          <div class="control-line"><label for="light-intensity">光の強さ</label><output id="light-intensity-output" for="light-intensity">1.50</output></div>
+          <input id="light-intensity" type="range" min="0" max="5" step="0.05" value="1.5">
+        </div>
+        <div class="control">
+          <div class="control-line"><label for="glass-reflection">ガラスの映り込み</label><output id="glass-reflection-output" for="glass-reflection">0.35</output></div>
+          <input id="glass-reflection" type="range" min="0" max="1" step="0.01" value="0.35">
+        </div>
+      </fieldset>
+      <div class="toggle"><input id="show-truth" type="checkbox"><label for="show-truth">正解を重ねて表示</label></div>
+      <label class="sr-only" for="export-button">画像と正解を書き出す</label>
+      <button id="export-button" type="button" disabled>画像と正解を書き出す</button>
+      <p class="help">1280 × 960 px・正解の重ね表示なし</p>
+      <p id="status" class="status" role="status">3D表示を準備しています…</p>
+    </section>
+  </div>
+  <section id="exports" class="panel exports" aria-labelledby="export-heading" hidden>
+    <h2 id="export-heading">書き出し結果</h2>
+    <p class="help">この画像とJSONは、書き出した時点の同じ設定です。操作後は再度書き出してください。</p>
+    <div class="export-grid">
+      <figure>
+        <img id="export-image" width="1280" height="960" alt="書き出したメーターの合成画像（正解の重ね表示なし）">
+        <figcaption>画像を右クリック、または長押しして保存してください。</figcaption>
+      </figure>
+      <div class="json-block">
+        <div class="json-heading">
+          <label for="export-json">正解JSON</label>
+          <label class="sr-only" for="copy-button">正解JSONをコピー</label>
+          <button id="copy-button" type="button">JSONをコピー</button>
+        </div>
+        <textarea id="export-json" readonly spellcheck="false" aria-describedby="coordinate-help"></textarea>
+        <p id="copy-status" class="status" role="status"></p>
+      </div>
+    </div>
+    <p id="coordinate-help" class="help">座標は画像左上が原点、右が +x、下が +y（px・小数を保持）。最小値・満尺点・各目盛りは目盛り線の中点、中心は盤面上の回転軸、針先は針の上面です。zero_pt は負の範囲でも最小値の点です。反射や針に隠れていても幾何学的な位置を記録します。</p>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const number = id => Number($(id).value);
+  const status = $('status');
+  const exportButton = $('export-button');
+  const stage = $('stage');
+  const postOverlay = $('post-overlay');
+  const postCtx = postOverlay.getContext('2d');
+  const overlay = $('truth-overlay');
+  const ctx = overlay.getContext('2d');
+  let renderer;
+  function reportError(message, error) {
+    status.textContent = message;
+    status.classList.add('error');
+    if (error) console.error(error);
+  }
+  try {
+    if (!window.THREE) throw new Error('Three.js could not be loaded');
+    renderer = new THREE.WebGLRenderer({ canvas: $('meter-canvas'), antialias: true, preserveDrawingBuffer: true });
+  } catch (error) {
+    reportError('3D表示を開始できません。CDNへの接続と、ブラウザーのWebGL対応を確認してください。', error);
+    return;
+  }
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xe7e9ed);
+  const camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.1, 50);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+  scene.add(ambientLight);
+  const keyLight = new THREE.DirectionalLight(0xfff8ed, 1.5);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024, 1024);
+  Object.assign(keyLight.shadow.camera, { left: -2.3, right: 2.3, top: 2.3, bottom: -2.3, near: 0.1, far: 15 });
+  keyLight.shadow.bias = -0.0002;
+  keyLight.shadow.normalBias = 0.004;
+  scene.add(keyLight);
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0xe7e9ed, roughness: 1 }));
+  wall.position.z = -0.36;
+  wall.receiveShadow = true;
+  scene.add(wall);
+
+  // All printed points use the same polar coordinates as the canvas dial.
+  const FACE_RADIUS = 1.43, DIAL_Z = 0.065;
+  const TICK_OUTER = 1.29, TICK_INNER = 1.10;
+  const NEEDLE_LENGTH = 1.17, NEEDLE_DEPTH = 0.045, NEEDLE_Z = 0.11;
+  const radians = THREE.MathUtils.degToRad;
+  const RANGES = {
+    pressure: {
+      '150': [0, 150, 50, 10, 2, 'MPa'], '400': [0, 400, 100, 20, 5, 'MPa'],
+      '1.0': [0, 1, 0.2, 0.1, 0.02, 'MPa'], '1.6': [0, 1.6, 0.4, 0.2, 0.05, 'MPa'],
+      '250': [0, 250, 50, 10, 2, 'kPa'], '16': [0, 16, 4, 2, 0.5, 'bar'],
+      '-0.1:0.5': [-0.1, 0.5, 0.1, 0.05, 0.01, 'MPa']
+    },
+    temperature: { '100': [0, 100, 10, 5, 1, '℃'], '60': [0, 60, 10, 5, 1, '℃'], '-20:120': [-20, 120, 20, 10, 2, '℃'] }
+  };
+  const LOOK_OPTIONS = {
+    sweep_deg: ['270', '240', '300'], dial_color: ['white', 'black', 'cream'],
+    number_position: ['inside', 'outside'], font: ['sans', 'serif', 'mono'],
+    needle_shape: ['lance', 'arrow', 'counterweight'], needle_color: ['black', 'red'],
+    bezel_color: ['black', 'silver', 'brass']
+  };
+  const FONTS = { sans: 'Arial, sans-serif', serif: 'Georgia, serif', mono: '"Courier New", monospace' };
+  const lookLabels = { sweep_deg: '開き角', dial_color: '盤面', number_position: '数字の位置', font: '書体', needle_shape: '針の形', needle_color: '針の色', bezel_color: '縁とケース' };
+  const optionLabels = { white: '白', black: '黒', cream: 'クリーム', inside: '内側', outside: '外側', sans: 'Arial', serif: 'Georgia', mono: 'Courier New', lance: '槍形', arrow: '矢印形', counterweight: '尾付き', red: '赤', silver: '銀', brass: '真鍮' };
+  const lookPanel = document.createElement('fieldset');
+  lookPanel.innerHTML = '<legend>見た目</legend>' + Object.entries(LOOK_OPTIONS).map(([name, options]) =>
+    `<div class="control"><label for="${name}">${lookLabels[name]}</label><select id="${name}">${options.map(v => `<option value="${v}">${optionLabels[v] || v + '°'}</option>`).join('')}</select></div>`).join('') +
+    '<label class="toggle" for="danger_band"><input id="danger_band" type="checkbox">赤い危険域（上側15%）</label>' +
+    '<label class="toggle" for="max_pointer"><input id="max_pointer" type="checkbox">赤い置き針</label>' +
+    '<div class="control"><div class="control-line"><label for="max_pointer_value">置き針の値</label><output id="max_pointer_value-output" for="max_pointer_value"></output></div><input id="max_pointer_value" type="range" min="0" max="150" step="any" value="120"></div>';
+  $('meter-range').closest('fieldset').after(lookPanel);
+  $('needle_shape').value = 'counterweight';
+
+  const DISTRACTOR_LABELS = {
+    dual_scale: '2重目盛り（psi / kgf/cm² / °F）',
+    non_scale_numbers: '目盛り以外の数字・シール',
+    extra_labels: '単位・銘柄の大きな文字',
+    danger_band_numbers: '危険域の帯の上の数字'
+  };
+  const DEGRADATION_LABELS = {
+    cluttered_background: '雑多な背景（配管・しみ・部品）',
+    dial_yellowing: '盤面の黄ばみ',
+    dial_dirt: '盤面の汚れ・しみ',
+    faded_print: '印刷のかすれ',
+    glass_scratches: 'ガラスの傷',
+    glass_fog: 'ガラスのくもり',
+    glass_droplets: 'ガラスの水滴',
+    uneven_lighting: '照明のむら・周辺減光',
+    color_cast: '色かぶり（蛍光灯・夕方）',
+    bezel_shadow: '縁の影',
+    small_in_frame: '遠景（盤面が小さい）',
+    sensor_noise: 'ノイズ',
+    jpeg_compression: '強いJPEG圧縮',
+    partial_occlusion: '一部遮蔽（札・指）',
+    partial_crop: '一部切れ（画面外へはみ出し）'
+  };
+  const DISTRACTOR_KEYS = Object.keys(DISTRACTOR_LABELS);
+  const DEGRADATION_KEYS = Object.keys(DEGRADATION_LABELS);
+  const ROUND2_KEYS = [...DISTRACTOR_KEYS, ...DEGRADATION_KEYS];
+  const DIAL_REBUILD_KEYS = [...DISTRACTOR_KEYS, 'dial_yellowing', 'dial_dirt', 'faded_print'];
+
+  const distractorPanel = document.createElement('fieldset');
+  distractorPanel.innerHTML = '<legend>紛らわしい文字（0＝無し）</legend>' + Object.entries(DISTRACTOR_LABELS).map(([name, label]) =>
+    `<div class="control"><div class="control-line"><label for="${name}">${label}</label><output id="${name}-output" for="${name}">0.00</output></div><input id="${name}" type="range" min="0" max="1" step="0.01" value="0"></div>`).join('');
+  const degradationPanel = document.createElement('fieldset');
+  degradationPanel.innerHTML = '<legend>背景・盤面・画質の劣化（0＝無し）</legend>' +
+    '<div class="control"><div class="control-line"><label for="seed">乱数の種（seed）</label><output id="seed-output" for="seed">1</output></div><input id="seed" type="range" min="0" max="9999" step="1" value="1"></div>' +
+    Object.entries(DEGRADATION_LABELS).map(([name, label]) =>
+      `<div class="control"><div class="control-line"><label for="${name}">${label}</label><output id="${name}-output" for="${name}">0.00</output></div><input id="${name}" type="range" min="0" max="1" step="0.01" value="0"></div>`).join('');
+  $('glass-reflection').closest('fieldset').after(distractorPanel, degradationPanel);
+
+  function makeRng(seed, salt = 0) {
+    let a = (Math.imul(Math.round(Number(seed) || 0), 2654435761) + Math.imul(salt, 1597334677) + 0x6d2b79f5) >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function cropShift(strength, seed, dist) {
+    if (strength <= 0) return [0, 0];
+    const rng = makeRng(seed, 601);
+    const dirX = rng() < 0.5 ? 1 : -1;
+    const dirY = rng() < 0.5 ? 1 : -1;
+    const scale = dist / 5.6;
+    return [dirX * (0.92 + 0.35 * strength) * scale, dirY * (0.35 + 0.25 * strength) * scale];
+  }
+
+  const scaleAngle = (value, settings) => radians(-settings.sweep_deg / 2 + settings.sweep_deg * (value - settings.min) / (settings.max - settings.min));
+  function polar(value, settings, radius, z = DIAL_Z) {
+    const angle = scaleAngle(value, settings);
+    return new THREE.Vector3(Math.sin(angle) * radius, Math.cos(angle) * radius, z);
+  }
+  function config() {
+    const type = $('meter-type').value;
+    const [min, max, major, medium, minor, unit] = RANGES[type][$('meter-range').value];
+    const r2 = Object.fromEntries(ROUND2_KEYS.map(k => [k, number(k)]));
+    return { type, min, max, major, medium, minor, unit, seed: Math.round(number('seed')), ...appearance(), ...r2 };
+  }
+  function appearance() {
+    return { ...Object.fromEntries(Object.keys(LOOK_OPTIONS).map(name => [name, name === 'sweep_deg' ? number(name) : $(name).value])),
+      danger_band: $('danger_band').checked, max_pointer: $('max_pointer').checked, max_pointer_value: number('max_pointer_value') };
+  }
+  function tickLayout(settings) {
+    const offset = settings.number_position === 'outside' ? 0.17 : 0;
+    return { outer: TICK_OUTER - offset, major: TICK_INNER - offset, medium: 1.16 - offset, minor: 1.22 - offset };
+  }
+  function tickValues(settings) {
+    const ticks = [];
+    const multiple = (value, step) => Math.abs(value / step - Math.round(value / step)) < 1e-7;
+    for (let i = 0; i <= Math.round((settings.max - settings.min) / settings.minor); i++) {
+      const value = Number((settings.min + i * settings.minor).toFixed(8));
+      ticks.push({ value, level: multiple(value, settings.major) ? 'major' : multiple(value, settings.medium) ? 'medium' : 'minor' });
+    }
+    return ticks;
+  }
+
+  function environment() {
+    const faces = Array.from({ length: 6 }, (_, side) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 256;
+      const c = canvas.getContext('2d');
+      const gradient = c.createLinearGradient(0, 0, 0, 256);
+      gradient.addColorStop(0, '#3a424d');
+      gradient.addColorStop(1, '#080c12');
+      c.fillStyle = gradient;
+      c.fillRect(0, 0, 256, 256);
+      if (side === 4) {
+        c.shadowColor = '#ffffff';
+        c.shadowBlur = 12;
+        c.fillStyle = '#ffffff';
+        c.fillRect(152, 55, 26, 140);
+      }
+      return canvas;
+    });
+    const texture = new THREE.CubeTexture(faces);
+    texture.encoding = THREE.sRGBEncoding;
+    texture.needsUpdate = true;
+    return texture;
+  }
+  const envMap = environment();
+  const glassMaterial = new THREE.MeshPhysicalMaterial({
+    // Add only reflected light: transparent glass must not paint a white veil.
+    color: 0x000000, metalness: 0, roughness: 0.07, transparent: true,
+    blending: THREE.AdditiveBlending,
+    opacity: 0.1, depthWrite: false, envMap, envMapIntensity: 1,
+    clearcoat: 1, clearcoatRoughness: 0.06, reflectivity: 1
+  });
+  const glassRadius = 1.37, domeRadius = 7;
+  const glassBaseZ = 0.24 - Math.sqrt(domeRadius ** 2 - glassRadius ** 2);
+  const glassGeometry = new THREE.SphereGeometry(domeRadius, 96, 24, 0, Math.PI * 2, 0, Math.asin(glassRadius / domeRadius));
+  glassGeometry.rotateX(Math.PI / 2);
+  const glass = new THREE.Mesh(glassGeometry, glassMaterial);
+  glass.position.z = glassBaseZ;
+  glass.renderOrder = 2;
+  scene.add(glass);
+  let meter, needle, maxPointer, dialTexture, glassFxMesh, glassFxTexture, wallTexture;
+  let lastBgKey = '', lastGlassKey = '';
+  let dialDistractors = [];
+
+  function updateBackgroundWall(settings) {
+    const s = settings.cluttered_background;
+    const key = s > 0 ? `${settings.seed}:${s}` : '0';
+    if (key === lastBgKey) return;
+    lastBgKey = key;
+    if (wallTexture) { wallTexture.dispose(); wallTexture = null; }
+    if (s <= 0) {
+      wall.material.map = null;
+      wall.material.color.setHex(0xe7e9ed);
+      wall.material.needsUpdate = true;
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1024;
+    const c = canvas.getContext('2d');
+    c.fillStyle = '#e7e9ed';
+    c.fillRect(0, 0, 1024, 1024);
+    const rng = makeRng(settings.seed, 401);
+    c.save();
+    c.globalAlpha = 0.35 + 0.65 * s;
+    // Industrial panel seams
+    c.strokeStyle = '#9aa1aa';
+    c.lineWidth = 3;
+    for (let pos = 128; pos < 1024; pos += 256) {
+      c.beginPath(); c.moveTo(pos, 0); c.lineTo(pos, 1024); c.stroke();
+      c.beginPath(); c.moveTo(0, pos); c.lineTo(1024, pos); c.stroke();
+    }
+    // Wall stains and water/oil streaks
+    for (let i = 0; i < Math.round(14 + 26 * s); i++) {
+      const x = rng() * 1024, y = rng() * 1024, r = 35 + rng() * 110;
+      const g = c.createRadialGradient(x, y, r * 0.1, x, y, r);
+      const tone = rng() < 0.5 ? '92, 82, 68' : '74, 84, 88';
+      g.addColorStop(0, `rgba(${tone}, ${0.28 + 0.42 * s})`);
+      g.addColorStop(1, `rgba(${tone}, 0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    }
+    // Horizontal and vertical pipes with flanges
+    for (let i = 0; i < Math.round(5 + 7 * s); i++) {
+      const horiz = rng() < 0.5;
+      const pos = 80 + rng() * 864;
+      const w = 24 + rng() * 44;
+      const g = horiz ? c.createLinearGradient(0, pos - w / 2, 0, pos + w / 2) : c.createLinearGradient(pos - w / 2, 0, pos + w / 2, 0);
+      const hue = rng() < 0.35 ? ['#5e4938', '#b89472', '#3d2e22'] : ['#4e565e', '#a9b2ba', '#343a40'];
+      g.addColorStop(0, hue[0]); g.addColorStop(0.4, hue[1]); g.addColorStop(1, hue[2]);
+      c.fillStyle = g;
+      if (horiz) {
+        c.fillRect(0, pos - w / 2, 1024, w);
+        for (let fx = 140 + rng() * 120; fx < 950; fx += 280) {
+          c.fillStyle = hue[2];
+          c.fillRect(fx - 8, pos - w * 0.7, 16, w * 1.4);
+        }
+      } else {
+        c.fillRect(pos - w / 2, 0, w, 1024);
+        for (let fy = 140 + rng() * 120; fy < 950; fy += 280) {
+          c.fillStyle = hue[2];
+          c.fillRect(pos - w * 0.7, fy - 8, w * 1.4, 16);
+        }
+      }
+    }
+    // Circular machine parts, valve wheels, and bolt rings (challenges circle detection)
+    for (let i = 0; i < Math.round(6 + 10 * s); i++) {
+      const cx = 60 + rng() * 904, cy = 60 + rng() * 904, cr = 26 + rng() * 72;
+      c.fillStyle = rng() < 0.5 ? '#666e75' : '#7b6352';
+      c.strokeStyle = '#2d3238';
+      c.lineWidth = 5;
+      c.beginPath(); c.arc(cx, cy, cr, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.beginPath(); c.arc(cx, cy, cr * 0.62, 0, Math.PI * 2); c.stroke();
+      for (let b = 0; b < 6; b++) {
+        const ba = b * Math.PI / 3;
+        c.fillStyle = '#25292e';
+        c.beginPath(); c.arc(cx + Math.cos(ba) * cr * 0.8, cy + Math.sin(ba) * cr * 0.8, 4, 0, Math.PI * 2); c.fill();
+      }
+    }
+    c.restore();
+    wallTexture = new THREE.CanvasTexture(canvas);
+    wallTexture.encoding = THREE.sRGBEncoding;
+    wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+    wallTexture.repeat.set(22, 22);
+    wall.material.map = wallTexture;
+    wall.material.color.setHex(0xffffff);
+    wall.material.needsUpdate = true;
+  }
+
+  function updateGlassOverlay(settings) {
+    if (!glassFxMesh) return;
+    const sScratch = settings.glass_scratches, sFog = settings.glass_fog, sDrop = settings.glass_droplets;
+    const sShadow = settings.bezel_shadow, sOcc = settings.partial_occlusion;
+    const active = sScratch > 0 || sFog > 0 || sDrop > 0 || sShadow > 0 || sOcc > 0;
+    glassFxMesh.visible = active;
+    if (!active) return;
+    const az = number('light-azimuth');
+    const key = `${settings.seed}:${sScratch}:${sFog}:${sDrop}:${sShadow}:${sOcc}:${az}`;
+    if (key === lastGlassKey) return;
+    lastGlassKey = key;
+    if (glassFxTexture) glassFxTexture.dispose();
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1024;
+    const c = canvas.getContext('2d');
+    c.save();
+    c.beginPath(); c.arc(512, 512, 504, 0, Math.PI * 2); c.clip();
+
+    // 1. Bezel shadow (directional crescent + rim shadow)
+    if (sShadow > 0) {
+      const rng = makeRng(settings.seed, 300);
+      const lightRad = radians(az + (rng() - 0.5) * 18);
+      const sx = 512 + Math.sin(lightRad) * (62 + 88 * sShadow);
+      const sy = 512 - Math.cos(lightRad) * (62 + 88 * sShadow);
+      const g = c.createRadialGradient(sx, sy, 310 - 70 * sShadow, 512, 512, 508);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.65, `rgba(8,10,14,${0.25 * sShadow})`);
+      g.addColorStop(1, `rgba(5,7,10,${0.48 + 0.44 * sShadow})`);
+      c.fillStyle = g;
+      c.fillRect(0, 0, 1024, 1024);
+    }
+
+    // 2. Glass fog / condensation
+    if (sFog > 0) {
+      const rng = makeRng(settings.seed, 302);
+      const baseFog = c.createRadialGradient(512, 512, 60, 512, 512, 500);
+      baseFog.addColorStop(0, `rgba(232, 238, 244, ${0.22 + 0.48 * sFog})`);
+      baseFog.addColorStop(1, `rgba(220, 228, 236, ${0.32 + 0.52 * sFog})`);
+      c.fillStyle = baseFog;
+      c.fillRect(0, 0, 1024, 1024);
+      for (let i = 0; i < Math.round(12 + 24 * sFog); i++) {
+        const fx = 120 + rng() * 784, fy = 120 + rng() * 784, fr = 70 + rng() * 140;
+        const fg = c.createRadialGradient(fx, fy, fr * 0.1, fx, fy, fr);
+        fg.addColorStop(0, `rgba(244, 248, 252, ${0.18 + 0.36 * sFog})`);
+        fg.addColorStop(1, 'rgba(244, 248, 252, 0)');
+        c.fillStyle = fg;
+        c.beginPath(); c.arc(fx, fy, fr, 0, Math.PI * 2); c.fill();
+      }
+    }
+
+    // 3. Glass scratches
+    if (sScratch > 0) {
+      const rng = makeRng(settings.seed, 301);
+      c.lineCap = 'round';
+      for (let i = 0; i < Math.round(14 + 42 * sScratch); i++) {
+        const x1 = 110 + rng() * 804, y1 = 110 + rng() * 804;
+        const len = 45 + rng() * 240, ang = rng() * Math.PI * 2;
+        const x2 = x1 + Math.cos(ang) * len, y2 = y1 + Math.sin(ang) * len;
+        const cx = (x1 + x2) / 2 + (rng() - 0.5) * 36, cy = (y1 + y2) / 2 + (rng() - 0.5) * 36;
+        c.lineWidth = 1.2 + rng() * (2.4 * sScratch);
+        c.strokeStyle = `rgba(248, 251, 255, ${0.35 + 0.55 * sScratch})`;
+        c.beginPath(); c.moveTo(x1, y1); c.quadraticCurveTo(cx, cy, x2, y2); c.stroke();
+        c.lineWidth = 1;
+        c.strokeStyle = `rgba(38, 44, 52, ${0.22 + 0.42 * sScratch})`;
+        c.beginPath(); c.moveTo(x1 + 1.5, y1 + 1.5); c.quadraticCurveTo(cx + 1.5, cy + 1.5, x2 + 1.5, y2 + 1.5); c.stroke();
+      }
+    }
+
+    // 4. Water droplets on glass
+    if (sDrop > 0) {
+      const rng = makeRng(settings.seed, 303);
+      for (let i = 0; i < Math.round(16 + 48 * sDrop); i++) {
+        const dx = 110 + rng() * 804, dy = 110 + rng() * 804;
+        if (Math.hypot(dx - 512, dy - 512) > 465) continue;
+        const dr = 7 + rng() * (12 + 14 * sDrop);
+        const dg = c.createRadialGradient(dx - dr * 0.28, dy - dr * 0.28, dr * 0.08, dx, dy, dr);
+        dg.addColorStop(0, `rgba(255, 255, 255, ${0.48 + 0.42 * sDrop})`);
+        dg.addColorStop(0.55, `rgba(195, 210, 225, ${0.18 + 0.25 * sDrop})`);
+        dg.addColorStop(0.88, `rgba(32, 42, 54, ${0.38 + 0.42 * sDrop})`);
+        dg.addColorStop(1, 'rgba(32, 42, 54, 0)');
+        c.fillStyle = dg;
+        c.beginPath(); c.arc(dx, dy, dr, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = `rgba(255, 255, 255, ${0.42 + 0.45 * sDrop})`;
+        c.lineWidth = 1.6;
+        c.beginPath(); c.arc(dx, dy, dr * 0.82, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      }
+    }
+
+    // 5. Partial occlusion (inspection tag or finger over the dial edge)
+    if (sOcc > 0) {
+      const rng = makeRng(settings.seed, 304);
+      const ang = (rng() * 1.4 - 0.7) * Math.PI;
+      const depth = 120 + 210 * sOcc;
+      c.save();
+      c.translate(512, 512);
+      c.rotate(ang);
+      if (rng() < 0.55) {
+        // Hanging inspection tag over the rim and scale edge
+        const tagY = -505 + depth;
+        c.fillStyle = '#d8c17a';
+        c.strokeStyle = '#4a3d1e';
+        c.lineWidth = 4;
+        c.beginPath();
+        c.rect(-82, tagY - 260, 164, 260);
+        c.fill(); c.stroke();
+        c.fillStyle = '#332814';
+        c.beginPath(); c.arc(0, tagY - 25, 11, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#9e1f1f';
+        c.fillRect(-70, tagY - 220, 140, 34);
+        c.fillStyle = '#241e14';
+        c.fillRect(-62, tagY - 165, 124, 10);
+        c.fillRect(-62, tagY - 140, 96, 10);
+        c.fillRect(-62, tagY - 115, 110, 10);
+      } else {
+        // Gloved finger shape intruding over the dial edge
+        const tipY = -505 + depth;
+        const fg = c.createLinearGradient(-68, 0, 68, 0);
+        fg.addColorStop(0, '#3a342e'); fg.addColorStop(0.5, '#595047'); fg.addColorStop(1, '#2b2622');
+        c.fillStyle = fg;
+        c.beginPath();
+        c.moveTo(-66, -520);
+        c.lineTo(-62, tipY - 58);
+        c.quadraticCurveTo(-58, tipY, 0, tipY);
+        c.quadraticCurveTo(58, tipY, 62, tipY - 58);
+        c.lineTo(66, -520);
+        c.closePath();
+        c.fill();
+      }
+      c.restore();
+    }
+    c.restore();
+    glassFxTexture = new THREE.CanvasTexture(canvas);
+    glassFxTexture.encoding = THREE.sRGBEncoding;
+    glassFxMesh.material.map = glassFxTexture;
+    glassFxMesh.material.needsUpdate = true;
+  }
+
+  function drawDial(settings) {
+    dialDistractors = [];
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 2048;
+    const c = canvas.getContext('2d');
+    const scale = 1024 / FACE_RADIUS;
+    const bgHex = { white: '#fafaf8', black: '#101317', cream: '#f6f0de' }[settings.dial_color];
+    c.fillStyle = bgHex;
+    c.fillRect(0, 0, 2048, 2048);
+
+    // Dial yellowing degradation
+    if (settings.dial_yellowing > 0) {
+      const s = settings.dial_yellowing;
+      const rng = makeRng(settings.seed, 201);
+      c.fillStyle = settings.dial_color === 'black' ? `rgba(155, 118, 42, ${0.18 + 0.34 * s})` : `rgba(204, 162, 62, ${0.22 + 0.46 * s})`;
+      c.fillRect(0, 0, 2048, 2048);
+      for (let i = 0; i < 8; i++) {
+        const yx = 300 + rng() * 1448, yy = 300 + rng() * 1448, yr = 280 + rng() * 520;
+        const yg = c.createRadialGradient(yx, yy, yr * 0.1, yx, yy, yr);
+        yg.addColorStop(0, `rgba(182, 134, 38, ${0.14 + 0.28 * s})`);
+        yg.addColorStop(1, 'rgba(182, 134, 38, 0)');
+        c.fillStyle = yg;
+        c.beginPath(); c.arc(yx, yy, yr, 0, Math.PI * 2); c.fill();
+      }
+    }
+
+    const printCanvas = settings.faded_print > 0 ? document.createElement('canvas') : canvas;
+    if (settings.faded_print > 0) printCanvas.width = printCanvas.height = 2048;
+    const pc = settings.faded_print > 0 ? printCanvas.getContext('2d') : c;
+
+    const ink = settings.dial_color === 'black' ? '#f7f7f3' : '#17191c';
+    pc.strokeStyle = pc.fillStyle = ink;
+    pc.lineCap = 'butt';
+    function dialPoint(value, radius) {
+      const p = polar(value, settings, radius);
+      return [1024 + p.x * scale, 1024 - p.y * scale];
+    }
+    function recordDistractor(text, cx, cy, kind) {
+      dialDistractors.push({
+        text: String(text),
+        local: new THREE.Vector3((cx - 1024) / scale, (1024 - cy) / scale, DIAL_Z),
+        kind,
+        is_scale_number: false
+      });
+    }
+
+    const layout = tickLayout(settings);
+    if (settings.danger_band || settings.danger_band_numbers > 0) {
+      const start = settings.min + (settings.max - settings.min) * 0.85;
+      pc.save();
+      pc.globalAlpha = settings.danger_band ? 1 : (0.55 + 0.45 * settings.danger_band_numbers);
+      pc.strokeStyle = '#c5212b'; pc.lineWidth = 26;
+      pc.beginPath();
+      for (let i = 0; i <= 60; i++) {
+        const p = dialPoint(start + (settings.max - start) * i / 60, layout.outer + 0.025);
+        i ? pc.lineTo(...p) : pc.moveTo(...p);
+      }
+      pc.stroke();
+      pc.restore();
+      pc.strokeStyle = ink;
+    }
+    for (const { value, level } of tickValues(settings)) {
+      const a = dialPoint(value, layout[level]);
+      const b = dialPoint(value, layout.outer);
+      pc.lineWidth = { major: 12, medium: 7, minor: 4 }[level];
+      pc.beginPath(); pc.moveTo(...a); pc.lineTo(...b); pc.stroke();
+      if (level === 'major') {
+        const outside = settings.number_position === 'outside';
+        const p = dialPoint(value, outside ? 1.28 : 0.88);
+        const count = (settings.max - settings.min) / settings.major;
+        pc.font = `${outside ? 75 : count > 7 ? 94 : 116}px ${FONTS[settings.font]}`;
+        pc.textAlign = 'center'; pc.textBaseline = 'middle';
+        pc.fillText(String(value), ...p);
+      }
+    }
+    pc.textAlign = 'center';
+    pc.font = `52px ${FONTS[settings.font]}`;
+    pc.fillText(settings.type === 'pressure' ? 'PRESSURE GAUGE' : 'TEMPERATURE', 1024, 1330);
+    pc.font = `108px ${FONTS[settings.font]}`;
+    pc.fillText(settings.unit, 1024, 1450);
+
+    // Distractor 1: dual_scale (inner ring of psi / kgf/cm² / °F numbers in a second color)
+    if (settings.dual_scale > 0) {
+      const s = settings.dual_scale;
+      const dualUnit = settings.type === 'temperature' ? '°F' : (settings.seed % 2 === 0 ? 'psi' : 'kgf/cm²');
+      const toDual = v => {
+        if (settings.type === 'temperature') return Math.round(v * 1.8 + 32);
+        const mpa = settings.unit === 'kPa' ? v / 1000 : settings.unit === 'bar' ? v * 0.1 : v;
+        return dualUnit === 'psi' ? Math.round(mpa * 145.038 * (settings.max <= 2 ? 10 : 1)) / (settings.max <= 2 ? 10 : 1) : Number((mpa * 10.197).toFixed(settings.max <= 2 ? 1 : 0));
+      };
+      const dualColor = settings.dial_color === 'black' ? '#58b4ff' : (settings.seed % 2 === 0 ? '#1458a8' : '#b83218');
+      const outside = settings.number_position === 'outside';
+      const arcR = outside ? 0.82 : 0.70;
+      const numR = outside ? 0.65 : 0.54;
+      pc.save();
+      pc.globalAlpha = 0.35 + 0.65 * s;
+      pc.strokeStyle = pc.fillStyle = dualColor;
+      pc.lineWidth = 5;
+      pc.beginPath();
+      for (let i = 0; i <= 80; i++) {
+        const p = dialPoint(settings.min + (settings.max - settings.min) * i / 80, arcR);
+        i ? pc.lineTo(...p) : pc.moveTo(...p);
+      }
+      pc.stroke();
+      pc.font = `bold 52px ${FONTS[settings.font]}`;
+      pc.textAlign = 'center'; pc.textBaseline = 'middle';
+      for (const { value, level } of tickValues(settings)) {
+        if (level !== 'major') continue;
+        const p1 = dialPoint(value, arcR);
+        const p2 = dialPoint(value, arcR - 0.06);
+        pc.lineWidth = 7;
+        pc.beginPath(); pc.moveTo(...p1); pc.lineTo(...p2); pc.stroke();
+        const np = dialPoint(value, numR);
+        const text = String(toDual(value));
+        pc.fillText(text, ...np);
+        recordDistractor(text, np[0], np[1], 'dual_scale');
+      }
+      pc.font = `bold 46px ${FONTS[settings.font]}`;
+      pc.fillText(dualUnit, 1024, 835);
+      recordDistractor(dualUnit, 1024, 835, 'dual_scale');
+      pc.restore();
+    }
+
+    // Distractor 2: non_scale_numbers (1.6, JIS B 7505, No. 2019-0471, ×0.1, sticker A-101)
+    if (settings.non_scale_numbers > 0) {
+      const s = settings.non_scale_numbers;
+      pc.save();
+      pc.globalAlpha = 0.35 + 0.65 * s;
+      pc.fillStyle = pc.strokeStyle = ink;
+      pc.textAlign = 'center'; pc.textBaseline = 'middle';
+      pc.font = `bold 46px ${FONTS[settings.font]}`;
+      pc.lineWidth = 4;
+      pc.beginPath(); pc.arc(730, 1185, 44, 0, Math.PI * 2); pc.stroke();
+      pc.fillText('1.6', 730, 1185);
+      recordDistractor('1.6', 730, 1185, 'non_scale_number');
+
+      pc.font = `42px ${FONTS[settings.font]}`;
+      pc.fillText('JIS B 7505', 1315, 1185);
+      recordDistractor('JIS B 7505', 1315, 1185, 'non_scale_number');
+
+      pc.font = `40px ${FONTS[settings.font]}`;
+      pc.fillText('No. 2019-0471', 1024, 1615);
+      recordDistractor('No. 2019-0471', 1024, 1615, 'non_scale_number');
+
+      pc.font = `bold 54px ${FONTS[settings.font]}`;
+      pc.fillText('×0.1', 755, 865);
+      recordDistractor('×0.1', 755, 865, 'non_scale_number');
+
+      // Sticker "A-101"
+      pc.fillStyle = '#f6eab8';
+      pc.strokeStyle = '#52492a';
+      pc.lineWidth = 4;
+      pc.fillRect(1195, 825, 190, 76);
+      pc.strokeRect(1195, 825, 190, 76);
+      pc.fillStyle = '#181a1d';
+      pc.font = `bold 48px ${FONTS[settings.font]}`;
+      pc.fillText('A-101', 1290, 863);
+      recordDistractor('A-101', 1290, 863, 'non_scale_number');
+      pc.restore();
+    }
+
+    // Distractor 3: extra_labels (large unit / maker-like text)
+    if (settings.extra_labels > 0) {
+      const s = settings.extra_labels;
+      pc.save();
+      pc.globalAlpha = 0.35 + 0.65 * s;
+      pc.fillStyle = pc.strokeStyle = ink;
+      pc.textAlign = 'center'; pc.textBaseline = 'middle';
+      pc.font = `bold 64px ${FONTS[settings.font]}`;
+      pc.fillText('KOSEI KEIKI', 1024, 675);
+      recordDistractor('KOSEI KEIKI', 1024, 675, 'extra_label');
+
+      const prominentUnit = settings.type === 'temperature' ? '℃' : settings.unit;
+      pc.font = `bold 132px ${FONTS[settings.font]}`;
+      pc.fillText(prominentUnit, 1024, 1175);
+      recordDistractor(prominentUnit, 1024, 1175, 'extra_label');
+
+      pc.font = `bold 44px ${FONTS[settings.font]}`;
+      pc.fillText('MODEL PG-200', 1024, 1535);
+      recordDistractor('MODEL PG-200', 1024, 1535, 'extra_label');
+      pc.restore();
+    }
+
+    // Distractor 4: danger_band_numbers (numbers printed directly on the red danger band)
+    if (settings.danger_band_numbers > 0) {
+      const s = settings.danger_band_numbers;
+      pc.save();
+      pc.globalAlpha = 0.4 + 0.6 * s;
+      pc.font = `bold 48px ${FONTS[settings.font]}`;
+      pc.textAlign = 'center'; pc.textBaseline = 'middle';
+      for (const frac of [0.86, 0.92, 0.98]) {
+        const val = Number((settings.min + (settings.max - settings.min) * frac).toFixed(2));
+        const p = dialPoint(val, layout.outer + 0.025);
+        const label = String(val);
+        pc.lineWidth = 8;
+        pc.strokeStyle = '#6e0d14';
+        pc.strokeText(label, p[0], p[1]);
+        pc.fillStyle = '#fff5cf';
+        pc.fillText(label, p[0], p[1]);
+        recordDistractor(label, p[0], p[1], 'danger_band_number');
+      }
+      pc.restore();
+    }
+
+    // Apply faded_print degradation to the print layer before compositing onto dial
+    if (settings.faded_print > 0) {
+      const s = settings.faded_print;
+      const rng = makeRng(settings.seed, 202);
+      pc.save();
+      pc.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < Math.round(28 + 65 * s); i++) {
+        const fx = 160 + rng() * 1728, fy = 160 + rng() * 1728, fr = 45 + rng() * 165;
+        const fg = pc.createRadialGradient(fx, fy, fr * 0.1, fx, fy, fr);
+        fg.addColorStop(0, `rgba(0,0,0,${0.42 + 0.54 * s})`);
+        fg.addColorStop(1, 'rgba(0,0,0,0)');
+        pc.fillStyle = fg;
+        pc.beginPath(); pc.arc(fx, fy, fr, 0, Math.PI * 2); pc.fill();
+      }
+      pc.restore();
+      c.save();
+      c.globalAlpha = 1 - 0.58 * s;
+      c.drawImage(printCanvas, 0, 0);
+      c.restore();
+    }
+
+    // Dial dirt spots and smudges
+    if (settings.dial_dirt > 0) {
+      const s = settings.dial_dirt;
+      const rng = makeRng(settings.seed, 203);
+      c.save();
+      for (let i = 0; i < Math.round(22 + 55 * s); i++) {
+        const dx = 180 + rng() * 1688, dy = 180 + rng() * 1688, dr = 14 + rng() * (42 + 95 * s);
+        const dg = c.createRadialGradient(dx, dy, dr * 0.1, dx, dy, dr);
+        const darkDial = settings.dial_color === 'black';
+        const rgb = darkDial ? (rng() < 0.5 ? '175, 162, 138' : '128, 114, 92') : (rng() < 0.5 ? '58, 46, 32' : '86, 68, 44');
+        dg.addColorStop(0, `rgba(${rgb}, ${0.24 + 0.52 * s})`);
+        dg.addColorStop(0.65, `rgba(${rgb}, ${0.12 + 0.28 * s})`);
+        dg.addColorStop(1, `rgba(${rgb}, 0)`);
+        c.fillStyle = dg;
+        c.beginPath(); c.arc(dx, dy, dr, 0, Math.PI * 2); c.fill();
+      }
+      c.restore();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.encoding = THREE.sRGBEncoding;
+    texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    return texture;
+  }
+
+  function buildMeter() {
+    const settings = config();
+    const pressure = settings.type === 'pressure';
+    if (meter) {
+      scene.remove(meter);
+      meter.traverse(object => {
+        if (object.geometry) { object.geometry.dispose(); object.material.dispose(); }
+      });
+      dialTexture.dispose();
+      if (glassFxTexture) { glassFxTexture.dispose(); glassFxTexture = null; }
+      lastGlassKey = '';
+    }
+    meter = new THREE.Group();
+    scene.add(meter);
+    const darkCase = settings.bezel_color === 'black';
+    const caseMaterial = new THREE.MeshStandardMaterial({ color: { black: 0x08090a, silver: 0x8c9399, brass: 0xb18a36 }[settings.bezel_color], metalness: darkCase ? 0.15 : 0.85, roughness: 0.3, envMap, envMapIntensity: darkCase ? 0.35 : 1 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(1.57, 1.53, 0.34, 128), caseMaterial);
+    body.rotation.x = Math.PI / 2;
+    body.position.z = -0.13;
+    body.castShadow = true;
+    meter.add(body);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.48, 0.105, 20, 128), caseMaterial.clone());
+    rim.position.z = 0.09;
+    rim.castShadow = true;
+    meter.add(rim);
+    dialTexture = drawDial(settings);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(FACE_RADIUS, 128), new THREE.MeshStandardMaterial({ map: dialTexture, roughness: 0.95 }));
+    face.position.z = DIAL_Z;
+    face.receiveShadow = true;
+    meter.add(face);
+    const shape = new THREE.Shape();
+    shape.moveTo(0, NEEDLE_LENGTH);
+    if (settings.needle_shape === 'counterweight') {
+      shape.lineTo(0.065, 0.20); shape.lineTo(0.055, -0.12);
+      shape.lineTo(0.115, -0.26); shape.lineTo(0.10, -0.39);
+      shape.lineTo(-0.10, -0.39); shape.lineTo(-0.115, -0.26);
+      shape.lineTo(-0.055, -0.12); shape.lineTo(-0.065, 0.20);
+    } else if (settings.needle_shape === 'arrow') {
+      shape.lineTo(0.105, 0.89); shape.lineTo(0.032, 0.89); shape.lineTo(0.032, -0.23);
+      shape.lineTo(-0.032, -0.23); shape.lineTo(-0.032, 0.89); shape.lineTo(-0.105, 0.89);
+    } else {
+      shape.lineTo(0.025, 0.1); shape.lineTo(0.035, -0.25);
+      shape.lineTo(-0.035, -0.25); shape.lineTo(-0.025, 0.1);
+    }
+    shape.closePath();
+    needle = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: NEEDLE_DEPTH, bevelEnabled: false }), new THREE.MeshStandardMaterial({ color: settings.needle_color === 'black' ? 0x030303 : 0xb00812, roughness: 0.7, metalness: 0 }));
+    if (settings.dial_color === 'black' && settings.needle_color === 'black') {
+      needle.add(new THREE.LineSegments(new THREE.EdgesGeometry(needle.geometry), new THREE.LineBasicMaterial({ color: 0xd5d8dc })));
+    }
+    needle.position.z = NEEDLE_Z;
+    needle.castShadow = true;
+    meter.add(needle);
+    const pointerShape = new THREE.Shape();
+    pointerShape.moveTo(0, NEEDLE_LENGTH); pointerShape.lineTo(0.018, -0.17); pointerShape.lineTo(-0.018, -0.17); pointerShape.closePath();
+    maxPointer = new THREE.Mesh(new THREE.ExtrudeGeometry(pointerShape, { depth: 0.015, bevelEnabled: false }), new THREE.MeshStandardMaterial({ color: 0xe6222c, roughness: 0.7 }));
+    maxPointer.position.z = 0.168;
+    meter.add(maxPointer);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.055, 64), new THREE.MeshStandardMaterial({ color: pressure ? 0x17191c : 0xc3c7ca, roughness: 0.35, metalness: 0.5, envMap }));
+    cap.rotation.x = Math.PI / 2;
+    cap.position.z = 0.185;
+    cap.castShadow = true;
+    meter.add(cap);
+    glassFxMesh = new THREE.Mesh(new THREE.CircleGeometry(1.48, 96), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }));
+    glassFxMesh.position.z = 0.215;
+    glassFxMesh.renderOrder = 1;
+    glassFxMesh.visible = false;
+    meter.add(glassFxMesh);
+  }
+
+  function effectiveCameraDistance() {
+    return Number((number('camera-distance') + number('small_in_frame') * 7.5).toFixed(6));
+  }
+
+  function updateScene() {
+    const settings = config();
+    updateBackgroundWall(settings);
+    updateGlassOverlay(settings);
+    const yaw = radians(number('camera-yaw')), pitch = radians(number('camera-pitch'));
+    const distance = effectiveCameraDistance();
+    camera.position.set(distance * Math.cos(pitch) * Math.sin(yaw), distance * Math.sin(pitch), distance * Math.cos(pitch) * Math.cos(yaw));
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    const [shiftX, shiftY] = cropShift(settings.partial_crop, settings.seed, distance);
+    meter.position.set(shiftX, shiftY, 0);
+    glass.position.set(shiftX, shiftY, glassBaseZ);
+    const azimuth = radians(number('light-azimuth')), elevation = radians(number('light-elevation'));
+    keyLight.position.set(5 * Math.cos(elevation) * Math.sin(azimuth), 5 * Math.sin(elevation), 5 * Math.cos(elevation) * Math.cos(azimuth));
+    keyLight.intensity = number('light-intensity');
+    if (settings.color_cast > 0) {
+      const castColor = new THREE.Color(settings.seed % 2 === 0 ? 0x9effb8 : 0xffaa58);
+      ambientLight.color.setHex(0xffffff).lerp(castColor, 0.55 * settings.color_cast);
+      keyLight.color.setHex(0xfff8ed).lerp(castColor, 0.65 * settings.color_cast);
+    } else {
+      ambientLight.color.setHex(0xffffff);
+      keyLight.color.setHex(0xfff8ed);
+    }
+    const reflection = number('glass-reflection');
+    glass.visible = reflection > 0;
+    glassMaterial.opacity = reflection * 0.42;
+    glassMaterial.envMapIntensity = (0.2 + keyLight.intensity * 6) * reflection;
+    needle.rotation.z = -scaleAngle(number('needle-value'), settings);
+    maxPointer.visible = settings.max_pointer;
+    maxPointer.rotation.z = -scaleAngle(settings.max_pointer_value, settings);
+    scene.updateMatrixWorld(true);
+  }
+
+  function hasPostEffects(settings) {
+    return settings.uneven_lighting > 0 || settings.color_cast > 0 || settings.sensor_noise > 0 || settings.jpeg_compression > 0;
+  }
+
+  function applyPostEffects(sourceCanvas, targetCanvas, width, height, settings) {
+    targetCanvas.width = width;
+    targetCanvas.height = height;
+    const c = targetCanvas.getContext('2d');
+    c.drawImage(sourceCanvas, 0, 0, width, height);
+
+    if (settings.uneven_lighting > 0) {
+      const s = settings.uneven_lighting;
+      const rng = makeRng(settings.seed, 501);
+      const lx = (0.2 + rng() * 0.6) * width, ly = (0.2 + rng() * 0.6) * height;
+      const g = c.createRadialGradient(lx, ly, Math.min(width, height) * 0.08, width / 2, height / 2, Math.hypot(width, height) * 0.55);
+      g.addColorStop(0, `rgba(255, 252, 242, ${0.22 * s})`);
+      g.addColorStop(0.45, 'rgba(0, 0, 0, 0)');
+      g.addColorStop(1, `rgba(6, 8, 12, ${0.42 + 0.46 * s})`);
+      c.fillStyle = g;
+      c.fillRect(0, 0, width, height);
+    }
+
+    if (settings.color_cast > 0) {
+      const s = settings.color_cast;
+      c.fillStyle = settings.seed % 2 === 0 ? `rgba(110, 235, 145, ${0.14 + 0.24 * s})` : `rgba(255, 165, 65, ${0.16 + 0.26 * s})`;
+      c.fillRect(0, 0, width, height);
+    }
+
+    if (settings.sensor_noise > 0 || settings.jpeg_compression > 0) {
+      const img = c.getImageData(0, 0, width, height);
+      const d = img.data;
+      if (settings.sensor_noise > 0) {
+        const amp = (10 + 66 * settings.sensor_noise);
+        const rng = makeRng(settings.seed, 502);
+        for (let i = 0; i < d.length; i += 4) {
+          const luma = (rng() - 0.5) * amp;
+          const cr = (rng() - 0.5) * amp * 0.45;
+          const cb = (rng() - 0.5) * amp * 0.45;
+          d[i] = Math.max(0, Math.min(255, d[i] + luma + cr));
+          d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + luma));
+          d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + luma + cb));
+        }
+      }
+      if (settings.jpeg_compression > 0) {
+        const s = settings.jpeg_compression;
+        const block = 8;
+        const qStep = Math.max(4, Math.round(8 + 44 * s));
+        const mix = 0.35 + 0.58 * s;
+        for (let by = 0; by < height; by += block) {
+          const bh = Math.min(block, height - by);
+          for (let bx = 0; bx < width; bx += block) {
+            const bw = Math.min(block, width - bx);
+            let sr = 0, sg = 0, sb = 0, count = bw * bh;
+            for (let y = 0; y < bh; y++) {
+              let idx = ((by + y) * width + bx) * 4;
+              for (let x = 0; x < bw; x++, idx += 4) {
+                sr += d[idx]; sg += d[idx + 1]; sb += d[idx + 2];
+              }
+            }
+            const mr = Math.round(sr / count / qStep) * qStep;
+            const mg = Math.round(sg / count / qStep) * qStep;
+            const mb = Math.round(sb / count / qStep) * qStep;
+            for (let y = 0; y < bh; y++) {
+              let idx = ((by + y) * width + bx) * 4;
+              for (let x = 0; x < bw; x++, idx += 4) {
+                const qR = Math.round(d[idx] / qStep) * qStep;
+                const qG = Math.round(d[idx + 1] / qStep) * qStep;
+                const qB = Math.round(d[idx + 2] / qStep) * qStep;
+                d[idx] = Math.max(0, Math.min(255, Math.round(qR * (1 - mix) + mr * mix)));
+                d[idx + 1] = Math.max(0, Math.min(255, Math.round(qG * (1 - mix) + mg * mix)));
+                d[idx + 2] = Math.max(0, Math.min(255, Math.round(qB * (1 - mix) + mb * mix)));
+              }
+            }
+          }
+        }
+      }
+      c.putImageData(img, 0, 0);
+    }
+  }
+
+  function groundTruth(width, height) {
+    const settings = config();
+    function project(point) {
+      const p = point.project(camera);
+      return [(p.x + 1) * width / 2, (1 - p.y) * height / 2];
+    }
+    const layout = tickLayout(settings);
+    const ticks = tickValues(settings).map(({ value, level }) => {
+      const [x, y] = project(meter.localToWorld(polar(value, settings, (layout.outer + layout[level]) / 2)));
+      return { level, value, x, y };
+    });
+    const numbered = ticks.filter(t => t.level === 'major').map(({ value, x, y }) => ({ value, x, y }));
+    const distractors = dialDistractors.map(d => {
+      const [x, y] = project(meter.localToWorld(d.local.clone()));
+      return { text: d.text, x, y, kind: d.kind, is_scale_number: false };
+    });
+    const degradations = {};
+    for (const key of ROUND2_KEYS) {
+      if (settings[key] > 0) degradations[key] = { strength: settings[key], seed: settings.seed };
+    }
+    return {
+      meter_type: settings.type, unit: settings.unit, min_value: settings.min,
+      max_value: settings.max, major_step: settings.major, true_value: number('needle-value'),
+      image_width: width, image_height: height,
+      camera: { yaw_deg: number('camera-yaw'), pitch_deg: number('camera-pitch'), distance: effectiveCameraDistance() },
+      light: { azimuth_deg: number('light-azimuth'), elevation_deg: number('light-elevation'), intensity: number('light-intensity') },
+      glass_reflection: number('glass-reflection'),
+      seed: settings.seed,
+      ticks, appearance: appearance(),
+      distractors, degradations,
+      ...(settings.max_pointer ? { max_pointer: { value: settings.max_pointer_value, tip: project(maxPointer.localToWorld(new THREE.Vector3(0, NEEDLE_LENGTH, 0.015))) } } : {}),
+      points: {
+        center: project(meter.localToWorld(new THREE.Vector3(0, 0, DIAL_Z))),
+        // Legacy name: zero_pt denotes the MIN tick, even when min_value is negative.
+        zero_pt: [numbered[0].x, numbered[0].y],
+        full_pt: [numbered[numbered.length - 1].x, numbered[numbered.length - 1].y],
+        needle_tip: project(needle.localToWorld(new THREE.Vector3(0, NEEDLE_LENGTH, NEEDLE_DEPTH))),
+        numbered_ticks: numbered
+      }
+    };
+  }
+  function drawOverlay(width, height) {
+    ctx.clearRect(0, 0, width, height);
+    if (!$('show-truth').checked) return;
+    const truth = groundTruth(width, height);
+    const points = truth.points;
+    ctx.lineWidth = 2;
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.lineJoin = 'round';
+    function text(label, x, y) {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4;
+      ctx.strokeText(label, x + 9, y - 9);
+      ctx.fillText(label, x + 9, y - 9);
+      ctx.lineWidth = 2;
+    }
+    ctx.fillStyle = ctx.strokeStyle = '#0758c9';
+    for (const tick of points.numbered_ticks) {
+      ctx.strokeRect(tick.x - 3, tick.y - 3, 6, 6);
+      text(String(tick.value), tick.x, tick.y);
+      ctx.strokeStyle = '#0758c9';
+    }
+    for (const d of truth.distractors) {
+      ctx.strokeStyle = ctx.fillStyle = '#8a3ab9';
+      ctx.beginPath(); ctx.moveTo(d.x - 4, d.y - 4); ctx.lineTo(d.x + 4, d.y + 4);
+      ctx.moveTo(d.x + 4, d.y - 4); ctx.lineTo(d.x - 4, d.y + 4); ctx.stroke();
+    }
+    for (const [point, label] of [[points.zero_pt, '最小'], [points.full_pt, '満尺']]) {
+      ctx.strokeStyle = ctx.fillStyle = '#087545';
+      ctx.beginPath(); ctx.arc(...point, 7, 0, Math.PI * 2); ctx.stroke();
+      text(label, point[0], point[1] + 24);
+    }
+    const [cx, cy] = points.center;
+    ctx.strokeStyle = ctx.fillStyle = '#0758c9';
+    ctx.beginPath(); ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy);
+    ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8); ctx.stroke();
+    text('中心', cx, cy);
+    ctx.fillStyle = '#bb2344';
+    ctx.beginPath(); ctx.arc(...points.needle_tip, 4, 0, Math.PI * 2); ctx.fill();
+    text('針先', ...points.needle_tip);
+  }
+  function render() {
+    const settings = config();
+    updateScene();
+    renderer.render(scene, camera);
+    if (hasPostEffects(settings) && stage.clientWidth && stage.clientHeight) {
+      applyPostEffects(renderer.domElement, postOverlay, Math.min(stage.clientWidth, 640), Math.min(stage.clientHeight, 480), settings);
+    } else {
+      postCtx.clearRect(0, 0, postOverlay.width, postOverlay.height);
+    }
+    drawOverlay(stage.clientWidth, stage.clientHeight);
+  }
+  function resize() {
+    const width = stage.clientWidth, height = stage.clientHeight;
+    if (!width || !height) return;
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    overlay.width = Math.round(width * ratio);
+    overlay.height = Math.round(height * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    render();
+  }
+  let pressureRange = '150';
+  let temperatureRange = '100';
+  function rangeOptions(type, selected) {
+    $('meter-range').innerHTML = Object.entries(RANGES[type]).map(([key, [min, max, major, medium, minor, unit]]) =>
+      `<option value="${key}">${min}〜${max} ${unit}（${major} / ${medium} / ${minor}）</option>`).join('');
+    $('meter-range').value = selected;
+  }
+  function valueBounds(settings) {
+    for (const id of ['needle-value', 'max_pointer_value']) {
+      $(id).min = String(settings.min); $(id).max = String(settings.max); $(id).step = 'any';
+    }
+  }
+  function updateReadouts() {
+    const settings = config();
+    for (const input of document.querySelectorAll('.controls input[type="range"]')) {
+      const angle = /yaw|pitch|azimuth|elevation/.test(input.id);
+      $(input.id + '-output').textContent = input.id === 'seed' ? String(Math.round(Number(input.value))) : angle ? `${input.value}°` : Number(input.value).toFixed(2) + (input.id === 'needle-value' ? ` ${settings.unit}` : '');
+    }
+    $('preview-value').textContent = `${number('needle-value').toFixed(2)} ${settings.unit}`;
+  }
+  function changeMeter() {
+    const min = Number($('needle-value').min), span = Number($('needle-value').max) - min;
+    const fraction = (number('needle-value') - min) / span;
+    const pointerFraction = (number('max_pointer_value') - min) / span;
+    const type = $('meter-type').value;
+    const typeChanged = !RANGES[type][$('meter-range').value];
+    const selected = typeChanged ? (type === 'pressure' ? pressureRange : temperatureRange) : $('meter-range').value;
+    rangeOptions(type, selected);
+    if (type === 'pressure') pressureRange = selected; else temperatureRange = selected;
+    if (typeChanged) {
+      $('dial_color').value = type === 'pressure' ? 'white' : 'cream';
+      $('needle_color').value = type === 'pressure' ? 'black' : 'red';
+      $('needle_shape').value = type === 'pressure' ? 'counterweight' : 'lance';
+      $('bezel_color').value = type === 'pressure' ? 'black' : 'silver';
+    }
+    const settings = config();
+    valueBounds(settings);
+    $('needle-value').value = String(settings.min + fraction * (settings.max - settings.min));
+    $('max_pointer_value').value = String(settings.min + pointerFraction * (settings.max - settings.min));
+    buildMeter();
+    updateReadouts();
+    render();
+    status.textContent = '種類・範囲の変更では、針の位置の割合を引き継ぎます。';
+  }
+  $('meter-type').addEventListener('change', changeMeter);
+  $('meter-range').addEventListener('change', changeMeter);
+  for (const name of Object.keys(LOOK_OPTIONS)) $(name).addEventListener('change', () => { buildMeter(); render(); });
+  $('danger_band').addEventListener('input', () => { buildMeter(); render(); });
+  for (const name of [...DIAL_REBUILD_KEYS, 'seed']) $(name).addEventListener('input', () => { buildMeter(); });
+  for (const input of document.querySelectorAll('.controls input')) {
+    input.addEventListener('input', () => {
+      updateReadouts();
+      render();
+    });
+  }
+  const exportPostCanvas = document.createElement('canvas');
+  function performExport() {
+    const width = 1280, height = 960;
+    const settings = config();
+    renderer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    updateScene();
+    renderer.render(scene, camera);
+    let png_data_url;
+    if (hasPostEffects(settings)) {
+      applyPostEffects(renderer.domElement, exportPostCanvas, width, height, settings);
+      png_data_url = exportPostCanvas.toDataURL('image/png');
+    } else {
+      png_data_url = renderer.domElement.toDataURL('image/png');
+    }
+    const truth = groundTruth(width, height);
+    return { png_data_url, truth };
+  }
+  function exportFrame() {
+    try {
+      const result = performExport();
+      return Promise.resolve(result);
+    } catch (error) {
+      return Promise.reject(error);
+    } finally {
+      resize();
+    }
+  }
+  function setParams(params) {
+    if (!params || typeof params !== 'object') {
+      throw new Error('setParams requires an object parameter');
+    }
+    const curType = $('meter-type').value;
+    const targetType = params.meter_type !== undefined ? params.meter_type : curType;
+    if (targetType !== 'pressure' && targetType !== 'temperature') {
+      throw new Error(`Invalid meter_type: ${params.meter_type} (expected 'pressure' or 'temperature')`);
+    }
+    const targetRange = params.range !== undefined ? String(params.range) : curType === targetType ? $('meter-range').value : targetType === 'pressure' ? pressureRange : temperatureRange;
+    if (!Object.hasOwn(RANGES[targetType], targetRange)) throw new Error(`Invalid range for ${targetType}: ${targetRange}`);
+    const [minVal, maxVal] = RANGES[targetType][targetRange];
+    for (const name of ['value', 'max_pointer_value']) {
+      const val = Number(params[name]);
+      if (params[name] !== undefined && (!Number.isFinite(val) || val < minVal || val > maxVal)) {
+        throw new Error(`Invalid ${name}: ${params[name]} (must be between ${minVal} and ${maxVal})`);
+      }
+    }
+    for (const [name, options] of Object.entries(LOOK_OPTIONS)) {
+      if (params[name] !== undefined && !options.includes(String(params[name]))) throw new Error(`Invalid ${name}: ${params[name]}`);
+    }
+    for (const name of ['danger_band', 'max_pointer']) {
+      if (params[name] !== undefined && typeof params[name] !== 'boolean') throw new Error(`Invalid ${name}: expected boolean`);
+    }
+    if (params.seed !== undefined) {
+      const s = Number(params.seed);
+      if (typeof params.seed === 'boolean' || !Number.isSafeInteger(s) || s < 0 || s > 9999) {
+        throw new Error(`Invalid seed: ${params.seed} (integer 0 to 9999)`);
+      }
+    }
+    for (const name of ROUND2_KEYS) {
+      if (params[name] !== undefined) {
+        const v = Number(params[name]);
+        if (typeof params[name] === 'boolean' || !Number.isFinite(v) || v < 0 || v > 1) {
+          throw new Error(`Invalid ${name}: ${params[name]} (range 0 to 1)`);
+        }
+      }
+    }
+    if (params.yaw_deg !== undefined) {
+      const v = Number(params.yaw_deg);
+      if (!Number.isFinite(v) || v < -60 || v > 60) {
+        throw new Error(`Invalid yaw_deg: ${params.yaw_deg} (range -60 to 60)`);
+      }
+    }
+    if (params.pitch_deg !== undefined) {
+      const v = Number(params.pitch_deg);
+      if (!Number.isFinite(v) || v < -60 || v > 60) {
+        throw new Error(`Invalid pitch_deg: ${params.pitch_deg} (range -60 to 60)`);
+      }
+    }
+    if (params.distance !== undefined) {
+      const v = Number(params.distance);
+      if (!Number.isFinite(v) || v < 4.8 || v > 9) {
+        throw new Error(`Invalid distance: ${params.distance} (range 4.8 to 9)`);
+      }
+    }
+    if (params.light_azimuth_deg !== undefined) {
+      const v = Number(params.light_azimuth_deg);
+      if (!Number.isFinite(v) || v < -180 || v > 180) {
+        throw new Error(`Invalid light_azimuth_deg: ${params.light_azimuth_deg} (range -180 to 180)`);
+      }
+    }
+    if (params.light_elevation_deg !== undefined) {
+      const v = Number(params.light_elevation_deg);
+      if (!Number.isFinite(v) || v < 0 || v > 85) {
+        throw new Error(`Invalid light_elevation_deg: ${params.light_elevation_deg} (range 0 to 85)`);
+      }
+    }
+    if (params.light_intensity !== undefined) {
+      const v = Number(params.light_intensity);
+      if (!Number.isFinite(v) || v < 0 || v > 5) {
+        throw new Error(`Invalid light_intensity: ${params.light_intensity} (range 0 to 5)`);
+      }
+    }
+    if (params.glass_reflection !== undefined) {
+      const v = Number(params.glass_reflection);
+      if (!Number.isFinite(v) || v < 0 || v > 1) {
+        throw new Error(`Invalid glass_reflection: ${params.glass_reflection} (range 0 to 1)`);
+      }
+    }
+
+    const typeChanged = targetType !== curType;
+    const meterChanged = typeChanged || targetRange !== $('meter-range').value;
+    $('meter-type').value = targetType;
+    rangeOptions(targetType, targetRange);
+    if (targetType === 'pressure') pressureRange = targetRange; else temperatureRange = targetRange;
+    if (typeChanged) {
+      $('dial_color').value = targetType === 'pressure' ? 'white' : 'cream';
+      $('needle_color').value = targetType === 'pressure' ? 'black' : 'red';
+      $('needle_shape').value = targetType === 'pressure' ? 'counterweight' : 'lance';
+      $('bezel_color').value = targetType === 'pressure' ? 'black' : 'silver';
+    }
+    for (const name of Object.keys(LOOK_OPTIONS)) if (params[name] !== undefined) $(name).value = String(params[name]);
+    for (const name of ['danger_band', 'max_pointer']) if (params[name] !== undefined) $(name).checked = params[name];
+    if (params.seed !== undefined) $('seed').value = String(params.seed);
+    for (const name of ROUND2_KEYS) if (params[name] !== undefined) $(name).value = String(params[name]);
+    const oldPointer = number('max_pointer_value');
+    const oldValue = number('needle-value');
+    const settings = config();
+    valueBounds(settings);
+    $('needle-value').value = String(params.value !== undefined ? Number(params.value) : Math.max(settings.min, Math.min(settings.max, oldValue)));
+    $('max_pointer_value').value = String(params.max_pointer_value !== undefined ? Number(params.max_pointer_value) : Math.max(settings.min, Math.min(settings.max, oldPointer)));
+    if (params.yaw_deg !== undefined) $('camera-yaw').value = String(params.yaw_deg);
+    if (params.pitch_deg !== undefined) $('camera-pitch').value = String(params.pitch_deg);
+    if (params.distance !== undefined) $('camera-distance').value = String(params.distance);
+    if (params.light_azimuth_deg !== undefined) $('light-azimuth').value = String(params.light_azimuth_deg);
+    if (params.light_elevation_deg !== undefined) $('light-elevation').value = String(params.light_elevation_deg);
+    if (params.light_intensity !== undefined) $('light-intensity').value = String(params.light_intensity);
+    if (params.glass_reflection !== undefined) $('glass-reflection').value = String(params.glass_reflection);
+    if (meterChanged || Object.keys(LOOK_OPTIONS).some(name => params[name] !== undefined) || params.danger_band !== undefined || params.seed !== undefined || DIAL_REBUILD_KEYS.some(name => params[name] !== undefined)) {
+      buildMeter();
+    }
+    updateReadouts();
+    render();
+  }
+  window.meter3dApi = { setParams, exportFrame };
+  exportButton.addEventListener('click', () => {
+    exportButton.disabled = true;
+    try {
+      const { png_data_url, truth } = performExport();
+      $('export-image').src = png_data_url;
+      $('export-json').value = JSON.stringify(truth, null, 2);
+      $('exports').hidden = false;
+      $('copy-status').textContent = '';
+      status.classList.remove('error');
+      status.textContent = '1280 × 960 px の画像と正解JSONを書き出しました。下の結果から保存できます。';
+    } catch (error) {
+      reportError('書き出しに失敗しました。WebGLが利用できる状態で再度お試しください。', error);
+    } finally {
+      resize();
+      exportButton.disabled = false;
+    }
+  });
+  $('copy-button').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText($('export-json').value);
+      $('copy-status').textContent = 'JSONをコピーしました。';
+    } catch {
+      $('export-json').focus();
+      $('export-json').select();
+      $('copy-status').textContent = '自動コピーが利用できません。選択したテキストを Ctrl+C / ⌘C でコピーしてください。';
+    }
+  });
+  $('meter-canvas').addEventListener('webglcontextlost', event => {
+    event.preventDefault();
+    exportButton.disabled = true;
+    reportError('WebGLの接続が失われました。ページを開き直してください。');
+  });
+  rangeOptions('pressure', '150');
+  buildMeter();
+  updateReadouts();
+  resize();
+  new ResizeObserver(resize).observe(stage);
+  status.textContent = '操作後に書き出すと、その時点の画像と正解を取得できます。';
+  exportButton.disabled = false;
+})();
+</script>

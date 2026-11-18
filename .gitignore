@@ -39,3 +39,5 @@ manager/.pc_config.json-*.tmp
 # 縮小画像キャッシュ・計測一時ディレクトリ
 .cache/
 tmp_perf/
+
+/demo/
