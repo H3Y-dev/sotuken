@@ -14,11 +14,18 @@ import re
 import secrets
 import sqlite3
 import threading
+import time
 from urllib.parse import parse_qs, urlsplit, unquote
 
 from manager.export import filter_readings
 from manager.storage import MeterReading
 from pc_api.owner import InternalServer, OwnerLock, OwnerConflict
+from pc_api.session import (
+    SessionStore,
+    build_clear_session_cookie,
+    build_session_cookie,
+    parse_session_cookie,
+)
 
 
 class APIError(Exception):
@@ -81,9 +88,25 @@ def opened_path(handle):
     return Path('/proc/self/fd/' + str(handle.fileno())).resolve(strict=True)
 
 
+def _is_json_content_type(header_value):
+    if not header_value:
+        return False
+    parts = [p.strip() for p in header_value.split(';')]
+    if parts[0].lower() != 'application/json':
+        return False
+    for param in parts[1:]:
+        if not param:
+            continue
+        k, sep, v = param.partition('=')
+        if sep and k.strip().lower() == 'charset':
+            if v.strip().strip('"').lower() not in ('utf-8', 'utf8'):
+                return False
+    return True
+
+
 class PCAPI:
     def __init__(self, db_path='manager.db', *, image_dirs=(), static_dir=None,
-                 owner_port=8767, internal_key='', port=8766):
+                 owner_port=8767, internal_key='', port=8766, clock=time.monotonic):
         self.storage = ReadOnlyStorage(db_path)
         self.image_dirs = tuple(Path(p).resolve() for p in image_dirs if str(p).strip())
         # An empty allowlist would silently 404 every image; refuse instead.
@@ -94,10 +117,27 @@ class PCAPI:
         self.static_dir = Path(static_dir).resolve() if static_dir else None
         self.owner_port, self.internal_key, self.port = owner_port, internal_key, port
         self.token = secrets.token_hex(32)
+        self.sessions = SessionStore(clock=clock)
         self.image_key = secrets.token_bytes(32)
         # Separate role namespace: API and owner may share a DB, two APIs may not.
         self.lock = OwnerLock(self.storage.path, str(self.storage.path) + '.pc-api')
         self.httpd = self.thread = None
+
+    def authenticate_session(self, headers, method):
+        """Validate session cookie, and for mutating methods also Origin and X-CSRF-Token."""
+        if 'X-Sotuken-Token' in headers:
+            raise APIError(401, 'unauthenticated')
+        session_id = parse_session_cookie(headers.get_all('Cookie', []))
+        csrf_token = self.sessions.get_session_csrf(session_id)
+        if csrf_token is None:
+            raise APIError(401, 'unauthenticated')
+        if method not in ('GET', 'HEAD'):
+            if headers.get_all('Origin', []) != [f'http://127.0.0.1:{self.port}']:
+                raise APIError(403, 'forbidden_origin')
+            csrf_headers = headers.get_all('X-CSRF-Token', [])
+            if len(csrf_headers) != 1 or not self.sessions.verify_csrf(session_id, csrf_headers[0]):
+                raise APIError(403, 'forbidden_origin')
+        return session_id, csrf_token
 
     def image_id(self, row, kind):
         # '<db id>-<o|v>-<hmac>': opaque to clients, lets the server read just one row.
@@ -261,28 +301,70 @@ class PCAPI:
                 pass
 
             def handle_api(self):
+                set_cookie = None
                 try:
                     if (self.headers.get_all('Host', []) != [f'127.0.0.1:{api.port}']
                             or any(h in self.headers for h in ('Forwarded', 'X-Forwarded-Host', 'X-Forwarded-For', 'X-Forwarded-Proto'))
                             or ('Origin' in self.headers and self.headers.get_all('Origin') != [f'http://127.0.0.1:{api.port}'])):
                         raise APIError(403, 'forbidden_origin')
-                    if urlsplit(self.path).path.startswith('/api/'):
-                        tokens = self.headers.get_all('X-PC-Token', [])
-                        if (len(tokens) != 1 or not tokens[0].isascii() or not secrets.compare_digest(tokens[0], api.token)
-                                or 'X-Sotuken-Token' in self.headers):
-                            raise APIError(401, 'unauthenticated')
+                    parsed_url = urlsplit(self.path)
                     length = self.headers.get('Content-Length', '0')
                     if 'Transfer-Encoding' in self.headers or not length.isdecimal():
                         raise APIError(400, 'invalid_request')
                     if int(length) > 1024:
                         raise APIError(413, 'too_large')
-                    if int(length):
-                        try:
-                            if json.loads(self.rfile.read(int(length))) != {}:
-                                raise ValueError()
-                        except (ValueError, UnicodeError):
-                            raise APIError(400, 'invalid_request') from None
-                    status, body, mime = api.dispatch(self.command, self.path)
+                    if parsed_url.path == '/api/v1/session':
+                        if 'X-Sotuken-Token' in self.headers:
+                            raise APIError(401, 'unauthenticated')
+                        if parsed_url.query:
+                            raise APIError(400, 'invalid_request')
+                        if self.command == 'POST':
+                            if self.headers.get_all('Origin', []) != [f'http://127.0.0.1:{api.port}']:
+                                raise APIError(403, 'forbidden_origin')
+                            if not _is_json_content_type(self.headers.get('Content-Type')):
+                                raise APIError(400, 'invalid_request')
+                            try:
+                                payload = json.loads(self.rfile.read(int(length)).decode('utf-8'))
+                            except (ValueError, UnicodeError):
+                                raise APIError(400, 'invalid_request') from None
+                            if not isinstance(payload, dict) or set(payload) != {'launch_key'} or not isinstance(payload['launch_key'], str):
+                                raise APIError(400, 'invalid_request')
+                            exchanged = api.sessions.exchange_launch_key(payload['launch_key'])
+                            if exchanged is None:
+                                raise APIError(401, 'unauthenticated')
+                            session_id, csrf_token = exchanged
+                            set_cookie = build_session_cookie(session_id)
+                            status, body, mime = 200, {'csrf_token': csrf_token}, None
+                        elif self.command in ('GET', 'DELETE'):
+                            if int(length):
+                                try:
+                                    if json.loads(self.rfile.read(int(length))) != {}:
+                                        raise ValueError()
+                                except (ValueError, UnicodeError):
+                                    raise APIError(400, 'invalid_request') from None
+                            session_id, csrf_token = api.authenticate_session(self.headers, self.command)
+                            if self.command == 'GET':
+                                status, body, mime = 200, {'csrf_token': csrf_token}, None
+                            else:
+                                api.sessions.revoke_session(session_id)
+                                set_cookie = build_clear_session_cookie()
+                                status, body, mime = 204, None, None
+                        else:
+                            api.authenticate_session(self.headers, self.command)
+                            raise APIError(400, 'invalid_request')
+                    else:
+                        if parsed_url.path.startswith('/api/'):
+                            tokens = self.headers.get_all('X-PC-Token', [])
+                            if (len(tokens) != 1 or not tokens[0].isascii() or not secrets.compare_digest(tokens[0], api.token)
+                                    or 'X-Sotuken-Token' in self.headers):
+                                raise APIError(401, 'unauthenticated')
+                        if int(length):
+                            try:
+                                if json.loads(self.rfile.read(int(length))) != {}:
+                                    raise ValueError()
+                            except (ValueError, UnicodeError):
+                                raise APIError(400, 'invalid_request') from None
+                        status, body, mime = api.dispatch(self.command, self.path)
                 except APIError as exc:
                     status, body, mime = exc.status, {'error': {'code':exc.code, 'message':exc.code, 'request_id':secrets.token_hex(8)}}, None
                 except sqlite3.Error as exc:
@@ -298,6 +380,8 @@ class PCAPI:
                 self.send_header('Cache-Control', 'no-store')
                 self.send_header('X-Content-Type-Options', 'nosniff')
                 self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; img-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+                if set_cookie:
+                    self.send_header('Set-Cookie', set_cookie)
                 if status == 503:
                     self.send_header('Retry-After', '1')
                 self.end_headers()
@@ -321,6 +405,7 @@ class PCAPI:
                 self.thread.join()
             self.httpd.server_close()
         self.httpd = self.thread = None
+        self.sessions.clear()
         self.lock.release()
 
 
