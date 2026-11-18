@@ -526,3 +526,42 @@ def summarize_progress(progress):
         'all_ok': all_ok,
         'needs_action': needs_action,
     }
+
+
+def parse_iso_for_sort(text):
+    """Parse ISO 8601 string into UTC naive datetime for sorting."""
+    return _parse_iso_for_sort(text)
+
+
+def build_inspection_preview(devices, has_route):
+    """Select preview meters in progress order (6 route + 2 off-route, or 6 total)."""
+    if has_route:
+        on_route = [d for d in devices if not d['off_route']][:6]
+        off_route = [d for d in devices if d['off_route']][:2]
+        return on_route + off_route
+    return list(devices[:6])
+
+
+def build_inspection_list_item(progress, reading_count):
+    """Build InspectionListItem DTO from full InspectionProgress and DB reading count."""
+    return {
+        'id': progress['id'],
+        'name': progress['name'],
+        'route_id': progress['route_id'],
+        'route_name': progress['route_name'],
+        'operator': progress['operator'],
+        'place': progress['place'],
+        'started_at': progress['started_at'],
+        'completed_at': progress['completed_at'],
+        'count': reading_count,
+        'status': {
+            'state': progress['status']['state'],
+            'matched': progress['status']['matched'],
+        },
+        'missing_photo_count': len(progress['status']['missing_photos']),
+        'preview': build_inspection_preview(
+            progress['devices'], progress['route_name'] is not None
+        ),
+        'summary': summarize_progress(progress),
+    }
+

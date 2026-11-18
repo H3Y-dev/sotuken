@@ -2,12 +2,18 @@
 from contextlib import closing, contextmanager
 import re
 from types import SimpleNamespace
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote
 
 from manager.routes import get_manifest, inspection_status, received_hashes, validate_id
-from pc_api.inspection_progress import build_inspection_progress
+from pc_api.inspection_pages import get_page_cache, parse_inspections_query
+from pc_api.inspection_progress import (
+    build_inspection_list_item,
+    build_inspection_progress,
+    parse_iso_for_sort,
+)
 from pc_api.server import APIError
 
+_MAX_INSPECTIONS = 10000
 _MAX_MANIFEST_PHOTOS = 10000
 _MAX_PROGRESS_READINGS = 10000
 _STATUS_PATH_RE = re.compile(r'/api/v1/inspections/([^/]+)/status')
@@ -115,9 +121,101 @@ def get_inspection_progress(storage, incoming_dir, inspection_id):
         raise APIError(503, 'data_invalid') from None
 
 
-def dispatch_inspection(api, method, url):
+def _sort_inspection_items(items):
+    dated = []
+    undated = []
+    for item in items:
+        dt = parse_iso_for_sort(item.get('started_at'))
+        if dt is not None:
+            dated.append((dt, item['id'], item))
+        else:
+            undated.append((item['id'], item))
+    dated.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    undated.sort(key=lambda row: row[0], reverse=True)
+    return [row[2] for row in dated] + [row[1] for row in undated]
+
+
+def list_inspections(storage, incoming_dir, session_id, query, *, page_cache=None):
+    """Return a paginated inspection list with summary counts and cursor snapshot."""
+    filter_val, limit_val, cursor = parse_inspections_query(query)
+    cache = page_cache if page_cache is not None else get_page_cache()
+    if cursor is not None:
+        return cache.get_page(
+            session_id=session_id,
+            path='/api/v1/inspections',
+            filter_val=filter_val,
+            limit=limit_val,
+            cursor=cursor,
+        )
+
+    cols = ', '.join(_PROGRESS_READING_COLUMNS)
+    with storage.connection() as conn:
+        insp_rows = conn.execute(
+            'SELECT inspection_id FROM inspections LIMIT ?',
+            (_MAX_INSPECTIONS + 1,),
+        ).fetchall()
+        if len(insp_rows) > _MAX_INSPECTIONS:
+            raise APIError(422, 'validation_failed')
+        reading_rows = conn.execute(
+            f"SELECT inspection_id, {cols} FROM meter_readings "
+            f"WHERE inspection_id IS NOT NULL AND inspection_id != '' "
+            f"ORDER BY id DESC LIMIT ?",
+            (_MAX_PROGRESS_READINGS + 1,),
+        ).fetchall()
+        if len(reading_rows) > _MAX_PROGRESS_READINGS:
+            raise APIError(422, 'validation_failed')
+
+    insp_ids = {row[0] for row in insp_rows}
+    readings_by_id = {}
+    for row in reading_rows:
+        ins_id = row[0]
+        reading = SimpleNamespace(**dict(zip(_PROGRESS_READING_COLUMNS, row[1:])))
+        readings_by_id.setdefault(ins_id, []).append(reading)
+
+    all_ids = insp_ids | set(readings_by_id.keys())
+    if len(all_ids) > _MAX_INSPECTIONS:
+        raise APIError(422, 'validation_failed')
+
+    hashes = received_hashes(storage, incoming_dir)
+    all_items = []
+    for ins_id in all_ids:
+        ins_readings = readings_by_id.get(ins_id, [])
+        try:
+            progress = build_inspection_progress(storage, incoming_dir, ins_id, ins_readings, hashes)
+            item = build_inspection_list_item(progress, len(ins_readings))
+        except APIError:
+            raise
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise APIError(503, 'data_invalid') from None
+        all_items.append(item)
+
+    sorted_items = _sort_inspection_items(all_items)
+    action_items = [item for item in sorted_items if item['summary']['needs_action']]
+    selected_items = sorted_items if filter_val == 'all' else action_items
+
+    return cache.create_page(
+        session_id=session_id,
+        path='/api/v1/inspections',
+        filter_val=filter_val,
+        limit=limit_val,
+        items=selected_items,
+        all_total=len(sorted_items),
+        action_total=len(action_items),
+    )
+
+
+def dispatch_inspection(api, method, url, session_id=None):
     """Dispatch authenticated /api/v1/inspections* requests."""
-    if method != 'GET' or url.query:
+    if method != 'GET':
+        raise APIError(400, 'invalid_request')
+    if url.path == '/api/v1/inspections':
+        raw_qs = parse_qs(url.query, keep_blank_values=True)
+        if set(raw_qs) - {'filter', 'limit', 'cursor'} or any(len(v) != 1 for v in raw_qs.values()):
+            raise APIError(400, 'invalid_request')
+        query = {k: v[0] for k, v in raw_qs.items()}
+        with _open_read_adapter(api.storage) as adapter:
+            return 200, list_inspections(adapter, api.incoming_dir, session_id, query), None
+    if url.query:
         raise APIError(400, 'invalid_request')
     for pattern, handler in (
         (_STATUS_PATH_RE, get_inspection_status),

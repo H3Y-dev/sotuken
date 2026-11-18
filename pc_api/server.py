@@ -254,7 +254,7 @@ class PCAPI:
         except (OSError, ValueError, RuntimeError):
             raise APIError(404, 'not_found') from None
 
-    def dispatch(self, method, target, body=None):
+    def dispatch(self, method, target, body=None, session_id=None):
         url = urlsplit(target)
         path = url.path
         if not path.startswith('/api/'):
@@ -280,7 +280,7 @@ class PCAPI:
             return (204, None, None) if method == 'DELETE' else (200, body, None)
         if path == '/api/v1/inspections' or path.startswith('/api/v1/inspections/'):
             from pc_api.inspection_routes import dispatch_inspection
-            return dispatch_inspection(self, method, url)
+            return dispatch_inspection(self, method, url, session_id=session_id)
         if path == '/api/v1/devices' or path.startswith('/api/v1/devices/'):
             if url.query:
                 raise APIError(400, 'invalid_request')
@@ -402,6 +402,8 @@ class PCAPI:
                                 status, body, mime = 200, {'csrf_token': csrf_token}, None
                             else:
                                 api.sessions.revoke_session(session_id)
+                                from pc_api.inspection_pages import discard_session_pages
+                                discard_session_pages(session_id)
                                 set_cookie = build_clear_session_cookie()
                                 status, body, mime = 204, None, None
                         else:
@@ -409,8 +411,9 @@ class PCAPI:
                             raise APIError(400, 'invalid_request')
                     else:
                         request_body = None
+                        session_id = None
                         if parsed_url.path.startswith('/api/'):
-                            api.authenticate_session(self.headers, self.command)
+                            session_id, _ = api.authenticate_session(self.headers, self.command)
                             if is_device_write:
                                 request_body = read_json_body()
                             elif self.command in ('POST', 'PUT', 'PATCH', 'DELETE') or int(length):
@@ -419,7 +422,9 @@ class PCAPI:
                         elif int(length):
                             if read_json_body() != {}:
                                 raise APIError(400, 'invalid_request')
-                        status, body, mime = api.dispatch(self.command, self.path, body=request_body)
+                        status, body, mime = api.dispatch(
+                            self.command, self.path, body=request_body, session_id=session_id
+                        )
                 except APIError as exc:
                     status, body, mime = exc.status, {'error': {'code':exc.code, 'message':exc.code, 'request_id':secrets.token_hex(8)}}, None
                 except sqlite3.Error as exc:
