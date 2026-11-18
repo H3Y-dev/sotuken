@@ -17,6 +17,7 @@ import tempfile
 import time
 
 from manager.receiver import get_default_incoming_dir
+from manager.storage import Storage
 from pc_api.owner import Owner
 
 DEFAULT_STATIC_DIR = Path(__file__).resolve().parent / 'static'
@@ -150,6 +151,7 @@ class VerificationLauncher:
             raise FileNotFoundError(f'DB file not found: {self.db_path}')
         _check_watch_inbox_pid(self.watch_inbox_pid)
         _ensure_port_available(self.port)
+        Storage(str(self.db_path))
         self.owner = Owner(
             db_path=self.db_path,
             incoming=self.incoming_dir,

@@ -1,6 +1,6 @@
 """Read-only PC API. Run python -m pc_api.server --help for configuration."""
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import date
 import hashlib
 import hmac
@@ -66,6 +66,44 @@ class ReadOnlyStorage:
     def reading(self, row_id):
         rows = self._query(' WHERE id = ?', (row_id,))
         return rows[0] if rows else None
+
+
+class _DeviceReadStorage:
+    """Read-only adapter exposing connection() without running Storage DDL."""
+
+    def __init__(self, ro_storage):
+        self._ro = ro_storage
+
+    @contextmanager
+    def connection(self):
+        with closing(self._ro._get_connection()) as conn:
+            yield conn
+
+
+class _DeviceWriteStorage:
+    """Read-write adapter exposing connection() without running Storage DDL."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+
+    @contextmanager
+    def connection(self):
+        conn = sqlite3.connect(self.path, timeout=.25)
+        conn.execute('PRAGMA busy_timeout=250')
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
+
+def _no_duplicate_keys(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError(f'Duplicate JSON key: {key}')
+        obj[key] = value
+    return obj
 
 
 def opened_path(handle):
@@ -216,7 +254,7 @@ class PCAPI:
         except (OSError, ValueError, RuntimeError):
             raise APIError(404, 'not_found') from None
 
-    def dispatch(self, method, target):
+    def dispatch(self, method, target, body=None):
         url = urlsplit(target)
         path = url.path
         if not path.startswith('/api/'):
@@ -243,6 +281,12 @@ class PCAPI:
         if path == '/api/v1/inspections' or path.startswith('/api/v1/inspections/'):
             from pc_api.inspection_routes import dispatch_inspection
             return dispatch_inspection(self, method, url)
+        if path == '/api/v1/devices' or path.startswith('/api/v1/devices/'):
+            if url.query:
+                raise APIError(400, 'invalid_request')
+            from pc_api.device_routes import dispatch_devices
+            storage = _DeviceReadStorage(self.storage) if method == 'GET' else _DeviceWriteStorage(self.storage.path)
+            return dispatch_devices(storage, method, path, body)
         if method != 'GET':
             raise APIError(400, 'invalid_request')
         if path in ('/api/v1/runtime', '/api/v1/usb/status'):
@@ -316,11 +360,19 @@ class PCAPI:
                     length = self.headers.get('Content-Length', '0')
                     if 'Transfer-Encoding' in self.headers or not length.isdecimal():
                         raise APIError(400, 'invalid_request')
-                    if int(length) > 1024:
+                    is_device_write = (
+                        (parsed_url.path == '/api/v1/devices' and self.command == 'POST')
+                        or (parsed_url.path.startswith('/api/v1/devices/id-') and self.command == 'PUT')
+                    )
+                    max_body_bytes = 16384 if is_device_write else 1024
+                    if int(length) > max_body_bytes:
                         raise APIError(413, 'too_large')
                     def read_json_body():
                         try:
-                            return json.loads(self.rfile.read(int(length)).decode('utf-8'))
+                            return json.loads(
+                                self.rfile.read(int(length)).decode('utf-8'),
+                                object_pairs_hook=_no_duplicate_keys,
+                            )
                         except (ValueError, UnicodeError):
                             raise APIError(400, 'invalid_request') from None
 
@@ -356,15 +408,18 @@ class PCAPI:
                             api.authenticate_session(self.headers, self.command)
                             raise APIError(400, 'invalid_request')
                     else:
+                        request_body = None
                         if parsed_url.path.startswith('/api/'):
                             api.authenticate_session(self.headers, self.command)
-                            if self.command in ('POST', 'PUT', 'PATCH', 'DELETE') or int(length):
+                            if is_device_write:
+                                request_body = read_json_body()
+                            elif self.command in ('POST', 'PUT', 'PATCH', 'DELETE') or int(length):
                                 if read_json_body() != {}:
                                     raise APIError(400, 'invalid_request')
                         elif int(length):
                             if read_json_body() != {}:
                                 raise APIError(400, 'invalid_request')
-                        status, body, mime = api.dispatch(self.command, self.path)
+                        status, body, mime = api.dispatch(self.command, self.path, body=request_body)
                 except APIError as exc:
                     status, body, mime = exc.status, {'error': {'code':exc.code, 'message':exc.code, 'request_id':secrets.token_hex(8)}}, None
                 except sqlite3.Error as exc:
