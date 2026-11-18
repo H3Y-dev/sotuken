@@ -1,4 +1,4 @@
-合意: 2026-11-18 方向性のみユーザー確認済み（React版計器盤と同じ雰囲気）。細部は未確認
+合意: 2026-11-18 方向性と0章の決定をユーザー確認済み（React版計器盤と同じ雰囲気）
 
 # Android アプリ「計器盤」デザイン刷新 設計書
 
@@ -8,25 +8,14 @@
 
 ---
 
-## 0. 未確定事項（実装の前にユーザーが判断する）
+## 0. 決定事項
 
-1. **(a) 点検中の履歴に出る送信状態は、ほぼ全行が同じ札になる。**
-   - 理由: 点検中（`InspectionState.IN_PROGRESS`）の写真は送信しない仕様（`inspection/InspectionSendRules.kt` の `isPhotoSendable`）。履歴画面も点検中しか開けない（`ui/inspection/AppScreen.kt` の `resolveScreen`）。
-   - そのため札は、実際には「完了後に送信」（途中の札）と「別のPC宛て（保留）」（要確認の札）の2種類しか出ない。
-   - SKくんが「送信中・送信済み」を見たかったのなら、点検中にも送る仕様変更が要る。これは `ui/` 以外のロジック変更になるので、本書の範囲外。本書は今の仕様のまま、札を出すところまでにする。
-2. **書体（BIZ UDPゴシック）を同梱するか。** React版の Android 対応節では `res/font` に同梱するとしている。同梱すると APK が数MB増え、フォントファイルのダウンロードも要る。本書では PR7（任意）に分けた。それまでは端末の標準書体（`FontFamily.Default`。多くの端末で Noto Sans CJK JP）で代用する。
-3. **言葉の置き換え（2章・5章の表）は細部が未確認。** 特に次の4つは、ユーザーかSKくんに一度見てもらうのがよい。
-   - 「件」→「枚」（写真）・「台」（機器）
-   - 「機器」→「台」
-   - 「対象一覧」「一覧外」→「ルート」「ルート外」
-   - 「送信箱」→「端末」
-4. **SKくんの11/12日報の原文は読めていない。** 「未着理由の文言統一」「送信状況画面の行に未着理由が出ない」という具体的な指摘の原文は Slack にある。本書は vault の要約（`セッション記録/2026-11-12_…`、`卒研/次にやること.md` の ④）から設計した。
-5. **緑の「送信済み」を出す条件を、React版の「要確認があれば緑を出さない」に合わせた。** 送信済みでも、未撮影・重複・機器IDなしが1つでもあれば、中立の札「送信済み（要確認あり）」にする（4.3節）。この判断が合っているか確認したい。
-6. **React版 DESIGN.md の Android 対応節と2点変えた。**
-   - 状態の色は `CompositionLocal`（`GaugeStatusColors`）を使わず、`object GaugeColors` で直接参照する。ライト固定で切り替えが無いため。
-   - 書体の同梱は後回しにした（上の2）。
-
-前提の確認: 今の画面の構成（`AppScreen` の Home・Create・Capture・History・Complete・SendStatus・ConnectionGuide・Routes・LegacyCapture）は、既存設計 `tasks/design/Android-点検フロー実装設計.md`（P3〜P6）と一致している。大きな食い違いは無い。
+1. **決定（2026-11-18 ユーザー）**: 点検中の履歴の札は「完了後に送信」のままにする。点検中の写真を送る仕様変更はせず、履歴の行に「今すぐ送る」ボタンを作らない。
+2. **決定（2026-11-18 ユーザー）**: BIZ UDPゴシックは同梱せず端末の標準書体を使う。PR7（書体の同梱）は当面しない。
+3. **決定（2026-11-18 ユーザー）**: 言葉の置き換えを採用する。「件」は写真では「枚」、機器では「台」。「機器」は「台」、「対象一覧」は「ルート」、「一覧外」は「ルート外」、「送信箱」は「端末」に置き換える。
+4. **決定（2026-11-18 ユーザー）**: SKくんの11/12日報の原文を読めていないことは了承済み。本書はvaultの要約から設計した。
+5. **決定（2026-11-18 ユーザー）**: 送信済みでも未撮影・重複・機器IDなしがあれば、中立の「送信済み（要確認あり）」を採用する。
+6. **決定（2026-11-18 ユーザー）**: React版 DESIGN.md の Android 対応節との差2点は了承済み。状態色は `CompositionLocal` を使わず `object GaugeColors` で参照し、書体は同梱しない。
 
 ---
 
@@ -38,7 +27,7 @@
   - 状態は「色・文字・形」の3つで示す。
 - **正常は控えめ、問題は塗り。** 正常は薄い緑の地に緑の文字。要確認（黄土）と失敗（赤錆）は塗りに白い文字。一覧で問題のある所だけが目に入るようにする。
 - **未撮影・未着・失敗・要確認が1つでもあれば、緑の札を出さない**（React版の「受信・完了状態」の考え方）。
-- **動きは付けない。** React版の「動き」の節（針の回転・段の色の移り変わり）は、スマホでは使わない。点滅・脈打つ動き・読み込みの飾り・画面遷移のアニメーションも付けない。Compose の `animate*`・`AnimatedVisibility`・`Crossfade` は使わない。
+- **SK-08の短い白い光以外の動きは付けない。** React版の「動き」の節（針の回転・段の色の移り変わり）は、スマホでは使わない。点滅・脈打つ動き・読み込みの飾り・画面遷移のアニメーションも付けない。Compose の `animate*`・`AnimatedVisibility`・`Crossfade` は使わない。
 - **文字盤の絵は移植しない。** スマホには読み取り値が無い。React版は、値を表さない飾りとしての文字盤を禁止している。計器の意匠として使ってよいのは、画面見出しの下の目盛りの定規（`TickRule`）だけ。
 - **屋外・工場の明るさで読める大きさとコントラストにする。**
   - 本文は最小16sp。
@@ -151,7 +140,7 @@
 | `labelMedium` | 16 / 24 sp | Bold | 今のコードで使っている所の救済 |
 | `labelSmall` | 14 / 20 sp | Medium | M3 内部専用。画面のコードでは使わない |
 
-- 書体: PR1〜PR6 は `GaugeFont = FontFamily.Default`。PR7 で BIZ UDPゴシックに差し替える（任意）。
+- 書体: PR1〜PR6 は `GaugeFont = FontFamily.Default`。PR7 の書体同梱は当面しない。
 - 数値（日時・ID・枚数・台数）の `Text` には、拡張関数 `TextStyle.gaugeNum()`（`fontFeatureSettings = "tnum"` を足す）を付け、桁の幅をそろえる。
 
 ### 3.5 形・余白・線
@@ -284,7 +273,7 @@ private val GaugeColorScheme = lightColorScheme(
     surfaceContainerHighest = GaugeColors.PanelDeep,
 )
 
-/** PR7 で BIZ UDPゴシックに差し替える。それまでは端末の標準書体。 */
+/** 端末の標準書体を使う。PR7の書体同梱は当面しない。 */
 val GaugeFont: FontFamily = FontFamily.Default
 
 private fun style(size: Int, line: Int, weight: FontWeight) =
@@ -459,7 +448,7 @@ fun GaugeSecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier =
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
-/** 削除など取り消せない操作の文字ボタン。文字色を赤錆にする。 */
+/** 削除のような取り消せない操作の文字ボタン。文字色を赤錆にする。 */
 @Composable
 fun GaugeDangerTextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     TextButton(onClick = onClick, modifier = modifier, enabled = enabled,
@@ -978,16 +967,27 @@ val startedLabel: String = "",
 | 4 | `feat/android-gauge-4` | 撮影と履歴の見た目と、**(a) 履歴の送信状態** | `ui/inspection/InspectionCaptureScreen.kt`（6.6節）／`ui/inspection/InspectionHistoryScreen.kt`（6.7節）／`ui/inspection/InspectionDisplay.kt`（`HistoryRow` の3つの引数、`buildHistoryUiState` の `currentReceiverId`）／`ui/QueueDisplay.kt`（`sendStatusKind`）／`ui/inspection/InspectionApp.kt`（`:184` に受信口IDを渡す、削除ボタン2か所）／テストを2つ足す: `QueueDisplayTest` に `sendStatusKindFollowsLabelOrder`（3.6節の表の写真の行9つを各1行で）、`HistoryUiStateTest` に `historyRowShowsSendStateWhileInProgress`（点検中の写真 → `"完了後に送信"`・`WAIT`、`receiverId = "old"` で `currentReceiverId = "new"` の写真 → `"別のPC宛て（保留）"`・`WARN`） | テスト・ビルドが通る。履歴の全行に送信状態の札が出る。未撮影の機器が破線で囲まれる。点検中の M3 の `Card`・`OutlinedButton` が撮影・履歴の画面に残っていない | 撮影（未撮影あり・保存直後）、履歴（ルートあり、写真2枚以上） |
 | 5 | `feat/android-gauge-5` | 点検の一覧・新しい点検・ルート | `ui/inspection/InspectionHomeScreen.kt`（6.3節）／`ui/inspection/InspectionDisplay.kt`（`HomeCard` の4つの引数、`inspectionBadge`・`extraBadges`・`formatStartedLabel`、`buildHomeUiState`）／`ui/inspection/InspectionCreateScreen.kt`（6.4節）／`ui/inspection/RouteListScreen.kt`（6.5節）／テストを1つ足す: `HomeUiStateTest` に `sentBadgeTurnsNeutralWhenRouteDeviceMissing`（SENT・未撮影0 → `OK` `"送信済み"`、SENT・未撮影1 → `NEUTRAL` `"送信済み（要確認あり）"` と追加の札 `MISSING` `"未撮影 1台"`、`edgeKind == MISSING`） | テスト・ビルドが通る。未撮影・未着がある点検に緑の札が出ない。カード左端が3.6節のとおり | 点検の一覧（作業中・送信待ち・送信済み・未着ありが並んだ状態）、新しい点検、ルート |
 | 6 | `feat/android-gauge-6` | 完了確認・送信状況・接続の案内 | `ui/inspection/InspectionCompleteScreen.kt`（6.8節）／`ui/inspection/InspectionSendStatusScreen.kt`（6.9節）／`ui/inspection/ConnectionGuideScreen.kt`（6.10節）／テストを1つ足す: `SendStatusUiStateTest` に `incompleteBadgeAndMissingRowAreWarn`（SENT_INCOMPLETE → `badgeKind == WARN`、PC未着の行 → `kind == WARN`・`reason == "PCで写真が見つかりません"`） | テスト・ビルドが通る。この3画面に M3 の `Card`・`OutlinedCard`・素の `Button` が残っていない | 完了確認（注意あり）、送信状況（送信済み・未着あり）、接続の案内 |
-| 7（任意。ユーザーが同梱を決めたときだけ） | `feat/android-gauge-7` | 書体 BIZ UDPゴシックの同梱 | 新規 `res/font/biz_udp_gothic_regular.ttf`・`res/font/biz_udp_gothic_bold.ttf`（入手元: `https://github.com/google/fonts/raw/main/ofl/bizudpgothic/BIZUDPGothic-Regular.ttf` と `…/BIZUDPGothic-Bold.ttf`。SIL Open Font License。取れなければ止まって報告）／新規 `res/font/OFL.txt`（同じフォルダの `OFL.txt`）／`ui/theme/GaugeTheme.kt` の `GaugeFont` を `FontFamily(Font(R.font.biz_udp_gothic_regular, FontWeight.Normal), Font(R.font.biz_udp_gothic_bold, FontWeight.Bold))` に | テスト・ビルドが通る。APK の大きさの増え方を日報に書く | 点検の一覧、撮影 |
+| 7（当面しない） | `feat/android-gauge-7` | 書体の同梱は当面しない | なし | 実施しない | なし |
+
+
+### PR8 `feat/android-gauge-8`: SK-08 撮影したときの反応
+
+- 前提: PR4のあと。正本は `tasks/design/Android-接続状況バーとSK-08-DESIGN.md` のSK-08節。
+- 触るファイル: `ui/inspection/InspectionCaptureScreen.kt` と必要な `ui/` 内のファイルだけ。
+- シャッターを押した瞬間、画面全体に白い光を約150ms表示してフェードアウトする。白は3章の `OnInk` を使う。これ以外の動きは足さない。
+- 保存完了後、画面下に `保存しました（今日 N枚目）` を2秒表示する。Nは端末の日付で今日撮ったキュー項目数。表示には3章の `Ink`・`OnInk` を使う。保存失敗時は既存のエラー表示を維持する。
+- 撮影を連打しても反応は溜めず、直近の1回だけ表示する。その他の時間の数値は正本に記載なし。
+- 受入条件: 撮影時に約150msの白い光がフェードアウトし、保存成功後に正しい枚数の文言が2秒出る。失敗時は既存エラーを表示し、連打時は反応が溜まらない。変更は `ui/` 内だけで、テストとビルドが通る。
+- 確認する画面: 撮影画面（保存成功・失敗・連打）。確認コマンド: `cd android; .\gradlew.bat testDebugUnitTest`、`.\gradlew.bat assembleDebug`。
 
 ---
 
 ## 8. しないこと（非目標）
 
 - 文字盤の絵、針、許容範囲の帯（スマホには読み取り値が無い）。
-- アニメーション（1章）。ダークモード、壁紙の色。
+- SK-08の白い光以外のアニメーション（1章）。ダークモード、壁紙の色。
 - 送信状態・点検状態を新しく増やすこと（3.6節は、今の `SendState`・`InspectionState` だけを使う）。
 - 点検中に写真を送るように変えること（0章の1）。
-- `queue/`・`inspection/` などで作る生のエラー文を書き換えること（5.2節は表示のときに置き換えるだけ）。
+- `queue/`・`inspection/` 等で作る生のエラー文を書き換えること（5.2節は表示のときに置き換えるだけ）。
 - Compose の画面テスト（UIテスト）を足すこと。見た目は実機のスクリーンショットで確かめる。
 - `CompositionLocal` による色の受け渡し（0章の6）。
