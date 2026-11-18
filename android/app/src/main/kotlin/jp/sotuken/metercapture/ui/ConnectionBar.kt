@@ -9,20 +9,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import jp.sotuken.metercapture.ui.theme.GaugeColors
 
 private fun barBackground(state: ConnectionBarState): Color = when (state) {
-    ConnectionBarState.NOT_CONFIGURED -> Color(0xFFFFCDD2)
-    ConnectionBarState.CHECKING -> Color(0xFFE0E0E0)
-    ConnectionBarState.CONNECTED -> Color(0xFFC8E6C9)
-    ConnectionBarState.UNREACHABLE -> Color(0xFFFFF59D)
+    ConnectionBarState.NOT_CONFIGURED -> GaugeColors.Fail
+    ConnectionBarState.CHECKING -> GaugeColors.PanelDeep
+    ConnectionBarState.CONNECTED -> GaugeColors.OkTint
+    ConnectionBarState.UNREACHABLE -> GaugeColors.Warn
 }
 
 private fun barForeground(state: ConnectionBarState): Color = when (state) {
-    ConnectionBarState.NOT_CONFIGURED -> Color(0xFFB71C1C)
-    ConnectionBarState.CHECKING -> Color(0xFF424242)
-    ConnectionBarState.CONNECTED -> Color(0xFF1B5E20)
-    ConnectionBarState.UNREACHABLE -> Color(0xFF5D4037)
+    ConnectionBarState.NOT_CONFIGURED -> GaugeColors.OnInk
+    ConnectionBarState.CHECKING -> GaugeColors.Steel
+    ConnectionBarState.CONNECTED -> GaugeColors.Ok
+    ConnectionBarState.UNREACHABLE -> GaugeColors.OnInk
 }
 
 @Composable
@@ -33,13 +35,14 @@ fun ConnectionBar(
 ) {
     Text(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.Bold,
         color = barForeground(state),
         maxLines = 2,
         modifier = Modifier
             .fillMaxWidth()
             .background(barBackground(state))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     )
 }
