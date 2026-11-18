@@ -21,8 +21,8 @@ from pc_api.owner import Owner
 DEFAULT_STATIC_DIR = Path(__file__).resolve().parent / 'static'
 
 
-def _write_private_key_file(directory: Path, key: str) -> Path:
-    key_path = directory / 'owner-key.txt'
+def _write_private_key_file(directory: Path, key: str, filename: str = 'owner-key.txt') -> Path:
+    key_path = directory / filename
     fd = os.open(str(key_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         os.write(fd, key.encode('utf-8'))
@@ -140,6 +140,7 @@ class VerificationLauncher:
         self.watch_inbox_pid = watch_inbox_pid
         self.owner: Owner | None = None
         self.api_proc: subprocess.Popen | None = None
+        self.launch_url: str | None = None
 
     def start(self) -> None:
         if not self.db_path.is_file():
@@ -156,6 +157,7 @@ class VerificationLauncher:
         try:
             with tempfile.TemporaryDirectory(prefix='sotuken-key-') as key_dir:
                 key_file = _write_private_key_file(Path(key_dir), self.owner.internal_key)
+                launch_key_file = _write_private_key_file(Path(key_dir), '', 'launch-key.txt')
                 cmd = [
                     sys.executable,
                     '-m',
@@ -174,6 +176,8 @@ class VerificationLauncher:
                     str(self.owner.port),
                     '--internal-key-file',
                     str(key_file),
+                    '--launch-key-out',
+                    str(launch_key_file),
                 ]
                 if self.static_dir and self.static_dir.is_dir():
                     cmd.extend(['--static-dir', str(self.static_dir)])
@@ -183,6 +187,9 @@ class VerificationLauncher:
                 env['PYTHONPATH'] = f'{repo_root}{os.pathsep}{existing_pp}' if existing_pp else repo_root
                 self.api_proc = subprocess.Popen(cmd, cwd=str(self.db_path.parent), env=env)
                 _wait_tcp(self.port, self.api_proc)
+                launch_key = launch_key_file.read_text(encoding='utf-8').strip()
+                self.launch_url = f'http://127.0.0.1:{self.port}/#k={launch_key}'
+                print(self.launch_url, flush=True)
         except BaseException:
             self.stop()
             raise
@@ -198,6 +205,7 @@ class VerificationLauncher:
                         self.api_proc.kill()
                         self.api_proc.wait(timeout=5)
                 self.api_proc = None
+                self.launch_url = None
         finally:
             if self.owner is not None:
                 self.owner.stop()

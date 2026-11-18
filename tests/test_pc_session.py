@@ -190,7 +190,40 @@ class PCSessionTests(unittest.TestCase):
         self.assertEqual(status, 401)
         self.assertEqual(err['error']['code'], 'unauthenticated')
 
-    def test_existing_pc_token_access_still_works(self):
-        status, body, _, _ = self.request('/api/v1/readings', method='GET', headers={'X-PC-Token': self.api.token})
+    def test_session_cookie_required_for_api_and_no_pc_token_meta(self):
+        status, html, _, _ = self.request('/', method='GET')
         self.assertEqual(status, 200)
-        self.assertEqual(body['total'], 0)
+        self.assertNotIn(b'<meta name="pc-token"', html)
+
+        status, err, _, _ = self.request('/api/v1/readings', method='GET')
+        self.assertEqual(status, 401)
+        self.assertEqual(err['error']['code'], 'unauthenticated')
+
+        status, err, _, _ = self.request('/api/v1/readings', method='GET', headers={'X-PC-Token': 'anything'})
+        self.assertEqual(status, 401)
+        self.assertEqual(err['error']['code'], 'unauthenticated')
+
+        key = self.api.sessions.issue_launch_key()
+        _, body, _, set_cookies = self.exchange(key)
+        cookie = self.cookie_pair(set_cookies)
+
+        status, readings, _, _ = self.request('/api/v1/readings', method='GET', headers={'Cookie': cookie})
+        self.assertEqual(status, 200)
+        self.assertEqual(readings['total'], 0)
+
+        status, err, _, _ = self.request(
+            '/api/v1/pairing',
+            method='POST',
+            headers={'Origin': self.origin, 'Cookie': cookie},
+            body=b'{}',
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(err['error']['code'], 'forbidden_origin')
+
+        status, _, _, _ = self.request(
+            '/api/v1/pairing',
+            method='POST',
+            headers={'Origin': self.origin, 'Cookie': cookie, 'X-CSRF-Token': body['csrf_token']},
+            body=b'{}',
+        )
+        self.assertNotIn(status, (401, 403))

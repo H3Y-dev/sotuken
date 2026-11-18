@@ -10,7 +10,6 @@ import json
 import math
 import os
 from pathlib import Path, PureWindowsPath
-import re
 import secrets
 import sqlite3
 import threading
@@ -116,7 +115,6 @@ class PCAPI:
             raise ValueError('A drive/filesystem root is not allowed as an image root.')
         self.static_dir = Path(static_dir).resolve() if static_dir else None
         self.owner_port, self.internal_key, self.port = owner_port, internal_key, port
-        self.token = secrets.token_hex(32)
         self.sessions = SessionStore(clock=clock)
         self.image_key = secrets.token_bytes(32)
         # Separate role namespace: API and owner may share a DB, two APIs may not.
@@ -218,13 +216,6 @@ class PCAPI:
                 data = (self.file(self.static_dir / relative, (self.static_dir,))
                         if self.static_dir and (self.static_dir / relative).exists()
                         else b'<!doctype html><html><head></head><body>PC API ready</body></html>')
-                meta = f'<meta name="pc-token" content="{self.token}">'.encode()
-                # Keep the doctype first and place credentials in the document head.
-                head = re.search(br'<head(?:\s[^>]*)?>', data, re.IGNORECASE)
-                if head:
-                    data = data[:head.end()] + meta + data[head.end():]
-                else:
-                    data = b'<!doctype html><html><head>' + meta + b'</head><body>' + data + b'</body></html>'
                 return 200, data, 'text/html; charset=utf-8'
             if not self.static_dir:
                 raise APIError(404, 'not_found')
@@ -354,10 +345,7 @@ class PCAPI:
                             raise APIError(400, 'invalid_request')
                     else:
                         if parsed_url.path.startswith('/api/'):
-                            tokens = self.headers.get_all('X-PC-Token', [])
-                            if (len(tokens) != 1 or not tokens[0].isascii() or not secrets.compare_digest(tokens[0], api.token)
-                                    or 'X-Sotuken-Token' in self.headers):
-                                raise APIError(401, 'unauthenticated')
+                            api.authenticate_session(self.headers, self.command)
                         if int(length):
                             try:
                                 if json.loads(self.rfile.read(int(length))) != {}:
@@ -420,6 +408,7 @@ def main():
     parser.add_argument('--port', type=int, default=8766, help='Loopback port; Host/Origin must match it')
     parser.add_argument('--owner-port', type=int, default=8767, help='Owner internal port')
     parser.add_argument('--internal-key-file', required=True, help='Private UTF-8 file supplied by the owner launcher')
+    parser.add_argument('--launch-key-out', help='Private UTF-8 file to write the initial one-time launch key')
     args = parser.parse_args()
     if not Path(args.db).is_file():
         parser.error(f'--db file not found: {args.db} (the API never creates the DB)')
@@ -429,7 +418,14 @@ def main():
                     internal_key=Path(args.internal_key_file).read_text(encoding='utf-8').strip())
     except ValueError as exc:
         parser.error(str(exc))
-    api.start()
+    if args.launch_key_out:
+        launch_key = api.sessions.issue_launch_key()
+        Path(args.launch_key_out).write_text(launch_key, encoding='utf-8')
+        api.start()
+    else:
+        api.start()
+        launch_key = api.sessions.issue_launch_key()
+        print(f'http://127.0.0.1:{api.port}/#k={launch_key}', flush=True)
     try:
         api.thread.join()
     except KeyboardInterrupt:

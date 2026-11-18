@@ -53,13 +53,19 @@ class ServerTests(unittest.TestCase):
         self.api = PCAPI(self.db, image_dirs=[self.images], port=0)
         self.api.start()
         self.addCleanup(self.api.stop)
+        sid, csrf = self.api.sessions.exchange_launch_key(self.api.sessions.issue_launch_key())
+        self.session_cookie = f'pc_session={sid}'
+        self.csrf_token = csrf
 
     def request(self, path='/api/v1/readings', method='GET', headers=None, body=None, auth=True):
         conn = http.client.HTTPConnection('127.0.0.1', self.api.port, timeout=3)
         try:
             headers = dict(headers or {})
             if auth:
-                headers.setdefault('X-PC-Token', self.api.token)
+                headers.setdefault('Cookie', self.session_cookie)
+                if method not in ('GET', 'HEAD'):
+                    headers.setdefault('Origin', f'http://127.0.0.1:{self.api.port}')
+                    headers.setdefault('X-CSRF-Token', self.csrf_token)
             conn.request(method, path, body=body, headers=headers)
             response = conn.getresponse()
             data = response.read()
@@ -69,8 +75,8 @@ class ServerTests(unittest.TestCase):
             conn.close()
 
     def test_authentication(self):
-        for headers in ({}, {'X-PC-Token':'wrong'}, {'X-Sotuken-Token':self.api.token},
-                        {'X-PC-Token':self.api.token, 'X-Sotuken-Token':'phone'}):
+        for headers in ({}, {'Cookie': 'pc_session=wrong'}, {'X-Sotuken-Token': 'phone'},
+                        {'Cookie': self.session_cookie, 'X-Sotuken-Token': 'phone'}):
             status, body, _ = self.request(headers=headers, auth=False)
             self.assertEqual(status, 401)
             self.assertEqual(body['error']['code'], 'unauthenticated')
@@ -205,7 +211,7 @@ class ServerTests(unittest.TestCase):
     def test_static_and_token(self):
         status, body, headers = self.request('/',auth=False)
         self.assertEqual(status,200)
-        self.assertIn(self.api.token.encode(),body)
+        self.assertNotIn(b'pc-token',body)
         self.assertNotIn(b'X-Internal',body)
         self.assertIn("frame-ancestors 'none'",headers['Content-Security-Policy'])
         static = self.root/'dist'
@@ -287,12 +293,12 @@ class ServerTests(unittest.TestCase):
 
     def test_host_variants_and_proxy_headers(self):
         host = f'Host: 127.0.0.1:{self.api.port}'
-        token = f'X-PC-Token: {self.api.token}'
+        cookie = f'Cookie: {self.session_cookie}'
         get = 'GET /api/v1/readings HTTP/1.1'
-        self.assertEqual(self.raw(get, host, token, 'Connection: close'), 200)
-        self.assertEqual(self.raw(get, host, host, token, 'Connection: close'), 403)
-        self.assertEqual(self.raw(get, host, 'Host: evil.example', token, 'Connection: close'), 403)
-        self.assertEqual(self.raw(get, 'Host: 127.0.0.1', token, 'Connection: close'), 403)
+        self.assertEqual(self.raw(get, host, cookie, 'Connection: close'), 200)
+        self.assertEqual(self.raw(get, host, host, cookie, 'Connection: close'), 403)
+        self.assertEqual(self.raw(get, host, 'Host: evil.example', cookie, 'Connection: close'), 403)
+        self.assertEqual(self.raw(get, 'Host: 127.0.0.1', cookie, 'Connection: close'), 403)
         self.assertEqual(self.request(headers={'Host':'127.0.0.1'})[0], 403)
         self.assertEqual(self.request(headers={'Host':f'127.0.0.1:{self.api.port + 1}'})[0], 403)
         for name, value in (('X-Forwarded-For','10.0.0.1'), ('X-Forwarded-Proto','https')):
