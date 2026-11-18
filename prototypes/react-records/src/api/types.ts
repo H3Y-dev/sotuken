@@ -140,3 +140,17 @@ export interface InspectionListPage {
   all_total: number;
   action_total: number;
 }
+
+export interface DeviceInput {
+  device_name: string;
+  unit: string | null;
+  min_value: number | null;
+  max_value: number | null;
+  tolerance_min: number | null;
+  tolerance_max: number | null;
+}
+
+export interface Device extends DeviceInput {
+  device_id: string;
+  provisional: boolean;
+}

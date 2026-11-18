@@ -1,4 +1,6 @@
 import type {
+  Device,
+  DeviceInput,
   Filters,
   Page,
   PairingStatus,
@@ -94,7 +96,7 @@ async function parseError(res: Response): Promise<ApiError> {
 
 async function apiRequest(
   path: string,
-  options: { method?: "GET" | "POST" | "DELETE"; body?: string; signal?: AbortSignal } = {},
+  options: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: string; signal?: AbortSignal } = {},
 ): Promise<Response> {
   const method = options.method ?? "GET";
   const maxBusyRetries = method === "GET" ? 2 : 0;
@@ -135,7 +137,7 @@ async function apiRequest(
 
 async function apiJson<T>(
   path: string,
-  options: { method?: "GET" | "POST" | "DELETE"; body?: string; signal?: AbortSignal } = {},
+  options: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: string; signal?: AbortSignal } = {},
 ): Promise<T> {
   const res = await apiRequest(path, options);
   return (await res.json()) as T;
@@ -190,6 +192,33 @@ export async function cancelPairing(): Promise<void> {
 
 export function fetchUsbStatus(signal?: AbortSignal): Promise<UsbStatus> {
   return apiJson<UsbStatus>("/api/v1/usb/status", { signal });
+}
+
+export async function listDevices(signal?: AbortSignal): Promise<Device[]> {
+  const res = await apiJson<{ items: Device[] }>("/api/v1/devices", { signal });
+  return res.items;
+}
+
+export function createDevice(input: DeviceInput & { device_id: string }): Promise<Device> {
+  return apiJson<Device>("/api/v1/devices", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateDevice(id: string, input: DeviceInput): Promise<Device> {
+  return apiJson<Device>(`/api/v1/devices/id-${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function downloadDeviceLabels(ids: string[]): Promise<Blob> {
+  const res = await apiRequest("/api/v1/devices/labels.pdf", {
+    method: "POST",
+    body: JSON.stringify({ device_ids: ids }),
+  });
+  return res.blob();
 }
 
 export async function fetchImageBlobUrl(

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Cog, RefreshCw, SquareX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DevicesView } from "@/components/DevicesView";
 import { OverlayPreview } from "@/components/OverlayPreview";
 import { RecordsView } from "@/components/RecordsView";
 import { SettingsView } from "@/components/SettingsView";
@@ -14,10 +15,12 @@ import {
 import type { Filters, Reading, RuntimeStatus, UsbStatus } from "@/api/types";
 import { inspectionOptions } from "@/lib/records";
 
-type Tab = "records" | "settings";
+type Tab = "records" | "devices" | "settings";
 
 function tabFromHash(hash: string): Tab {
-  return hash === "#settings" ? "settings" : "records";
+  if (hash === "#settings") return "settings";
+  if (hash === "#devices") return "devices";
+  return "records";
 }
 
 export default function App() {
@@ -53,7 +56,7 @@ export default function App() {
   }, []);
 
   const switchTab = (next: Tab) => {
-    const target = next === "settings" ? "#settings" : "#";
+    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : "#";
     if (window.location.hash !== target) {
       window.location.hash = target;
     }
@@ -198,6 +201,20 @@ export default function App() {
               <Button
                 type="button"
                 size="field"
+                variant={tab === "devices" ? "secondary" : "ghost"}
+                aria-current={tab === "devices" ? "page" : undefined}
+                className={
+                  tab === "devices"
+                    ? "border border-hairline font-bold text-ink"
+                    : "text-steel"
+                }
+                onClick={() => switchTab("devices")}
+              >
+                機器登録
+              </Button>
+              <Button
+                type="button"
+                size="field"
                 variant={tab === "settings" ? "secondary" : "ghost"}
                 aria-current={tab === "settings" ? "page" : undefined}
                 className={
@@ -287,6 +304,8 @@ export default function App() {
             updatedAt={updatedAt}
             onSelectReading={setSelected}
           />
+        ) : tab === "devices" ? (
+          <DevicesView onAuthExpired={() => setAuthExpired(true)} />
         ) : (
           <SettingsView
             runtime={runtime}
