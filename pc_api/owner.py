@@ -132,6 +132,8 @@ class Owner:
             info = init_receiver_for_app(incoming_dir=str(self.incoming))
             if not info.get('running') or info.get('external_process') or info.get('server') is None:
                 raise OwnerConflict('Stop the existing run_pc.py receiver, then restart via pc_api.owner.')
+            info['server'].daemon_threads = False
+            info['server'].block_on_close = True
             self.receiver_info = info
             if self.usb_enabled:
                 self.usb = init_usb_pull_for_app(incoming_dir=str(self.incoming))

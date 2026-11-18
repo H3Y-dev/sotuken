@@ -136,6 +136,17 @@ class OwnerTests(unittest.TestCase):
         lock.acquire()
         lock.release()
 
+    def test_receiver_non_daemon_and_lock_released_after_server_close(self):
+        self.assertIs(self.receiver.daemon_threads, False)
+        self.assertIs(self.receiver.block_on_close, True)
+        events = []
+        self.receiver.shutdown.side_effect = lambda: events.append('shutdown')
+        self.receiver.server_close.side_effect = lambda: events.append('server_close')
+        with patch.object(self.owner.lock, 'release', wraps=self.owner.lock.release) as release_mock:
+            release_mock.side_effect = lambda: (events.append('lock_release'), OwnerLock.release(self.owner.lock))
+            self.owner.stop()
+        self.assertEqual(events, ['shutdown', 'server_close', 'lock_release'])
+
 
 if __name__ == '__main__':
     unittest.main()
