@@ -2,13 +2,23 @@
 
 import csv
 import math
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from manager.qr_label import validate_device_id as _validate_device_id
+from manager.qr_label import (
+    validate_device_id as _validate_device_id,
+    validate_device_name as _validate_device_name,
+)
 
 
 _FIELDS = ("device_name", "unit", "min_value", "max_value", "kind", "provisional", "note")
+_ADMIN_FIELDS = ("device_name", "unit", "min_value", "max_value", "tolerance_min", "tolerance_max")
+_ADMIN_FIELD_SET = frozenset(_ADMIN_FIELDS)
+
+
+class DeviceConflict(Exception):
+    """Raised when creating a device whose ID conflicts with an existing row."""
 
 
 @dataclass
@@ -42,9 +52,17 @@ def get_device(storage, device_id) -> dict | None:
         return _select_device(conn, device_id)
 
 
-def list_devices(storage) -> list[dict]:
+def list_devices(storage, *, limit=None) -> list[dict]:
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 0):
+        raise ValueError("limit must be a non-negative integer")
     with storage.connection() as conn:
-        cursor = conn.execute("SELECT * FROM devices ORDER BY device_id")
+        if limit is None:
+            cursor = conn.execute("SELECT * FROM devices ORDER BY device_id COLLATE BINARY")
+        else:
+            cursor = conn.execute(
+                "SELECT * FROM devices ORDER BY device_id COLLATE BINARY LIMIT ?",
+                (limit,),
+            )
         columns = [col[0] for col in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
@@ -109,6 +127,97 @@ def register_device(storage, device_id, device_name=None, unit=None,
         _update(conn, device_id, changed)
         result.updated_fields = list(changed)
     return result
+
+
+def _validate_number(value, name: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number or null")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be finite")
+    return number
+
+
+def _validate_range(low: float | None, high: float | None, label: str, *, strict: bool) -> None:
+    if (low is None) != (high is None):
+        raise ValueError(f"{label} bounds must both be set or both be null")
+    if low is not None and ((low >= high) if strict else (low > high)):
+        op = "<" if strict else "<="
+        raise ValueError(f"{label} must satisfy min {op} max")
+
+
+def validate_device_fields(fields: dict) -> dict:
+    """Validate and normalize manual device input fields."""
+    if not isinstance(fields, dict) or set(fields) != _ADMIN_FIELD_SET:
+        raise ValueError("fields must contain exactly the required device keys")
+
+    device_name = _validate_device_name(fields["device_name"])
+    if device_name == "unknown":
+        raise ValueError("device_name 'unknown' is reserved")
+
+    unit = fields["unit"]
+    if unit is not None:
+        if not isinstance(unit, str):
+            raise ValueError("unit must be a string or null")
+        if any(unicodedata.category(c).startswith("C") for c in unit):
+            raise ValueError("unit must not contain control characters")
+        unit = unit.strip()
+        if not unit or len(unit) > 16:
+            raise ValueError("unit must be 1 to 16 characters after stripping")
+
+    min_value = _validate_number(fields["min_value"], "min_value")
+    max_value = _validate_number(fields["max_value"], "max_value")
+    tolerance_min = _validate_number(fields["tolerance_min"], "tolerance_min")
+    tolerance_max = _validate_number(fields["tolerance_max"], "tolerance_max")
+
+    _validate_range(min_value, max_value, "scale range", strict=True)
+    _validate_range(tolerance_min, tolerance_max, "tolerance range", strict=False)
+    if min_value is not None and tolerance_min is not None:
+        if tolerance_min < min_value or tolerance_max > max_value:
+            raise ValueError("tolerance range must fall within scale range")
+
+    return {
+        "device_name": device_name,
+        "unit": unit,
+        "min_value": min_value,
+        "max_value": max_value,
+        "tolerance_min": tolerance_min,
+        "tolerance_max": tolerance_max,
+    }
+
+
+def create_device(storage, device_id, fields: dict) -> dict:
+    """Create a manually registered device (provisional=0)."""
+    _validate_device_id(device_id)
+    validated = validate_device_fields(fields)
+    now = _now()
+    with storage.connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute(
+            "SELECT 1 FROM devices WHERE device_id = ? COLLATE NOCASE",
+            (device_id,),
+        ).fetchone():
+            raise DeviceConflict(f"Device already exists: {device_id}")
+        conn.execute(
+            "INSERT INTO devices (device_id, " + ", ".join(_ADMIN_FIELDS)
+            + ", provisional, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+            [device_id] + [validated[name] for name in _ADMIN_FIELDS] + [now, now],
+        )
+        return _select_device(conn, device_id)
+
+
+def update_device(storage, device_id, fields: dict) -> dict:
+    """Replace editable fields of an existing device and clear provisional."""
+    _validate_device_id(device_id)
+    validated = validate_device_fields(fields)
+    with storage.connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if _select_device(conn, device_id) is None:
+            raise KeyError(device_id)
+        _update(conn, device_id, {**validated, "provisional": 0})
+        return _select_device(conn, device_id)
 
 
 def rename_device(storage, device_id, new_name):

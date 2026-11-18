@@ -118,13 +118,19 @@ class Storage:
             ("inspection_name", "TEXT"),
             ("route_id", "TEXT"),
         )
+        device_additional_columns = (
+            ("tolerance_min", "REAL"),
+            ("tolerance_max", "REAL"),
+        )
         tables = {row[0] for row in cursor.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         )}
         columns = {row[1] for row in cursor.execute("PRAGMA table_info(meter_readings)")}
+        device_columns = {row[1] for row in cursor.execute("PRAGMA table_info(devices)")}
         needs_migration = (
             not {"meter_readings", "image_truths", "devices"}.issubset(tables)
             or any(column not in columns for column, _ in additional_columns)
+            or any(column not in device_columns for column, _ in device_additional_columns)
         )
         if self.db_path != ":memory:" and tables and needs_migration:
             self._backup_db(conn)
@@ -132,7 +138,7 @@ class Storage:
         # SQLiteのDDLも戻せるよう、最初のCREATEより前に明示的に開始する。
         cursor.execute("BEGIN IMMEDIATE")
         try:
-            repaired_count = self._create_schema(cursor, additional_columns)
+            repaired_count = self._create_schema(cursor, additional_columns, device_additional_columns)
             from manager.routes import init_tables
             init_tables(conn)
             conn.commit()
@@ -162,7 +168,7 @@ class Storage:
             backup_path.unlink()
             raise
 
-    def _create_schema(self, cursor: sqlite3.Cursor, additional_columns) -> int:
+    def _create_schema(self, cursor: sqlite3.Cursor, additional_columns, device_additional_columns=()) -> int:
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS meter_readings (
@@ -219,6 +225,10 @@ class Storage:
         for column, definition in additional_columns:
             if column not in columns:
                 cursor.execute(f"ALTER TABLE meter_readings ADD COLUMN {column} {definition}")
+        device_columns = {row[1] for row in cursor.execute("PRAGMA table_info(devices)")}
+        for column, definition in device_additional_columns:
+            if column not in device_columns:
+                cursor.execute(f"ALTER TABLE devices ADD COLUMN {column} {definition}")
         cursor.execute(
             """
             UPDATE meter_readings SET reading_id = 'legacy:' || id

@@ -81,6 +81,7 @@ class TestStorageSchema(unittest.TestCase):
             self.assertEqual(set(devices), {
                 "device_id", "device_name", "unit", "min_value", "max_value",
                 "kind", "provisional", "note", "created_at", "updated_at",
+                "tolerance_min", "tolerance_max",
             })
             self.assertEqual(devices["device_id"][2], "TEXT")
             self.assertEqual(devices["device_id"][5], 1)
