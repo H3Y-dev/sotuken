@@ -61,3 +61,82 @@ export interface UsbStatus {
   owner_instance_id: string;
   observed_at: string;
 }
+
+export type InspectionState = "受信中" | "不足あり" | "完了";
+export type InspectionReadStatus = "ok" | "low_confidence" | "failed";
+export type InspectionSource = "phone_qr" | "manual" | "pc_qr";
+
+export interface InspectionStatus {
+  state: InspectionState;
+  matched: number;
+  missing_photos: string[];
+}
+
+export interface InspectionMeta {
+  id: string;
+  name: string;
+  route_id: string | null;
+  route_name: string | null;
+  operator: string | null;
+  place: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface InspectionMeter {
+  key: string;
+  seq: number | null;
+  off_route: boolean;
+  device_id: string | null;
+  name: string;
+  unit: string | null;
+  scale: [number, number] | null;
+  tolerance: [number, number] | null;
+  stage: 0 | 1 | 2 | 4;
+  value: number | null;
+  read_status: InspectionReadStatus | null;
+  sources: InspectionSource[];
+  photos: number;
+  captured_at: string | null;
+}
+
+export interface InspectionProgress extends InspectionMeta {
+  status: InspectionStatus;
+  devices: InspectionMeter[];
+}
+
+export interface InspectionSummary {
+  route_total: number;
+  route_captured: number;
+  route_recorded: number;
+  captured: number;
+  recorded: number;
+  missing: number;
+  off_route: number;
+  off_route_recorded: number;
+  warn: number;
+  fail: number;
+  wait: number;
+  out_of_tolerance: number;
+  all_ok: boolean;
+  needs_action: boolean;
+}
+
+export interface InspectionListItem extends InspectionMeta {
+  count: number;
+  status: {
+    state: InspectionState;
+    matched: number;
+  };
+  missing_photo_count: number;
+  preview: InspectionMeter[];
+  summary: InspectionSummary;
+}
+
+export interface InspectionListPage {
+  items: InspectionListItem[];
+  total: number;
+  next_cursor: string | null;
+  all_total: number;
+  action_total: number;
+}
