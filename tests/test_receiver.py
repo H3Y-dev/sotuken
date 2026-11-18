@@ -327,7 +327,7 @@ class TestReceiverServer(unittest.TestCase):
         headers = self._make_upload_headers(file_name, {"local_id": "loc-01"}, b"small")
         headers["Content-Length"] = str(31 * 1024 * 1024)  # 31MB
 
-        status, _ = self._request("POST", "/upload", headers=headers, body=b"small")
+        status, _ = self._request("POST", "/upload", headers=headers, body=b"")
         self.assertEqual(413, status)
 
     def test_non_private_ip_returns_403(self):
