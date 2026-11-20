@@ -53,7 +53,7 @@ def draw_detection_overlay(image, result):
 
 
 def save_overlay(image, result, output_dir, reading_id):
-    """検出オーバーレイを保存し、作業ディレクトリからの相対パスを返す。"""
+    """検出オーバーレイを保存し、絶対パスを返す。"""
     if result.get("center") is None:
         return None
     try:
@@ -63,6 +63,6 @@ def save_overlay(image, result, output_dir, reading_id):
         if not ok:
             return None
         buffer.tofile(output_path)
-        return os.path.relpath(output_path).replace(os.sep, "/")
+        return os.path.abspath(output_path)
     except Exception:
         return None

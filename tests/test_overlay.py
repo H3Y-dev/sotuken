@@ -35,7 +35,7 @@ class TestDetectionOverlay(unittest.TestCase):
         self.assertTrue(np.array_equal(image, overlay))
         self.assertIsNot(image, overlay)
 
-    def test_saves_jpeg_and_returns_relative_path(self):
+    def test_saves_jpeg_and_returns_absolute_path(self):
         image = np.zeros((30, 30, 3), dtype=np.uint8)
         result = {
             "center": (15, 15),
@@ -45,10 +45,10 @@ class TestDetectionOverlay(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             try:
                 os.chdir(temp_dir)
-                relative_path = save_overlay(image, result, "overlays", "reading-1")
-                self.assertEqual("overlays/reading-1.jpg", relative_path)
-                self.assertTrue(os.path.isfile(os.path.join(temp_dir, relative_path)))
-                self.assertIsNotNone(cv2.imread(os.path.join(temp_dir, relative_path)))
+                path = save_overlay(image, result, "overlays", "reading-1")
+                self.assertEqual(os.path.join(temp_dir, "overlays", "reading-1.jpg"), path)
+                self.assertTrue(os.path.isfile(path))
+                self.assertIsNotNone(cv2.imread(path))
             finally:
                 os.chdir(old_cwd)
 
