@@ -16,7 +16,7 @@ import jp.sotuken.metercapture.queue.sender.SenderPayloads
 import jp.sotuken.metercapture.ui.*
 
 data class HealthView(val reachable: Boolean?, val network: NetworkSnapshot)
-data class SendRow(val item: QueueItem, val title: String, val idLine: String, val timeLine: String, val status: String, val heldForOtherPc: Boolean)
+data class SendRow(val item: QueueItem, val title: String, val idLine: String, val timeLine: String, val status: String, val heldForOtherPc: Boolean, val reason: String? = null)
 data class SendStatusUiState(
     val badge: String,
     val headline: String,
@@ -43,13 +43,13 @@ fun buildSendStatusUiState(inspection: Inspection, photos: List<QueueItem>, heal
     val badge = when (state) {
         InspectionState.SENDING -> "送信中"
         InspectionState.SENT -> "送信済み"
-        InspectionState.SENT_INCOMPLETE -> "送信済み（一部失敗あり）"
+        InspectionState.SENT_INCOMPLETE -> "未着あり ${undelivered}枚"
         else -> "送信待ち"
     }
     val headline = when (state) {
         InspectionState.SENDING -> "PCへ送っています"
-        InspectionState.SENT -> "すべてPCに届きました"
-        InspectionState.SENT_INCOMPLETE -> "${undelivered}枚が届いていません"
+        InspectionState.SENT -> "すべてPCに到着しました"
+        InspectionState.SENT_INCOMPLETE -> "${undelivered}枚がPCに未着です"
         else -> "点検を完了しました"
     }
     val summary = summarizeInspection(photos, null)
@@ -58,22 +58,27 @@ fun buildSendStatusUiState(inspection: Inspection, photos: List<QueueItem>, heal
         "　送信先：${pcName ?: "未設定"}${time?.let { " ・ $it" }.orEmpty()}"
     } else ""
     return SendStatusUiState(badge, headline,
-        listOfNotNull(inspection.operatorName, inspection.place).joinToString(" ・ ") + " 写真${photos.size}枚 ・ ${summary.deviceCount}機器",
-        if (state == InspectionState.SENT) "写真 $arrived / ${photos.size}枚 到着" else "$arrived / ${photos.size}枚",
+        listOfNotNull(inspection.operatorName, inspection.place).joinToString(" ・ ") + " 写真${photos.size}枚 ・ ${summary.deviceCount}台",
+        "到着 $arrived/${photos.size}枚",
         when {
             state == InspectionState.SENT || state == InspectionState.SENT_INCOMPLETE -> "写真の一覧：到着$destination"
+            inspection.manifestError == "PCに届かないため、写真の一覧を送れませんでした" -> "写真の一覧：未送信（PCにつながりません）"
             inspection.manifestError != null -> "写真の一覧：送れませんでした（${inspection.manifestError}）"
-            else -> "写真の一覧：未送信 残りの写真が届いたら送ります。"
+            else -> "写真の一覧：未送信（写真がすべて到着したら送ります）"
         },
         if (!waiting) null else when {
             held -> "別のPC宛ての写真があります。『今のPCへ送り直す』で送れます"
             health.reachable == true -> "まもなく送信します"
             offline -> "PCにつながりません。接続の案内を見てください"
-            else -> "${networkLabel(health.network)}には接続していますが、PCに届きません。PCの受信アプリと接続を確認してください。"
+            else -> "${networkLabel(health.network)}には接続していますが、PCにつながりません。PCの受信アプリと接続を確認してください。"
         },
-        photos.map { photo -> SendRow(photo, photo.deviceName ?: "機器名なし", photo.deviceId ?: "機器IDなし",
-            "${formatInspectionCaptureTime(photo.capturedAt)} 撮影",
-            if (SenderPayloads.buildImageFileName(photo) in missing && photo.sendState == SendState.SENT) "PC未到着" else sendStatusLabel(photo, currentReceiverId), photo.isHeldFor(currentReceiverId)) },
+        photos.map { photo ->
+            val pcMissing = SenderPayloads.buildImageFileName(photo) in missing && photo.sendState == SendState.SENT
+            SendRow(photo, photo.deviceName ?: "機器名なし", photo.deviceId ?: "機器IDなし",
+                "${formatInspectionCaptureTime(photo.capturedAt)} 撮影",
+                if (pcMissing) "PCに未着" else sendStatusLabel(photo, currentReceiverId), photo.isHeldFor(currentReceiverId),
+                if (pcMissing) "PCで写真が見つかりません" else undeliveredReason(photo))
+        },
         waiting && !manifestOnly, state == InspectionState.SENT_INCOMPLETE, manifestOnly,
         waiting && offline && health.reachable != true,
     )
@@ -96,6 +101,7 @@ fun InspectionSendStatusScreen(state: SendStatusUiState, onSendNow: () -> Unit, 
                     Thumbnail(row.item.imagePath, Modifier.size(76.dp))
                     Column(Modifier.weight(1f)) {
                         Text(row.title); Text(row.idLine); Text(row.timeLine); Text(row.status)
+                        row.reason?.let { Text("理由：$it") }
                         if (row.heldForOtherPc) TextButton(onClick = { onReassign(row.item.localId) }) { Text("今のPCへ送り直す") }
                     }
                 }
@@ -103,7 +109,7 @@ fun InspectionSendStatusScreen(state: SendStatusUiState, onSendNow: () -> Unit, 
         }
         item {
             if (state.showSendNow) Button(onClick = onSendNow, modifier = Modifier.fillMaxWidth()) { Text("今すぐ送る") }
-            if (state.showRetryUndelivered) Button(onClick = onRetryUndelivered, modifier = Modifier.fillMaxWidth()) { Text("届いていない写真を再送") }
+            if (state.showRetryUndelivered) Button(onClick = onRetryUndelivered, modifier = Modifier.fillMaxWidth()) { Text("未着の写真を再送") }
             if (state.showManifestOnlyRetry) Button(onClick = onSendNow, modifier = Modifier.fillMaxWidth()) { Text("写真の一覧だけ再送") }
             if (state.showGuideLink) TextButton(onClick = onGuide) { Text("接続の案内を見る") }
             TextButton(onClick = onHome) { Text("点検の一覧へ") }

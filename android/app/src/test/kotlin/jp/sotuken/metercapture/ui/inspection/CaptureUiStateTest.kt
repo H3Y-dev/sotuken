@@ -12,11 +12,11 @@ class CaptureUiStateTest {
         assertEquals("11/06 09:32", formatInspectionCaptureTime("2026-11-06T00:32:00Z", java.time.ZoneId.of("Asia/Tokyo")))
         assertEquals("invalid", formatInspectionCaptureTime("invalid", java.time.ZoneId.of("Asia/Tokyo")))
     }
-    @Test fun routeProgressText() = assertEquals("対象 2機器中 1機器を撮影", buildCaptureUiState(displayInspection, displayRoute, listOf(photo()), null, null).progress)
+    @Test fun routeProgressText() = assertEquals("撮影 1/2台", buildCaptureUiState(displayInspection, displayRoute, listOf(photo()), null, null).progress)
     @Test fun noRouteProgressText() {
         val state = buildCaptureUiState(displayInspection, null, listOf(photo(), photo("two")), null, null)
-        assertEquals("写真2枚 ・ 1機器", state.progress)
-        assertEquals("この点検：写真2枚 ・ 1機器", state.countLine)
+        assertEquals("写真2枚 ・ 1台", state.progress)
+        assertEquals("この点検：写真2枚 ・ 1台", state.countLine)
     }
     @Test fun missingChipsOnlyWithRoute() {
         assertEquals(listOf(displayRoute[1]), buildCaptureUiState(displayInspection, displayRoute, listOf(photo()), null, null).missingChips)

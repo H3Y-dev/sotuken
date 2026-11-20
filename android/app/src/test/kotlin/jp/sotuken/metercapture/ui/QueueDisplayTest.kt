@@ -11,8 +11,8 @@ import org.junit.Test
 class QueueDisplayTest {
     @Test
     fun deleteAvailabilityAndConfirmationFollowState() {
-        val unsent = "この写真を削除します。まだPCに届いていないため、削除するとPCには送られません。"
-        val sent = "端末内の写真を削除します。PCに届いた記録は消えません。"
+        val unsent = "この写真を削除します。まだPCに未着のため、削除するとPCには送られません。"
+        val sent = "端末内の写真を削除します。PCに到着した記録は消えません。"
         for (state in SendState.entries) {
             assertEquals(state != SendState.SENDING, canDelete(item(state)))
         }
@@ -46,12 +46,12 @@ class QueueDisplayTest {
 
     @Test
     fun folderSentIsShownAsNotArrived() {
-        assertEquals("PC未到着・端末に保存済み", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_FOLDER)))
+        assertEquals("PCに未着（端末に保存済み）", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_FOLDER)))
     }
 
     @Test
     fun httpSentIsShownAsReceived() {
-        assertEquals("PC受信済み", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_HTTP)))
+        assertEquals("PCに到着", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_HTTP)))
     }
 
     @Test
@@ -63,7 +63,7 @@ class QueueDisplayTest {
     fun otherStatesKeepLabels() {
         assertEquals("未送信", sendStatusLabel(item(SendState.PENDING)))
         assertEquals("送信中", sendStatusLabel(item(SendState.SENDING)))
-        assertEquals("失敗", sendStatusLabel(item(SendState.FAILED)))
+        assertEquals("送信失敗", sendStatusLabel(item(SendState.FAILED)))
     }
 
     @Test
@@ -75,7 +75,7 @@ class QueueDisplayTest {
             item(SendState.FAILED, id = "4"),
         )
         assertEquals(2, undeliveredCount(items))
-        assertEquals("PC未到着: 2件（端末に保存済み）", undeliveredSummary(items))
+        assertEquals("PCに未着 2枚（端末に保存済み）", undeliveredSummary(items))
     }
 
     @Test
@@ -86,11 +86,23 @@ class QueueDisplayTest {
 
     @Test
     fun errorTextShownForFailedAndUndeliveredOnly() {
-        assertEquals("接続失敗", errorTextFor(item(SendState.FAILED, error = "接続失敗")))
-        assertEquals("接続失敗", errorTextFor(item(SendState.SENT, QueueItem.VIA_FOLDER, "接続失敗")))
+        assertEquals("端末への保存に失敗しました", errorTextFor(item(SendState.FAILED, error = "接続失敗")))
+        assertEquals("端末への保存に失敗しました", errorTextFor(item(SendState.SENT, QueueItem.VIA_FOLDER, "接続失敗")))
         assertNull(errorTextFor(item(SendState.SENT, QueueItem.VIA_HTTP, "古いエラー")))
         assertNull(errorTextFor(item(SendState.FAILED, error = "  ")))
         assertNull(errorTextFor(item(SendState.FAILED, error = null)))
+    }
+
+    @Test
+    fun reasonFromLastErrorMapsRawErrors() {
+        assertEquals(null, reasonFromLastError(" "))
+        assertEquals("送信先が未設定です", reasonFromLastError("送信先未設定"))
+        assertEquals("合言葉が違います", reasonFromLastError("PC未接続: Health check failed with HTTP 401: x"))
+        assertEquals("写真のファイルが見つかりません", reasonFromLastError("HTTP失敗: Image file does not exist"))
+        assertEquals("PCが写真を受け付けませんでした", reasonFromLastError("追い送り失敗: HTTP 413: too large"))
+        assertEquals("応答がありません", reasonFromLastError("HTTP失敗: unknown"))
+        assertEquals("端末への保存に失敗しました", reasonFromLastError("Folder sender failed: x"))
+        assertEquals("接続できません", reasonFromLastError("PC未接続: 接続できません"))
     }
 
     @Test
@@ -103,12 +115,12 @@ class QueueDisplayTest {
     @Test
     fun sendStatusLabelDistinguishesAllConditions() {
         assertEquals("未送信", sendStatusLabel(item(SendState.PENDING)))
-        assertEquals("PC未到着・端末に保存済み", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_FOLDER)))
-        assertEquals("PC受信済み", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_HTTP)))
-        assertEquals("失敗", sendStatusLabel(item(SendState.FAILED)))
-        assertEquals("点検中(完了すると送信します)", sendStatusLabel(item(SendState.PENDING), isSendable = { false }))
+        assertEquals("PCに未着（端末に保存済み）", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_FOLDER)))
+        assertEquals("PCに到着", sendStatusLabel(item(SendState.SENT, QueueItem.VIA_HTTP)))
+        assertEquals("送信失敗", sendStatusLabel(item(SendState.FAILED)))
+        assertEquals("完了後に送信", sendStatusLabel(item(SendState.PENDING), isSendable = { false }))
         val held = item(SendState.PENDING).copy(receiverId = "old-pc")
-        assertEquals("別のPC宛て(保留)", sendStatusLabel(held, currentReceiverId = "new-pc"))
+        assertEquals("別のPC宛て（保留）", sendStatusLabel(held, currentReceiverId = "new-pc"))
     }
 
     @Test
@@ -117,20 +129,20 @@ class QueueDisplayTest {
             item(SendState.PENDING, id = "1"),
             item(SendState.PENDING, id = "2"),
         )
-        assertEquals("未送信: 2件（端末に保存済み）", undeliveredSummary(pendingOnly))
+        assertEquals("未送信 2枚（端末に保存済み）", undeliveredSummary(pendingOnly))
 
         val mixed = listOf(
             item(SendState.PENDING, id = "1"),
             item(SendState.SENT, QueueItem.VIA_FOLDER, id = "2"),
         )
-        assertEquals("未送信: 2件（端末に保存済み）", undeliveredSummary(mixed))
+        assertEquals("未送信 2枚（端末に保存済み）", undeliveredSummary(mixed))
 
         val nonSendableMixed = listOf(
             item(SendState.PENDING, id = "1"),
             item(SendState.PENDING, id = "2"),
         )
         assertEquals(
-            "未送信: 1件（端末に保存済み）",
+            "未送信 1枚（端末に保存済み）",
             undeliveredSummary(nonSendableMixed, isSendable = { it.localId == "1" }),
         )
 
@@ -139,7 +151,7 @@ class QueueDisplayTest {
             item(SendState.SENT, QueueItem.VIA_FOLDER, id = "2"),
         )
         assertEquals(
-            "PC未到着: 1件（端末に保存済み）",
+            "PCに未着 1枚（端末に保存済み）",
             undeliveredSummary(heldMixed, currentReceiverId = "current"),
         )
     }
@@ -148,11 +160,11 @@ class QueueDisplayTest {
     fun errorTextForPendingWhenConnectionUnreachable() {
         val pending = item(SendState.PENDING)
         assertEquals(
-            "PCに届いていません。接続できません",
+            "接続できません",
             errorTextFor(pending, connectionUnreachable = true, connectionReason = "接続できません"),
         )
         assertEquals(
-            "PCに届いていません。接続できません",
+            "接続できません",
             errorTextFor(pending.copy(lastError = "PC未接続: 接続できません"), connectionUnreachable = true),
         )
         assertNull(

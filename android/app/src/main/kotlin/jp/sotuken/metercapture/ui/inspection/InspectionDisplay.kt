@@ -25,11 +25,11 @@ fun formatInspectionCaptureTime(capturedAt: String, zone: ZoneId = ZoneId.system
 
 fun buildCaptureUiState(inspection: Inspection, routeDevices: List<RouteDevice>?, photos: List<QueueItem>, target: CaptureTarget?, justSaved: SavedCard?): CaptureUiState {
     val summary = summarizeInspection(photos, routeDevices)
-    val counts = "写真${summary.photoCount}枚 ・ ${summary.deviceCount}機器"
+    val counts = "写真${summary.photoCount}枚 ・ ${summary.deviceCount}台"
     val routeIds = routeDevices?.map { it.id }?.toSet().orEmpty()
     return CaptureUiState(
         "${inspection.name} ・ ${inspectionStateLabel(inspection.state)}",
-        if (routeDevices == null) counts else "対象 ${summary.routeDeviceCount}機器中 ${summary.shotRouteDeviceCount}機器を撮影",
+        if (routeDevices == null) counts else "撮影 ${summary.shotRouteDeviceCount}/${summary.routeDeviceCount}台",
         summary.missing, target?.deviceName ?: "機器が選ばれていません",
         target?.let { it.deviceId ?: "機器IDなし" } ?: "QRを読むか、手入力してください",
         "この点検：$counts", justSaved,
@@ -58,7 +58,7 @@ fun buildHistoryUiState(inspection: Inspection, routeDevices: List<RouteDevice>?
     val routeIds = routeDevices?.map { it.id }?.toSet().orEmpty()
     return HistoryUiState(
         inspection.name, photos.size,
-        if (routeDevices == null) "${summary.deviceCount}機器" else "${summary.shotRouteDeviceCount} / ${summary.routeDeviceCount}機器",
+        if (routeDevices == null) "${summary.deviceCount}台" else "撮影 ${summary.shotRouteDeviceCount}/${summary.routeDeviceCount}台",
         routeDevices?.map { device ->
             val count = photos.count { it.deviceId == device.id }
             RouteCheckRow(device, count, count > 0)
@@ -69,7 +69,7 @@ fun buildHistoryUiState(inspection: Inspection, routeDevices: List<RouteDevice>?
                 inspection.state == InspectionState.IN_PROGRESS && it.sendState != SendState.SENDING)
         },
         summary.duplicates.map { "${it.deviceId ?: it.deviceName}は${it.count}枚あります。撮り直しの写真か確認してください。" },
-        if (routeDevices == null) "対象一覧がないため、未撮影の機器は判定できません" else null,
+        if (routeDevices == null) "ルートがないため、未撮影の機器は判定できません" else null,
     )
 }
 
@@ -77,9 +77,9 @@ fun buildCompleteUiState(inspection: Inspection, summary: InspectionSummary): Co
     val warnings = buildList {
         summary.missing.forEach { add("未撮影：${it.name} ${it.id}") }
         summary.duplicates.forEach { add("重複：${listOfNotNull(it.deviceName, it.deviceId).joinToString(" ")} が${it.count}枚") }
-        summary.extra.forEach { add("一覧外：$it") }
+        summary.extra.forEach { add("ルート外：$it") }
         if (summary.unidentifiedCount > 0) add("機器IDなし：${summary.unidentifiedCount}枚")
-        if (summary.routeDeviceCount == null) add("対象一覧がないため、未撮影は確認できません")
+        if (summary.routeDeviceCount == null) add("ルートがないため、未撮影は確認できません")
     }
     val blockReason = when {
         inspection.state != InspectionState.IN_PROGRESS -> "完了した点検は変更できません"
@@ -95,7 +95,7 @@ fun inspectionStateLabel(state: InspectionState, undeliveredCount: Int = 0): Str
     InspectionState.WAITING -> "送信待ち"
     InspectionState.SENDING -> "送信中"
     InspectionState.SENT -> "送信済み"
-    InspectionState.SENT_INCOMPLETE -> "送信済み（未到着${undeliveredCount}枚）"
+    InspectionState.SENT_INCOMPLETE -> "未着あり ${undeliveredCount}枚"
 }
 
 internal fun inspectionUndelivered(inspection: Inspection, photos: List<QueueItem>): Int {
@@ -113,14 +113,14 @@ fun buildHomeUiState(items: List<InspectionListItem>, legacyItems: List<QueueIte
         val devices = item.counts?.deviceCount ?: summary.deviceCount
         val undelivered = inspectionUndelivered(inspection, photos)
         val subtitle = when (inspection.state) {
-            InspectionState.IN_PROGRESS -> listOfNotNull(inspection.operatorName, inspection.place).joinToString(" ・ ").let { "${if (it.isEmpty()) "" else "$it "}写真${count}枚 ・ ${devices}機器" }
+            InspectionState.IN_PROGRESS -> listOfNotNull(inspection.operatorName, inspection.place).joinToString(" ・ ").let { "${if (it.isEmpty()) "" else "$it "}写真${count}枚 ・ ${devices}台" }
             InspectionState.WAITING -> "写真${count}枚 ・ 接続確認後に自動送信"
-            InspectionState.SENDING -> "写真${count}枚 ・ ${item.counts?.deliveredCount ?: 0} / ${count}枚到着"
-            InspectionState.SENT -> "写真${count}枚 ・ すべてPCへ到着"
-            InspectionState.SENT_INCOMPLETE -> "写真${count}枚 ・ ${undelivered}枚が未到着"
+            InspectionState.SENDING -> "写真${count}枚 ・ 到着 ${item.counts?.deliveredCount ?: 0}/${count}枚"
+            InspectionState.SENT -> "写真${count}枚 ・ すべてPCに到着"
+            InspectionState.SENT_INCOMPLETE -> "写真${count}枚 ・ 未着 ${undelivered}枚"
         }
         HomeCard(inspection.inspectionId, inspection.name, inspectionStateLabel(inspection.state, undelivered), subtitle,
-            if (inspection.state == InspectionState.IN_PROGRESS && summary.routeDeviceCount != null) "対象${summary.routeDeviceCount}機器のうち${summary.shotRouteDeviceCount}機器を撮影" else null,
+            if (inspection.state == InspectionState.IN_PROGRESS && summary.routeDeviceCount != null) "撮影 ${summary.shotRouteDeviceCount}/${summary.routeDeviceCount}台" else null,
             when (inspection.state) { InspectionState.IN_PROGRESS -> "点検を続ける"; InspectionState.WAITING, InspectionState.SENDING -> "状態を見る"; else -> "送信結果を見る" },
             if (inspection.state == InspectionState.IN_PROGRESS) AppScreen.Capture(inspection.inspectionId) else AppScreen.SendStatus(inspection.inspectionId))
     }
@@ -128,5 +128,5 @@ fun buildHomeUiState(items: List<InspectionListItem>, legacyItems: List<QueueIte
     val waitingIds = items.filter { it.inspection.state in SENDABLE_INSPECTION_STATES }.map { it.inspection.inspectionId }.toSet()
     val sentIds = items.filter { it.inspection.state == InspectionState.SENT || it.inspection.state == InspectionState.SENT_INCOMPLETE }.map { it.inspection.inspectionId }.toSet()
     val legacy = countUndelivered(legacyItems.filter { it.inspectionId == null })
-    return HomeUiState(cards.filter { it.inspectionId in inProgressIds }, cards.filter { it.inspectionId in waitingIds }, cards.filter { it.inspectionId in sentIds }, if (legacy > 0) "点検なしの写真: 未着${legacy}件" else null)
+    return HomeUiState(cards.filter { it.inspectionId in inProgressIds }, cards.filter { it.inspectionId in waitingIds }, cards.filter { it.inspectionId in sentIds }, if (legacy > 0) "点検なしの写真 未着 ${legacy}枚" else null)
 }

@@ -104,7 +104,7 @@ internal fun PairingScreen(pendingCount: Int, onClose: () -> Unit) {
                         Text("端末時刻では期限切れです。PCでQRを更新してください。時刻がずれている場合は確認して登録できます。最終判定はPCが行います。")
                     }
                     val changesPc = settings.getReceiverId() != current.receiverId && pendingCount > 0
-                    if (changesPc) Text("PC未到着の写真が${pendingCount}件あります。既存の写真も新しいPCへ送ります。")
+                    if (changesPc) Text("PCに未着の写真が${pendingCount}枚あります。既存の写真も新しいPCへ送ります。")
                     Button(enabled = !busy, onClick = {
                         busy = true
                         error = null

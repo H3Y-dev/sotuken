@@ -11,7 +11,7 @@ class SendStatusUiStateTest {
     @Test fun usbArrivalCountsInPhotoProgressAndManifestRetry() {
         val arrived = photo.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_USB)
         val state = build(inspection.copy(manifestError = "offline"), listOf(arrived))
-        assertEquals("1 / 1枚", state.photoProgress)
+        assertEquals("到着 1/1枚", state.photoProgress)
         assertTrue(state.showManifestOnlyRetry)
         assertTrue(state.rows.single().status.contains("USB"))
     }
@@ -28,16 +28,16 @@ class SendStatusUiStateTest {
     }
     @Test fun sendingProgress() {
         val s = build(inspection.copy(state = InspectionState.SENDING), listOf(photo, photo.copy(localId = "b", sendState = SendState.SENT, sentVia = QueueItem.VIA_HTTP)))
-        assertEquals("PCへ送っています", s.headline); assertEquals("1 / 2枚", s.photoProgress); assertFalse(s.showSendNow)
+        assertEquals("PCへ送っています", s.headline); assertEquals("到着 1/2枚", s.photoProgress); assertFalse(s.showSendNow)
     }
     @Test fun sentShowsManifestArrived() {
         val s = build(inspection.copy(state = InspectionState.SENT, manifestSentAt = "2026-11-06T02:00:00Z"), listOf(photo.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_HTTP)))
-        assertEquals("すべてPCに届きました", s.headline); assertTrue(s.manifestLine.contains("写真の一覧：到着")); assertTrue(s.manifestLine.contains("点検PC"))
+        assertEquals("すべてPCに到着しました", s.headline); assertTrue(s.manifestLine.contains("写真の一覧：到着")); assertTrue(s.manifestLine.contains("点検PC"))
     }
     @Test fun incompleteShowsRetry() {
         val failed = photo.copy(sendState = SendState.FAILED)
         val s = build(inspection.copy(state = InspectionState.SENT_INCOMPLETE, pcMissingFileNames = "[\"${SenderPayloads.buildImageFileName(failed)}\"]"), listOf(failed))
-        assertEquals("1枚が届いていません", s.headline); assertTrue(s.showRetryUndelivered)
+        assertEquals("1枚がPCに未着です", s.headline); assertTrue(s.showRetryUndelivered)
     }
     @Test fun manifestOnlyRetryWhenPhotosDelivered() {
         val s = build(inspection.copy(manifestError = "失敗"), listOf(photo.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_HTTP)))

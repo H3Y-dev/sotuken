@@ -13,7 +13,7 @@ data class SavedRouteRow(val routeId: String, val name: String, val detail: Stri
 data class RouteListUiState(val saved: List<SavedRouteRow>, val remote: List<RouteSummary>?, val loading: Boolean, val error: String?, val confirm: RouteDoc?)
 
 fun buildRouteListUiState(saved: List<SavedRoute>, remote: List<RouteSummary>?, loading: Boolean, error: String?, confirm: RouteDoc?) = RouteListUiState(
-    saved.map { SavedRouteRow(it.route.routeId, it.route.name, "${it.route.devices.size}機器 ・ ${it.route.updatedAt} ・ ${if (it.source == "wifi") "Wi-Fi" else "QR"}") }, remote, loading, error, confirm,
+    saved.map { SavedRouteRow(it.route.routeId, it.route.name, "${it.route.devices.size}台 ・ ${it.route.updatedAt} ・ ${if (it.source == "wifi") "Wi-Fi" else "QR"}") }, remote, loading, error, confirm,
 )
 
 @Composable
@@ -36,7 +36,7 @@ fun RouteListScreen(state: RouteListUiState, onFetchList: () -> Unit, onPick: (S
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.remote?.forEach { row ->
             OutlinedCard(onClick = { onPick(row.routeId) }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) { Text(row.name); Text("${row.count}機器 ・ ${row.updatedAt}") }
+                Column(Modifier.padding(12.dp)) { Text(row.name); Text("${row.count}台 ・ ${row.updatedAt}") }
             }
         }
         TextButton(onClick = onBack) { Text("戻る") }

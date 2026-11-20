@@ -281,7 +281,7 @@ fun MeterCaptureApp(queueStore: QueueStore, health: ReceiverHealthState = rememb
                         Text("接続の結果: ${connectionResultLabel(barState, healthReason)}")
                         Text("PCのURL: ${receiverSettings.getUrl() ?: "未設定"}")
                         Text("最終送信: $lastSentText")
-                        Text("未着: ${undelivered}件")
+                        Text("未着 ${undelivered}枚")
                         Text("直近の失敗の理由: ${lastFailure ?: "なし"}")
                     }
                 },

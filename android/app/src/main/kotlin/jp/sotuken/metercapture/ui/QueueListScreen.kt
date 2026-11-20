@@ -210,7 +210,7 @@ private fun QueueListRow(
                 )
                 errorTextFor(item, connectionUnreachable, connectionReason, isSendable, currentReceiverId)?.let { errorText ->
                     Text(
-                        text = errorText,
+                        text = "理由：$errorText",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         maxLines = 2,
@@ -377,13 +377,13 @@ private fun stateLabel(state: SendState): String = when (state) {
     SendState.PENDING -> "未送信"
     SendState.SENDING -> "送信中"
     SendState.SENT -> "送信済み"
-    SendState.FAILED -> "失敗"
+    SendState.FAILED -> "送信失敗"
 }
 
 @Composable
 private fun stateColor(state: SendState): Color = when (state) {
     SendState.PENDING -> MaterialTheme.colorScheme.onSurfaceVariant
-    SendState.SENDING -> MaterialTheme.colorScheme.tertiary
+    SendState.SENDING -> MaterialTheme.colorScheme.onSurfaceVariant
     SendState.SENT -> MaterialTheme.colorScheme.primary
     SendState.FAILED -> MaterialTheme.colorScheme.error
 }

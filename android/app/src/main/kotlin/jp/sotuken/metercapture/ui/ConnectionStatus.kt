@@ -78,12 +78,13 @@ fun connectionBarText(
     reason: String,
     hasOutbox: Boolean = true,
 ): String = when (state) {
-    ConnectionBarState.NOT_CONFIGURED -> "▲ 送信先が未設定です（タップして設定）"
-    ConnectionBarState.CHECKING -> "… PCとの接続を確認中"
-    ConnectionBarState.CONNECTED -> "● PCに接続中　未着 ${undelivered}件　最終送信 $lastSent"
+    ConnectionBarState.NOT_CONFIGURED -> "■ 送信先が未設定です（タップして設定）"
+    ConnectionBarState.CHECKING -> "◎ PCとの接続を確認中"
+    ConnectionBarState.CONNECTED -> "● PCに接続中　未着 ${undelivered}枚" +
+        if (lastSent.isNotBlank()) "　最終送信 $lastSent" else ""
     ConnectionBarState.UNREACHABLE -> {
-        val savingLabel = if (hasOutbox) "（送信箱に保存中）" else "（送信待ち）"
-        "○ PCに届かない${savingLabel}　未着 ${undelivered}件　$reason"
+        val savingLabel = if (hasOutbox) "（端末に保存中）" else "（送信待ち）"
+        "▲ PCにつながりません${savingLabel}　未着 ${undelivered}枚　$reason"
     }
 }
 
@@ -92,5 +93,5 @@ fun connectionResultLabel(state: ConnectionBarState, reason: String): String = w
     ConnectionBarState.NOT_CONFIGURED -> "未設定"
     ConnectionBarState.CHECKING -> "確認中"
     ConnectionBarState.CONNECTED -> "接続中"
-    ConnectionBarState.UNREACHABLE -> "届かない（$reason）"
+    ConnectionBarState.UNREACHABLE -> "つながりません（$reason）"
 }
