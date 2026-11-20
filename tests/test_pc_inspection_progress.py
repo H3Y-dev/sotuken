@@ -87,6 +87,52 @@ class InspectionProgressAPITests(unittest.TestCase):
                  device_id, device_id_source, captured_at, received_at, inspection_id, inspection_name, route_id),
             )
 
+    def test_image_ids_use_latest_failed_row_and_hide_paths(self):
+        self._insert_reading('photos', device_id='D1')
+        self._insert_reading('photos', device_id='D1', status='error', stage='failed')
+        self._insert_reading('photos', device_id='D2')
+        with self.storage.connection() as conn:
+            rows = conn.execute('SELECT id FROM meter_readings ORDER BY id').fetchall()
+            failed_id = rows[1][0]
+            conn.execute('UPDATE meter_readings SET overlay_path=? WHERE id=?', (str(self.overlays / 'result.jpg'), failed_id))
+        status, body, _ = self.request('/api/v1/inspections/photos/progress')
+        self.assertEqual(status, 200)
+        devices = {row['key']: row for row in body['devices']}
+        row = devices['device:D1']
+        status, reading, _ = self.request(f'/api/v1/readings/{failed_id}')
+        self.assertEqual(status, 200)
+        for key, kind in [('image_id', 'o'), ('overlay_image_id', 'v')]:
+            self.assertEqual(row[key], reading[key])
+            self.assertRegex(row[key], rf'^{failed_id}-{kind}-[0-9a-f]{{64}}$')
+        self.assertIsNotNone(devices['device:D2']['image_id'])
+        self.assertIsNone(devices['device:D2']['overlay_image_id'])
+        for device in devices.values():
+            self.assertNotIn('image_path', device)
+            self.assertNotIn('overlay_path', device)
+            self.assertNotIn(str(self.images), json.dumps(device))
+            self.assertNotIn(str(self.overlays), json.dumps(device))
+
+    def test_missing_image_ids_are_explicit_null(self):
+        route = save_route(self.storage, 'route', [{'id': 'D1', 'name': 'D1'}])
+        sha = hashlib.sha256(b'manifest-only').hexdigest()
+        save_manifest(self.storage, 'nulls', _make_manifest('nulls', [
+            {'file_name': 'missing.jpg', 'sha256': sha, 'device_id': 'D2', 'captured_at': '2026-11-18T09:00:00+09:00'}
+        ], route_id=route['route_id']))
+        self._insert_reading('nulls', device_id='D3', status='error', stage='failed')
+        self._insert_reading('nulls', device_id='D4', timestamp='2026-11-18T08:00:00+09:00')
+        self._insert_reading('nulls', device_id='D4', timestamp='2026-11-18T09:00:00+09:00')
+        with self.storage.connection() as conn:
+            conn.execute("UPDATE meter_readings SET image_path='', overlay_path=NULL WHERE device_id='D3'")
+            conn.execute("UPDATE meter_readings SET image_path='', overlay_path=NULL WHERE device_id='D4' AND timestamp LIKE '%09:00:00%'")
+        status, body, _ = self.request('/api/v1/inspections/nulls/progress')
+        self.assertEqual(status, 200)
+        devices = {row['key']: row for row in body['devices']}
+        for key in ('device:D1', 'device:D2', 'device:D3', 'device:D4'):
+            self.assertIn(key, devices)
+            for field in ('image_id', 'overlay_image_id'):
+                self.assertIn(field, devices[key])
+                self.assertIsNone(devices[key][field])
+
     def test_route_order_stages_and_extra_declaration(self):
         route = save_route(self.storage, '1F巡回', [
             {'id': 'D1', 'name': 'R-D1'},

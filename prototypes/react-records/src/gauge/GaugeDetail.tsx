@@ -1,8 +1,11 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
+import { OverlayPreview, type PreviewPhoto } from "@/components/OverlayPreview";
+import { displayNameOf } from "@/lib/records";
 import { ArrowLeft, ChevronRight, CirclePlus, Info } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Inspection, MeterResult } from "./model";
@@ -56,7 +59,7 @@ function Stages({ m, kind }: { m: MeterResult; kind: Kind }) {
   );
 }
 
-function MeterCard({ m, id }: { m: MeterResult; id: string }) {
+function MeterCard({ m, id, number, onPhoto }: { m: MeterResult; id: string; number: number; onPhoto: (meter: MeterResult, trigger: HTMLButtonElement) => void }) {
   const { kind, reasons, outOfTolerance } = judge(m);
   const hasValue = m.value !== null && kind !== "fail" && kind !== "missing";
   const unit = unitOf(m);
@@ -132,6 +135,11 @@ function MeterCard({ m, id }: { m: MeterResult; id: string }) {
         <span>撮影 <span className="g-num">{time(m.capturedAt)}</span></span>
         {m.photos > 1 && <span>写真 {m.photos}枚</span>}
       </p>
+      {(m.imageId || m.overlayImageId) && (
+        <Button type="button" variant="outline" size="field" className="self-start"
+          aria-label={`${m.seq !== undefined ? `No.${m.seq}` : `ルート外${number}`} ${displayNameOf({ device_name: m.name })}${m.id ? `（${m.id}）` : ""}の写真`}
+          onClick={(event) => onPhoto(m, event.currentTarget)}>写真</Button>
+      )}
     </Card>
   );
 }
@@ -221,6 +229,14 @@ function Pipeline({ ins }: { ins: Inspection }) {
 
 export function GaugeDetail({ ins, onExport, exporting, exportError, savedFile }: { ins: Inspection; onExport: (save: boolean) => void; exporting: boolean; exportError: string; savedFile: string }) {
   const [order, setOrder] = useState("route");
+  const [selected, setSelected] = useState<{ photo: PreviewPhoto; trigger: HTMLButtonElement } | null>(null);
+  const onPhoto = (m: MeterResult, trigger: HTMLButtonElement) => setSelected({
+    photo: { name: m.name, deviceId: m.id || null, imageId: m.imageId, overlayImageId: m.overlayImageId }, trigger,
+  });
+  const closePhoto = () => {
+    if (selected && document.contains(selected.trigger)) selected.trigger.focus();
+    setSelected(null);
+  };
   const s = summarize(ins);
   const hasRoute = ins.routeName !== null;
   // ルート順（seq の昇順。seq の無いものは後ろに元の順で）。sort は安定なので同順位はルート順のまま
@@ -230,6 +246,7 @@ export function GaugeDetail({ ins, onExport, exporting, exportError, savedFile }
   };
   const onRoute = sort(ins.meters.filter((m) => !m.offRoute));
   const extra = sort(ins.meters.filter((m) => m.offRoute));
+  const unsequenced = [...onRoute, ...extra].filter((m) => m.seq === undefined);
   const grid = "grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4";
 
   return (
@@ -281,7 +298,7 @@ export function GaugeDetail({ ins, onExport, exporting, exportError, savedFile }
       </div>
       <div className={grid}>
         {onRoute.map((m) => (
-          <MeterCard key={m.key} id={cardId(m)} m={m} />
+          <MeterCard key={m.key} id={cardId(m)} m={m} number={unsequenced.indexOf(m) + 1} onPhoto={onPhoto} />
         ))}
       </div>
 
@@ -290,11 +307,12 @@ export function GaugeDetail({ ins, onExport, exporting, exportError, savedFile }
           <h2 className="text-xl font-bold">ルート外の機器 {extra.length}台</h2>
           <div className={grid}>
             {extra.map((m) => (
-              <MeterCard key={m.key} id={cardId(m)} m={m} />
+              <MeterCard key={m.key} id={cardId(m)} m={m} number={unsequenced.indexOf(m) + 1} onPhoto={onPhoto} />
             ))}
           </div>
         </>
       )}
+      {selected && createPortal(<OverlayPreview photo={selected.photo} onClose={closePhoto} />, document.body)}
     </section>
   );
 }

@@ -16,6 +16,7 @@ const baseMeter: InspectionMeter = {
   read_status: "ok",
   sources: ["phone_qr"],
   photos: 1,
+  image_id: null, overlay_image_id: null,
   captured_at: "2026-11-12T13:07:00+09:00",
 };
 
@@ -37,6 +38,11 @@ const baseProgress: InspectionProgress = {
 };
 
 describe("toMeter", () => {
+  it("旧応答で画像キーがない場合はnullにする", () => {
+    const { image_id, overlay_image_id, ...old } = baseMeter;
+    void image_id; void overlay_image_id;
+    expect(toMeter(old as unknown as InspectionMeter)).toMatchObject({ imageId: null, overlayImageId: null });
+  });
   it("実APIの機器行を画面用モデルへ変換する", () => {
     expect(toMeter(baseMeter)).toEqual({
       key: "device:A-101",
@@ -52,6 +58,7 @@ describe("toMeter", () => {
       status: "ok",
       sources: ["phone_qr"],
       photos: 1,
+      imageId: null, overlayImageId: null,
       capturedAt: "2026-11-12T13:07:00+09:00",
     });
   });

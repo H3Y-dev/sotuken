@@ -195,7 +195,7 @@ def _load_devices_map(storage, device_ids):
     }
 
 
-def build_inspection_progress(storage, incoming_dir, inspection_id, readings, hashes):
+def build_inspection_progress(storage, incoming_dir, inspection_id, readings, hashes, *, image_id):
     """Build InspectionProgress DTO from DB readings, manifest, route, and devices."""
     manifest = get_manifest(storage, inspection_id)
     if manifest is not None:
@@ -389,6 +389,8 @@ def build_inspection_progress(storage, incoming_dir, inspection_id, readings, ha
         sources = list(dict.fromkeys(sources_raw))
 
         return {
+            'image_id': image_id(latest_row, 'original') if latest_row is not None and _field(latest_row, 'image_path') else None,
+            'overlay_image_id': image_id(latest_row, 'overlay') if latest_row is not None and _field(latest_row, 'overlay_path') else None,
             'key': grp['key'],
             'seq': seq,
             'off_route': off_route,

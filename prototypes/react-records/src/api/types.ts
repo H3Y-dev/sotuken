@@ -98,6 +98,8 @@ export interface InspectionMeter {
   sources: InspectionSource[];
   photos: number;
   captured_at: string | null;
+  image_id: string | null;
+  overlay_image_id: string | null;
 }
 
 export interface InspectionProgress extends InspectionMeta {

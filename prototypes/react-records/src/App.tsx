@@ -111,6 +111,7 @@ export default function App() {
     const onHash = () => {
       const nextHash = normalizeHash(window.location.hash);
       if (nextHash === hash) return;
+      setSelected(null);
       csvRequest.current?.abort();
       csvRequest.current = null;
       setCsvBusy(false);
@@ -133,6 +134,7 @@ export default function App() {
   const switchTab = (next: Tab) => {
     const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : next === "gauge" ? "#/gauge" : "#";
     if (window.location.hash !== target) {
+      setSelected(null);
       window.location.hash = target;
     }
   };
