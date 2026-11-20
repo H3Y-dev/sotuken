@@ -244,14 +244,27 @@ class PCAPI:
             if ('..' in Path(name).parts or '..' in win.parts or name.startswith(('\\\\', '//'))
                     or ':' in name[2:] or (win.drive and not win.is_absolute())):
                 raise OSError('Unsafe path')
-            resolved = Path(path).resolve(strict=True)
-            if not self.allowed(resolved, roots):
-                raise OSError('Outside roots')
-            with resolved.open('rb') as handle:
-                actual = opened_path(handle)
-                if actual != resolved or not self.allowed(actual, roots):
-                    raise OSError('Changed path')
-                return handle.read()
+            candidates = [Path(path)]
+            if not Path(path).is_absolute():
+                candidates.extend(root / Path(name).name for root in roots)
+            matches = {}
+            for index, candidate in enumerate(candidates):
+                try:
+                    resolved = candidate.resolve(strict=True)
+                except (OSError, ValueError, RuntimeError):
+                    continue
+                if not self.allowed(resolved, roots):
+                    continue
+                with resolved.open('rb') as handle:
+                    actual = opened_path(handle)
+                    if actual == resolved and self.allowed(actual, roots):
+                        data = handle.read()
+                        if index == 0:
+                            return data
+                        matches[resolved] = data
+            if len(matches) == 1:
+                return next(iter(matches.values()))
+            raise OSError('Not found')
         except (OSError, ValueError, RuntimeError):
             raise APIError(404, 'not_found') from None
 

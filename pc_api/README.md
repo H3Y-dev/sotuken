@@ -10,10 +10,10 @@ python -m pc_api.server --db C:\data\manager.db --incoming-dir C:\data\incoming 
 `--incoming-dir`, `--images-dir` and `--overlays-dir` are all required (the
 launch is refused with a usage message when any is missing or empty, when a root
 is a drive root, or when `--db` does not exist: the API never creates the DB).
-They form the image allowlist, not a search path. Out-of-root absolute paths are
-rejected; absolute stored paths within these roots are supported. Relative
-stored paths resolve against the process working directory (run from the same
-data directory as the owner). Roots are not required to exist yet.
+They form the image allowlist. Out-of-root absolute paths are rejected. Relative
+stored paths resolve first against the API working directory, then by filename
+directly under each allowed root. Multiple distinct matching files under the
+roots result in 404. Roots are not required to exist yet.
 
 Where the existing app writes (pass the same folders):
 

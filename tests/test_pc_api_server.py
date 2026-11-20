@@ -159,6 +159,30 @@ class ServerTests(unittest.TestCase):
         self.assertNotEqual(row['image_id'], row['overlay_image_id'])
         self.assertEqual(self.request('/api/v1/images/' + row['overlay_image_id'])[0],200)
 
+    def test_relative_overlay_path_resolves_under_allowed_root(self):
+        with self.connection() as conn:
+            conn.execute('UPDATE meter_readings SET overlay_path=? WHERE id=2', ('missing/overlays/photo.png',))
+        row = self.request('/api/v1/readings/2')[1]
+        status, data, _ = self.request('/api/v1/images/' + row['overlay_image_id'])
+        self.assertEqual((status, data), (200, self.picture.read_bytes()))
+
+    def test_relative_overlay_unsafe_paths_rejected(self):
+        for path in (r'..\outside.png', r'\\srv\x.png', 'photo.png:ads'):
+            with self.subTest(path=path), self.connection() as conn:
+                conn.execute('UPDATE meter_readings SET overlay_path=? WHERE id=2', (path,))
+            row = self.request('/api/v1/readings/2')[1]
+            self.assertEqual(self.request('/api/v1/images/' + row['overlay_image_id'])[0], 404)
+
+    def test_relative_overlay_ambiguous_roots_rejected(self):
+        other = self.root / 'other'
+        other.mkdir()
+        (other / 'photo.png').write_bytes(b'other')
+        self.api.image_dirs += (other.resolve(),)
+        with self.connection() as conn:
+            conn.execute('UPDATE meter_readings SET overlay_path=? WHERE id=2', ('missing/photo.png',))
+        row = self.request('/api/v1/readings/2')[1]
+        self.assertEqual(self.request('/api/v1/images/' + row['overlay_image_id'])[0], 404)
+
     def test_link_escape(self):
         outside = self.root / 'outside'
         outside.mkdir()
