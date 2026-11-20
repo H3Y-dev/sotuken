@@ -5,15 +5,19 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, downloadInspectionCsv, fetchInspection, fetchInspections } from "@/api/client";
+import { ApiError, downloadInspectionCsv, fetchImageBlobUrl, fetchInspection, fetchInspections, fetchReading } from "@/api/client";
 import type { InspectionListItem, InspectionProgress } from "@/api/types";
 import { download } from "@/lib/download";
 import { FakeElement, FakeEvent, setupFakeDom } from "@/lib/fakeDom.test-support";
+import { OverlayPreview } from "@/components/OverlayPreview";
+import type { Reading } from "@/api/types";
 
 vi.mock("@/api/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/api/client")>(),
   fetchInspections: vi.fn(),
   fetchInspection: vi.fn(),
+  fetchImageBlobUrl: vi.fn(),
+  fetchReading: vi.fn(),
   downloadInspectionCsv: vi.fn(),
   fetchReadings: vi.fn(async () => ({ items: [], total: 0 })),
   fetchRuntime: vi.fn(async () => ({ receiver_running: false })),
@@ -41,7 +45,7 @@ function progress(id: string): InspectionProgress {
     devices: [{
       key: "device:1", seq: null, off_route: false, device_id: "1", name: "テスト計器",
       unit: null, scale: null, tolerance: null, stage: 4, value: 1,
-      read_status: "ok", sources: [], photos: 1, captured_at: null,
+      read_status: "ok", sources: [], photos: 1, captured_at: null, image_id: null, overlay_image_id: null,
     }],
   };
 }
@@ -102,6 +106,96 @@ describe("点検確認", () => {
     return found;
   };
   const click = (label: string | RegExp) => act(async () => button(label).click());
+  const photoButton = (label: string) => {
+    const found = container.querySelectorAll("button").find((el) => el.getAttribute("aria-label") === label);
+    if (!found) throw new Error(`Photo button not found: ${label}`);
+    return found;
+  };
+
+  it("写真は選択時だけ取得し更新後も保持し、閉じると解放する", async () => {
+    const revoke = vi.fn();
+    vi.mocked(fetchImageBlobUrl).mockImplementation(async (id) => ({ url: `blob:${id}`, revoke }));
+    vi.mocked(fetchInspection).mockImplementation(async (id) => {
+      const data = progress(id);
+      data.devices[0] = { ...data.devices[0], seq: 1, image_id: "original", overlay_image_id: "overlay" };
+      return data;
+    });
+    location.hash = "#/gauge/A";
+    await render();
+    expect(fetchImageBlobUrl).not.toHaveBeenCalled();
+    const trigger = photoButton("No.1 テスト計器（1）の写真");
+    await act(async () => trigger.click());
+    expect(fetchImageBlobUrl).toHaveBeenCalledTimes(2);
+    expect(fetchImageBlobUrl).toHaveBeenCalledWith("original", expect.any(AbortSignal));
+    expect(fetchImageBlobUrl).toHaveBeenCalledWith("overlay", expect.any(AbortSignal));
+    expect(fetchReading).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("テスト計器");
+    const close = doc.body.querySelectorAll("button").find((el) => el.textContent.trim() === "閉じる")!;
+    expect(doc.activeElement).toBe(close);
+    expect(doc.body.querySelectorAll("[data-preview-reading-id]")).toHaveLength(0);
+    const src = doc.body.querySelectorAll("img").map((img) => img.getAttribute("src"));
+    expect(src).toEqual(expect.arrayContaining(["blob:original", "blob:overlay"]));
+    expect(doc.body.querySelectorAll("img").every((img) => img.getAttribute("alt")?.includes("テスト計器"))).toBe(true);
+    await click("更新");
+    expect(fetchImageBlobUrl).toHaveBeenCalledTimes(2);
+    expect(doc.body.querySelectorAll("img").map((img) => img.getAttribute("src"))).toEqual(src);
+    await act(async () => close.click());
+    expect(revoke).toHaveBeenCalledTimes(2);
+    expect(doc.activeElement).toBe(trigger);
+  });
+
+  it("記録モードは詳細を取得しフォーカスを移さずEscapeで閉じる", async () => {
+    const reading: Reading = {
+      id: "42", reading_id: null, device_name: "計器", device_id: null,
+      captured_at: "2026-11-18T09:00:00+09:00", timestamp: null, received_at: null,
+      value: 1, unit: null, status: "ok", stage: "done", confidence: null,
+      failure_stage: null, inspection_id: null, inspection_name: null, route_id: null,
+      image_id: null, overlay_image_id: null,
+    };
+    const onClose = vi.fn();
+    vi.mocked(fetchReading).mockResolvedValue(reading);
+    await act(async () => root.render(<OverlayPreview reading={reading} onClose={onClose} />));
+    expect(fetchReading).toHaveBeenCalledWith("42", expect.any(AbortSignal));
+    expect(doc.body.textContent).toContain("42");
+    expect(doc.body.textContent).toContain("2026");
+    expect(doc.body.textContent).toContain("正常");
+    expect(doc.body.querySelectorAll("[data-preview-reading-id]")).toHaveLength(1);
+    const close = doc.body.querySelectorAll("button").find((el) => el.textContent.trim() === "閉じる");
+    expect(doc.activeElement).not.toBe(close);
+    await act(async () => doc.dispatchEvent(new FakeEvent("keydown", { key: "Escape" })));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("画像IDのある機器だけボタンを表示し、欠落画像と残った画像を表示する", async () => {
+    vi.mocked(fetchImageBlobUrl).mockImplementation(async (id) => id === "missing" ? null : { url: `blob:${id}`, revoke: vi.fn() });
+    vi.mocked(fetchInspection).mockImplementation(async (id) => {
+      const data = progress(id);
+      const base = data.devices[0];
+      data.devices = [
+        { ...base, key: "a", seq: 1, name: "未撮影", stage: 0, image_id: null, overlay_image_id: null },
+        { ...base, key: "b", seq: 2, name: "manifest", stage: 2, image_id: null, overlay_image_id: null },
+        { ...base, key: "c", seq: 3, name: "失敗", read_status: "failed", image_id: null, overlay_image_id: null },
+        { ...base, key: "d", seq: 4, name: "元画像", read_status: "failed", image_id: "missing", overlay_image_id: null },
+        { ...base, key: "e", seq: null, off_route: true, name: "ルート外", image_id: null, overlay_image_id: "extra" },
+        { ...base, key: "f", seq: 5, name: "正常", image_id: "missing", overlay_image_id: "result" },
+      ];
+      return data;
+    });
+    location.hash = "#/gauge/A";
+    await render();
+    const labels = container.querySelectorAll("button").map((el) => el.getAttribute("aria-label"));
+    expect(labels.filter((label) => label?.endsWith("の写真"))).toEqual([
+      "No.4 元画像（1）の写真", "No.5 正常（1）の写真", "ルート外1 ルート外（1）の写真",
+    ]);
+    await act(async () => photoButton("No.5 正常（1）の写真").click());
+    expect(doc.body.textContent).toContain("元の写真が見つかりません。");
+    expect(doc.body.querySelectorAll("img").map((img) => img.getAttribute("src"))).toContain("blob:result");
+    await act(async () => { const event = new FakeEvent("keydown"); Object.assign(event, { key: "Escape" }); doc.dispatchEvent(event); });
+    expect(doc.body.textContent).not.toContain("元の写真が見つかりません。");
+    await act(async () => photoButton("ルート外1 ルート外（1）の写真").click());
+    expect(doc.body.querySelectorAll("img").map((img) => img.getAttribute("src"))).toEqual(["blob:extra"]);
+  });
+
 
   it("表示復帰で取得済みのページを追加せず、画面タブに戻ると先頭から取得する", async () => {
     vi.mocked(fetchInspections).mockImplementation(async (_filter, _limit, cursor) =>

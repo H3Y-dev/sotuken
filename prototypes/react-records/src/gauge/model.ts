@@ -33,6 +33,8 @@ export interface MeterResult {
   sources: Source[];
   photos: number;
   capturedAt: string | null;
+  imageId: string | null;
+  overlayImageId: string | null;
 }
 
 export interface Inspection {
@@ -91,6 +93,8 @@ export function toMeter(row: InspectionMeter): MeterResult {
     sources,
     photos: row.photos,
     capturedAt: row.captured_at,
+    imageId: row.image_id ?? null,
+    overlayImageId: row.overlay_image_id ?? null,
   };
 }
 

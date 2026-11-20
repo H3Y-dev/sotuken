@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -22,19 +22,25 @@ const emptySlot = (hasId: boolean): ImageSlot => ({
   error: "",
 });
 
-export function OverlayPreview({
-  reading,
-  onClose,
-}: {
-  reading: Reading;
-  onClose: () => void;
-}) {
-  const [detail, setDetail] = useState<Reading>(reading);
+export type PreviewPhoto = { name: string; deviceId: string | null; imageId: string | null; overlayImageId: string | null };
+
+export function OverlayPreview(props: { reading: Reading; photo?: never; onClose: () => void } | { photo: PreviewPhoto; reading?: never; onClose: () => void }) {
+  const onClose = props.onClose;
+  const readingId = props.reading?.id;
+  const imageId = props.photo?.imageId ?? null;
+  const overlayImageId = props.photo?.overlayImageId ?? null;
+  const [detail, setDetail] = useState<Reading | null>(props.reading ?? null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const initialReading = useRef<Reading | null>(props.reading ?? null);
   const [mode, setMode] = useState<ViewMode>("both");
-  const [original, setOriginal] = useState<ImageSlot>(() => emptySlot(Boolean(reading.image_id)));
-  const [overlay, setOverlay] = useState<ImageSlot>(() => emptySlot(Boolean(reading.overlay_image_id)));
+  const [original, setOriginal] = useState<ImageSlot>(() => emptySlot(Boolean(props.reading?.image_id ?? imageId)));
+  const [overlay, setOverlay] = useState<ImageSlot>(() => emptySlot(Boolean(props.reading?.overlay_image_id ?? overlayImageId)));
   const [detailError, setDetailError] = useState("");
   const [loadedAt, setLoadedAt] = useState<Record<string, string>>({});
+
+  const photoMode = Boolean(props.photo);
+  useEffect(() => { if (photoMode) closeRef.current?.focus(); }, [photoMode]);
+  useEffect(() => { initialReading.current = props.reading ?? null; }, [props.reading]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,13 +56,18 @@ export function OverlayPreview({
 
     async function load() {
       setDetailError("");
-      let row = reading;
-      try {
-        row = await fetchReading(reading.id, controller.signal);
+      let originalId = imageId;
+      let resultId = overlayImageId;
+      if (readingId !== undefined) try {
+        const row = await fetchReading(readingId, controller.signal);
         if (!controller.signal.aborted) setDetail(row);
+        originalId = row.image_id;
+        resultId = row.overlay_image_id;
       } catch (err) {
         if (controller.signal.aborted) return;
         setDetailError(describeApiError(err));
+        originalId = initialReading.current?.image_id ?? null;
+        resultId = initialReading.current?.overlay_image_id ?? null;
       }
 
       const loadOne = async (
@@ -94,8 +105,8 @@ export function OverlayPreview({
       };
 
       await Promise.all([
-        loadOne(row.image_id, setOriginal),
-        loadOne(row.overlay_image_id, setOverlay),
+        loadOne(originalId, setOriginal),
+        loadOne(resultId, setOverlay),
       ]);
     }
 
@@ -104,11 +115,12 @@ export function OverlayPreview({
       controller.abort();
       for (const revoke of revokers) revoke();
     };
-  }, [reading]);
+  }, [readingId, imageId, overlayImageId]);
 
   const showOriginal = mode === "both" || mode === "original";
   const showOverlay = mode === "both" || mode === "overlay";
-  const label = statusLabelOf(detail);
+  const name = detail ? displayNameOf(detail) : displayNameOf({ device_name: props.photo?.name ?? "" });
+  const deviceId = detail?.device_id ?? props.photo?.deviceId;
 
   return (
     <div
@@ -121,20 +133,20 @@ export function OverlayPreview({
       <div
         className="flex max-h-[92vh] w-full max-w-5xl flex-col gap-4 overflow-y-auto rounded-md border border-hairline bg-dial p-5 text-text shadow-lg"
         onClick={(e) => e.stopPropagation()}
-        data-preview-reading-id={detail.id}
+        data-preview-reading-id={detail?.id}
       >
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-hairline pb-3">
           <div className="flex flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 id="preview-dialog-title" className="text-xl font-bold text-text">
-                {displayNameOf(detail)}
+                {name}
               </h2>
-              <StatusBadge label={label} />
-              {detail.device_id && (
-                <span className="g-num text-base text-steel">機器ID: {detail.device_id}</span>
+              {detail && <StatusBadge label={statusLabelOf(detail)} />}
+              {deviceId && (
+                <span className="g-num text-base text-steel">機器ID: {deviceId}</span>
               )}
             </div>
-            <p className="g-num text-base text-steel">
+            {detail ? <p className="g-num text-base text-steel">
               記録 #{detail.id}
               {" ・ "}
               {formatDateTime(readingTimestamp(detail))}
@@ -143,15 +155,15 @@ export function OverlayPreview({
               {detail.unit ? ` ${detail.unit}` : ""}
               {detail.confidence !== null ? ` ・ 確からしさ ${(detail.confidence * 100).toFixed(0)}%` : ""}
               {detail.failure_stage ? ` ・ 失敗段階 ${detail.failure_stage}` : ""}
-            </p>
+            </p> : <p className="text-base text-steel">この機器の最新の記録の写真</p>}
           </div>
-          <Button type="button" variant="outline" size="field" onClick={onClose}>
+          <Button ref={closeRef} type="button" variant="outline" size="field" onClick={onClose}>
             <X aria-hidden />
             閉じる
           </Button>
         </div>
 
-        {detailError && (
+        {detail && detailError && (
           <p className="rounded-md border border-warn bg-warn-tint px-3 py-2 text-base text-text">
             詳細再取得エラー: {detailError}
           </p>
@@ -190,7 +202,7 @@ export function OverlayPreview({
               ) : (
                 <img
                   src={overlay.url}
-                  alt={`${displayNameOf(detail)} の検出結果オーバーレイ`}
+                  alt={`${name} の検出結果オーバーレイ`}
                   data-image-kind="overlay"
                   data-image-loaded={loadedAt.overlay ?? ""}
                   onLoad={() => setLoadedAt((prev) => ({ ...prev, overlay: new Date().toISOString() }))}
@@ -212,7 +224,7 @@ export function OverlayPreview({
               ) : (
                 <img
                   src={original.url}
-                  alt={`${displayNameOf(detail)} の元画像`}
+                  alt={`${name} の元画像`}
                   data-image-kind="original"
                   data-image-loaded={loadedAt.original ?? ""}
                   onLoad={() => setLoadedAt((prev) => ({ ...prev, original: new Date().toISOString() }))}

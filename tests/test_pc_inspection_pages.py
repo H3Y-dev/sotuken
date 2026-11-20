@@ -108,6 +108,40 @@ class InspectionPagesAPITests(unittest.TestCase):
     def _save_manifest(self, inspection_id, photos, **kwargs):
         save_manifest(self.storage, inspection_id, _make_manifest(inspection_id, photos, **kwargs))
 
+    def test_preview_image_ids_match_progress(self):
+        self._insert_reading('photos', device_id='D1')
+        self._insert_reading('photos', device_id='D2')
+        with self.storage.connection() as conn:
+            conn.execute("UPDATE meter_readings SET overlay_path=? WHERE device_id='D1'", (str(self.overlays / 'result.jpg'),))
+            conn.execute("UPDATE meter_readings SET image_path='' WHERE device_id='D2'")
+        status, listing, _ = self.request('/api/v1/inspections')
+        self.assertEqual(status, 200)
+        status, detail, _ = self.request('/api/v1/inspections/photos/progress')
+        self.assertEqual(status, 200)
+        preview = {row['key']: row for row in listing['items'][0]['preview']}
+        devices = {row['key']: row for row in detail['devices']}
+        for key in ('device:D1', 'device:D2'):
+            for field in ('image_id', 'overlay_image_id'):
+                self.assertEqual(preview[key][field], devices[key][field])
+                if key == 'device:D1':
+                    self.assertIsNotNone(preview[key][field])
+                else:
+                    self.assertIsNone(preview[key][field])
+
+    def test_preview_does_not_expose_image_paths(self):
+        self._insert_reading('photos', device_id='D1')
+        with self.storage.connection() as conn:
+            conn.execute("UPDATE meter_readings SET overlay_path=?", (str(self.overlays / 'result.jpg'),))
+        status, listing, _ = self.request('/api/v1/inspections')
+        self.assertEqual(status, 200)
+        preview = listing['items'][0]['preview']
+        for row in preview:
+            self.assertNotIn('image_path', row)
+            self.assertNotIn('overlay_path', row)
+            for path in (self.images / 'x.jpg', self.overlays / 'result.jpg'):
+                self.assertNotIn(path.name, json.dumps(row))
+                self.assertNotIn(str(path).replace('\\', '\\\\'), json.dumps(row))
+
     def test_manifest_only_and_readings_only_listed_and_sorted(self):
         # manifestのみ (2026-11-18T10:00:00+09:00)
         sha_m = hashlib.sha256(b'missing-photo').hexdigest()

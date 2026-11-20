@@ -17,9 +17,9 @@ const inspections: Inspection[] = [
     receive: "receiving",
     missingPhotos: 0,
     meters: [
-      { key: "device:A-101", seq: 1, id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: [0.6, 1.0], stage: 4, value: 0.82, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:07") },
-      { key: "device:A-105", seq: 2, id: "A-105", name: "排ガス 温度", unit: "°C", scale: [0, 400], tolerance: [150, 260], stage: 2, value: null, status: "failed", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "13:30") },
-      { key: "device:A-106", seq: 3, id: "A-106", name: "復水 戻り温度", unit: "°C", scale: [0, 120], tolerance: [50, 90], stage: 1, value: null, status: null, sources: ["manual"], photos: 1, capturedAt: t("12", "13:36") },
+      { key: "device:A-101", seq: 1, id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: [0.6, 1.0], stage: 4, value: 0.82, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "13:07") },
+      { key: "device:A-105", seq: 2, id: "A-105", name: "排ガス 温度", unit: "°C", scale: [0, 400], tolerance: [150, 260], stage: 2, value: null, status: "failed", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "13:30") },
+      { key: "device:A-106", seq: 3, id: "A-106", name: "復水 戻り温度", unit: "°C", scale: [0, 120], tolerance: [50, 90], stage: 1, value: null, status: null, sources: ["manual"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "13:36") },
     ],
   },
   {
@@ -34,12 +34,12 @@ const inspections: Inspection[] = [
     receive: "complete",
     missingPhotos: 0,
     meters: [
-      { key: "device:SYN-001", seq: 1, id: "SYN-001", name: "ボイラー給水 圧力", unit: "kPa", scale: [0, 25], tolerance: [8, 14], stage: 4, value: 10.78, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "09:03") },
-      { key: "device:SYN-003", seq: 2, id: "SYN-003", name: "冷却水 入口圧力", unit: "kPa", scale: [0, 40], tolerance: [15, 28], stage: 4, value: 21.62, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "09:11") },
-      { key: "device:SYN-002", seq: 3, id: "SYN-002", name: "冷却水 出口圧力", unit: "kPa", scale: [0, 60], tolerance: [20, 35], stage: 4, value: 36.75, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("12", "09:19") },
-      { key: "device:SYN-004", seq: 4, id: "SYN-004", name: "圧縮空気タンク 圧力", unit: "MPa", scale: [0, 16], tolerance: [4, 8], stage: 4, value: 5.71, status: "low_confidence", sources: ["manual"], photos: 1, capturedAt: t("12", "09:27") },
-      { key: "device:SYN-006", seq: 5, id: "SYN-006", name: "冷却塔ポンプ 吐出圧力", unit: "MPa", scale: [0, 1.0], tolerance: [0.3, 0.6], stage: 0, value: null, status: null, sources: [], photos: 0, capturedAt: null },
-      { key: "device:SYN-005", offRoute: true, id: "SYN-005", name: "蒸気ヘッダー 圧力", unit: "MPa", scale: [0, 16], tolerance: [5, 10], stage: 4, value: 7.9, status: "ok", sources: ["phone_qr", "pc_qr"], photos: 2, capturedAt: t("12", "09:36") },
+      { key: "device:SYN-001", seq: 1, id: "SYN-001", name: "ボイラー給水 圧力", unit: "kPa", scale: [0, 25], tolerance: [8, 14], stage: 4, value: 10.78, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "09:03") },
+      { key: "device:SYN-003", seq: 2, id: "SYN-003", name: "冷却水 入口圧力", unit: "kPa", scale: [0, 40], tolerance: [15, 28], stage: 4, value: 21.62, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "09:11") },
+      { key: "device:SYN-002", seq: 3, id: "SYN-002", name: "冷却水 出口圧力", unit: "kPa", scale: [0, 60], tolerance: [20, 35], stage: 4, value: 36.75, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "09:19") },
+      { key: "device:SYN-004", seq: 4, id: "SYN-004", name: "圧縮空気タンク 圧力", unit: "MPa", scale: [0, 16], tolerance: [4, 8], stage: 4, value: 5.71, status: "low_confidence", sources: ["manual"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("12", "09:27") },
+      { key: "device:SYN-006", seq: 5, id: "SYN-006", name: "冷却塔ポンプ 吐出圧力", unit: "MPa", scale: [0, 1.0], tolerance: [0.3, 0.6], stage: 0, value: null, status: null, sources: [], photos: 0, imageId: null, overlayImageId: null, capturedAt: null },
+      { key: "device:SYN-005", offRoute: true, id: "SYN-005", name: "蒸気ヘッダー 圧力", unit: "MPa", scale: [0, 16], tolerance: [5, 10], stage: 4, value: 7.9, status: "ok", sources: ["phone_qr", "pc_qr"], photos: 2, imageId: null, overlayImageId: null, capturedAt: t("12", "09:36") },
     ],
   },
   {
@@ -54,9 +54,9 @@ const inspections: Inspection[] = [
     receive: "short",
     missingPhotos: 1,
     meters: [
-      { key: "device:SYN-001", seq: 1, id: "SYN-001", name: "ボイラー給水 圧力", unit: "kPa", scale: [0, 25], tolerance: [8, 14], stage: 4, value: 11.2, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("11", "16:33") },
-      { key: "device:SYN-003", seq: 2, id: "SYN-003", name: "冷却水 入口圧力", unit: "kPa", scale: [0, 40], tolerance: [15, 28], stage: 4, value: null, status: "failed", sources: ["phone_qr"], photos: 1, capturedAt: t("11", "16:40") },
-      { key: "device:SYN-004", seq: 3, id: "SYN-004", name: "圧縮空気タンク 圧力", unit: "MPa", scale: [0, 16], tolerance: [4, 8], stage: 1, value: null, status: null, sources: ["manual"], photos: 1, capturedAt: t("11", "16:55") },
+      { key: "device:SYN-001", seq: 1, id: "SYN-001", name: "ボイラー給水 圧力", unit: "kPa", scale: [0, 25], tolerance: [8, 14], stage: 4, value: 11.2, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("11", "16:33") },
+      { key: "device:SYN-003", seq: 2, id: "SYN-003", name: "冷却水 入口圧力", unit: "kPa", scale: [0, 40], tolerance: [15, 28], stage: 4, value: null, status: "failed", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("11", "16:40") },
+      { key: "device:SYN-004", seq: 3, id: "SYN-004", name: "圧縮空気タンク 圧力", unit: "MPa", scale: [0, 16], tolerance: [4, 8], stage: 1, value: null, status: null, sources: ["manual"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("11", "16:55") },
     ],
   },
   {
@@ -71,8 +71,8 @@ const inspections: Inspection[] = [
     receive: "complete",
     missingPhotos: 0,
     meters: [
-      { key: "device:SYN-001", seq: 1, id: "SYN-001", name: "ボイラー給水 圧力", unit: "kPa", scale: [0, 25], tolerance: [8, 14], stage: 4, value: 10.4, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("11", "09:05") },
-      { key: "device:SYN-002", seq: 2, id: "SYN-002", name: "冷却水 出口圧力", unit: "kPa", scale: [0, 60], tolerance: [20, 35], stage: 4, value: 28.9, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("11", "09:19") },
+      { key: "device:SYN-001", seq: 1, id: "SYN-001", name: "ボイラー給水 圧力", unit: "kPa", scale: [0, 25], tolerance: [8, 14], stage: 4, value: 10.4, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("11", "09:05") },
+      { key: "device:SYN-002", seq: 2, id: "SYN-002", name: "冷却水 出口圧力", unit: "kPa", scale: [0, 60], tolerance: [20, 35], stage: 4, value: 28.9, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("11", "09:19") },
     ],
   },
   {
@@ -87,9 +87,9 @@ const inspections: Inspection[] = [
     receive: "complete",
     missingPhotos: 0,
     meters: [
-      { key: "device:A-101", id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: null, stage: 4, value: 0.88, status: "ok", sources: ["phone_qr"], photos: 1, capturedAt: t("10", "15:12") },
-      { key: "photo:hash:abc", id: "", name: "", unit: null, scale: null, tolerance: null, stage: 4, value: 47.0, status: "ok", sources: [], photos: 1, capturedAt: t("10", "15:17") },
-      { key: "device:A-110", id: "A-110", name: "攪拌機 回転数カウンタ", unit: null, scale: [0, 2000], tolerance: null, stage: 4, value: 1240, status: "ok", sources: ["manual"], photos: 1, capturedAt: t("10", "15:23") },
+      { key: "device:A-101", id: "A-101", name: "ボイラー1 蒸気圧力", unit: "MPa", scale: [0, 1.6], tolerance: null, stage: 4, value: 0.88, status: "ok", sources: ["phone_qr"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("10", "15:12") },
+      { key: "photo:hash:abc", id: "", name: "", unit: null, scale: null, tolerance: null, stage: 4, value: 47.0, status: "ok", sources: [], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("10", "15:17") },
+      { key: "device:A-110", id: "A-110", name: "攪拌機 回転数カウンタ", unit: null, scale: [0, 2000], tolerance: null, stage: 4, value: 1240, status: "ok", sources: ["manual"], photos: 1, imageId: null, overlayImageId: null, capturedAt: t("10", "15:23") },
     ],
   },
 ];

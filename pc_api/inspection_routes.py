@@ -21,7 +21,7 @@ _PROGRESS_PATH_RE = re.compile(r'/api/v1/inspections/([^/]+)/progress')
 _PROGRESS_READING_COLUMNS = (
     'id', 'device_id', 'device_name', 'device_id_source', 'value', 'status',
     'stage', 'image_sha256', 'captured_at', 'received_at', 'timestamp',
-    'inspection_name', 'route_id',
+    'inspection_name', 'route_id', 'image_path', 'overlay_path',
 )
 
 
@@ -98,7 +98,7 @@ def get_inspection_status(storage, incoming_dir, inspection_id):
         raise APIError(503, 'data_invalid') from None
 
 
-def get_inspection_progress(storage, incoming_dir, inspection_id):
+def get_inspection_progress(storage, incoming_dir, inspection_id, *, image_id):
     """Verify inspection existence and return full InspectionProgress DTO."""
     _ensure_inspection_exists(storage, inspection_id)
 
@@ -114,7 +114,7 @@ def get_inspection_progress(storage, incoming_dir, inspection_id):
 
     hashes = received_hashes(storage, incoming_dir)
     try:
-        return build_inspection_progress(storage, incoming_dir, inspection_id, readings, hashes)
+        return build_inspection_progress(storage, incoming_dir, inspection_id, readings, hashes, image_id=image_id)
     except APIError:
         raise
     except (ValueError, TypeError, KeyError, AttributeError):
@@ -135,7 +135,7 @@ def _sort_inspection_items(items):
     return [row[2] for row in dated] + [row[1] for row in undated]
 
 
-def list_inspections(storage, incoming_dir, session_id, query, *, page_cache=None):
+def list_inspections(storage, incoming_dir, session_id, query, *, image_id, page_cache=None):
     """Return a paginated inspection list with summary counts and cursor snapshot."""
     filter_val, limit_val, cursor = parse_inspections_query(query)
     cache = page_cache if page_cache is not None else get_page_cache()
@@ -181,7 +181,7 @@ def list_inspections(storage, incoming_dir, session_id, query, *, page_cache=Non
     for ins_id in all_ids:
         ins_readings = readings_by_id.get(ins_id, [])
         try:
-            progress = build_inspection_progress(storage, incoming_dir, ins_id, ins_readings, hashes)
+            progress = build_inspection_progress(storage, incoming_dir, ins_id, ins_readings, hashes, image_id=image_id)
             item = build_inspection_list_item(progress, len(ins_readings))
         except APIError:
             raise
@@ -223,7 +223,7 @@ def dispatch_inspection(api, method, url, session_id=None, body=None):
             raise APIError(400, 'invalid_request')
         query = {k: v[0] for k, v in raw_qs.items()}
         with _open_read_adapter(api.storage) as adapter:
-            return 200, list_inspections(adapter, api.incoming_dir, session_id, query), None
+            return 200, list_inspections(adapter, api.incoming_dir, session_id, query, image_id=api.image_id), None
     if url.query:
         raise APIError(400, 'invalid_request')
     for pattern, handler in (
@@ -234,5 +234,6 @@ def dispatch_inspection(api, method, url, session_id=None, body=None):
         if match:
             inspection_id = validate_inspection_id(unquote(match.group(1)))
             with _open_read_adapter(api.storage) as adapter:
-                return 200, handler(adapter, api.incoming_dir, inspection_id), None
+                kwargs = {'image_id': api.image_id} if handler is get_inspection_progress else {}
+                return 200, handler(adapter, api.incoming_dir, inspection_id, **kwargs), None
     raise APIError(404, 'not_found')
