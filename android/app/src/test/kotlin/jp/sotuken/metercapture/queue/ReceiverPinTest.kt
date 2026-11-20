@@ -101,7 +101,7 @@ class ReceiverPinTest {
             assertNull(item.lastError)
             assertFalse(outbox.exists())
             assertTrue(image.exists())
-            assertEquals("別のPC宛て(保留)", sendStatusLabel(item))
+            assertEquals("別のPC宛て（保留）", sendStatusLabel(item))
             assertFalse(canRetry(item))
         }
     }

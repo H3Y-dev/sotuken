@@ -15,16 +15,16 @@ class HomeUiStateTest {
         val old = row(); val newer = old.copy(inspection = old.inspection.copy(inspectionId = "new", startedAt = "2026-11-07T00:00:00Z"))
         assertEquals(listOf("new", "inspection"), buildHomeUiState(listOf(old, newer), emptyList(), emptyMap()).inProgress.map { it.inspectionId })
     }
-    @Test fun inProgressSubtitleShowsOperatorPlaceAndCounts() = assertEquals("大久保 ・ 第1工場 写真3枚 ・ 2機器", buildHomeUiState(listOf(row()), emptyList(), emptyMap()).inProgress.single().subtitle)
+    @Test fun inProgressSubtitleShowsOperatorPlaceAndCounts() = assertEquals("大久保 ・ 第1工場 写真3枚 ・ 2台", buildHomeUiState(listOf(row()), emptyList(), emptyMap()).inProgress.single().subtitle)
     @Test fun waitingSubtitleMentionsAutoSend() = assertEquals("写真3枚 ・ 接続確認後に自動送信", buildHomeUiState(listOf(row(InspectionState.WAITING)), emptyList(), emptyMap()).waiting.single().subtitle)
     @Test fun sentIncompleteShowsUndeliveredCount() {
         val failed = photo().copy(sendState = SendState.FAILED)
         val state = buildHomeUiState(listOf(row(InspectionState.SENT_INCOMPLETE)), emptyList(), mapOf("inspection" to listOf(failed))).sent.single()
-        assertEquals("送信済み（未到着1枚）", state.stateLabel); assertEquals("写真3枚 ・ 1枚が未到着", state.subtitle)
+        assertEquals("未着あり 1枚", state.stateLabel); assertEquals("写真3枚 ・ 未着 1枚", state.subtitle)
     }
     @Test fun legacyUndeliveredShownOnlyWhenPositive() {
         assertNull(buildHomeUiState(emptyList(), emptyList(), emptyMap()).legacyUndelivered)
-        assertEquals("点検なしの写真: 未着1件", buildHomeUiState(emptyList(), listOf(photo(inspectionId = null)), emptyMap()).legacyUndelivered)
+        assertEquals("点検なしの写真 未着 1枚", buildHomeUiState(emptyList(), listOf(photo(inspectionId = null)), emptyMap()).legacyUndelivered)
         assertNull(buildHomeUiState(emptyList(), listOf(photo()), emptyMap()).legacyUndelivered)
     }
 }

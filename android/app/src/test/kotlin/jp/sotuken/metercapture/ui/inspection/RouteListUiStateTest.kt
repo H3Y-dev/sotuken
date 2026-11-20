@@ -9,7 +9,7 @@ class RouteListUiStateTest {
         val route = requireNotNull(parseRouteJson(PC_ROUTE_JSON))
         val state = buildRouteListUiState(listOf(SavedRoute(route, "now", "qr")), null, false, null, null)
         assertEquals("巡回", state.saved.single().name)
-        assertEquals("1機器 ・ ${route.updatedAt} ・ QR", state.saved.single().detail)
+        assertEquals("1台 ・ ${route.updatedAt} ・ QR", state.saved.single().detail)
         assertNull(state.remote)
     }
     @Test fun passesLoadingErrorAndConfirmation() {

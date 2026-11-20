@@ -146,7 +146,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                         onOpen = { open(it) }, onSettings = { showSettings = true }, onGuide = { open(AppScreen.ConnectionGuide) }, onRoutes = { open(AppScreen.Routes) }, onLegacy = { open(AppScreen.LegacyCapture) },
                     )
                     AppScreen.Create -> InspectionCreateScreen(
-                        CreateUiState(name, placeholder, operator, place, savedRoutes.map { RouteChoice(it.route.routeId, "${it.route.name}（${it.route.devices.size}機器）") }, selectedRouteId, error ?: routeError, starting),
+                        CreateUiState(name, placeholder, operator, place, savedRoutes.map { RouteChoice(it.route.routeId, "${it.route.name}（${it.route.devices.size}台）") }, selectedRouteId, error ?: routeError, starting),
                         onNameChange = { name = it; error = null }, onOperatorChange = { operator = it; error = null }, onPlaceChange = { place = it; error = null }, onRouteSelect = { selectedRouteId = it },
                         onStart = {
                             if (!starting) {
@@ -305,7 +305,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
             onDismissRequest = { if (!routeLoading) confirmRoute = null },
             title = { Text(route.name) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${route.devices.size}機器")
+                Text("${route.devices.size}台")
                 route.devices.take(5).forEach { Text("${it.name}（${it.id}）") }
                 if (savedRoutes.any { it.route.routeId == route.routeId }) Text("保存済みのルートを新しい内容で置き換えます。作成済みの点検には影響しません。")
                 routeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }

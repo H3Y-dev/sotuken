@@ -9,7 +9,7 @@ class HistoryUiStateTest {
     @Test fun routeRowsMarkDoneAndCounts() {
         val state = buildHistoryUiState(displayInspection, displayRoute, listOf(photo(), photo("two")))
         assertEquals(listOf(RouteCheckRow(displayRoute[0], 2, true), RouteCheckRow(displayRoute[1], 0, false)), state.routeRows)
-        assertEquals("1 / 2機器", state.deviceLine)
+        assertEquals("撮影 1/2台", state.deviceLine)
     }
     @Test fun duplicateNoticePerDevice() = assertEquals(listOf("A-1は2枚あります。撮り直しの写真か確認してください。"), buildHistoryUiState(displayInspection, null, listOf(photo(), photo("two"))).notices)
     @Test fun sourceLabels() {
@@ -21,7 +21,7 @@ class HistoryUiStateTest {
     @Test fun editDisabledAfterCompletion() = assertFalse(buildHistoryUiState(displayInspection.copy(state = InspectionState.WAITING), null, listOf(photo())).rows.single().canEdit)
     @Test fun editDisabledWhileSending() = assertFalse(buildHistoryUiState(displayInspection, null, listOf(photo().copy(sendState = SendState.SENDING))).rows.single().canEdit)
     @Test fun noRouteNote() {
-        assertEquals("対象一覧がないため、未撮影の機器は判定できません", buildHistoryUiState(displayInspection, null, emptyList()).noRouteNote)
+        assertEquals("ルートがないため、未撮影の機器は判定できません", buildHistoryUiState(displayInspection, null, emptyList()).noRouteNote)
         assertNull(buildHistoryUiState(displayInspection, displayRoute, emptyList()).noRouteNote)
     }
 }

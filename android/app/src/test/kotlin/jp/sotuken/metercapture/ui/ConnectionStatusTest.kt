@@ -113,19 +113,19 @@ class ConnectionStatusTest {
     @Test
     fun barTextMatchesDesignWording() {
         assertEquals(
-            "▲ 送信先が未設定です（タップして設定）",
+            "■ 送信先が未設定です（タップして設定）",
             connectionBarText(ConnectionBarState.NOT_CONFIGURED, 0, "なし", ""),
         )
         assertEquals(
-            "… PCとの接続を確認中",
+            "◎ PCとの接続を確認中",
             connectionBarText(ConnectionBarState.CHECKING, 0, "なし", ""),
         )
         assertEquals(
-            "● PCに接続中　未着 3件　最終送信 12:34",
+            "● PCに接続中　未着 3枚　最終送信 12:34",
             connectionBarText(ConnectionBarState.CONNECTED, 3, "12:34", ""),
         )
         assertEquals(
-            "○ PCに届かない（送信箱に保存中）　未着 2件　接続できません",
+            "▲ PCにつながりません（端末に保存中）　未着 2枚　接続できません",
             connectionBarText(ConnectionBarState.UNREACHABLE, 2, "なし", "接続できません"),
         )
     }
@@ -136,7 +136,7 @@ class ConnectionStatusTest {
         assertEquals("確認中", connectionResultLabel(ConnectionBarState.CHECKING, ""))
         assertEquals("接続中", connectionResultLabel(ConnectionBarState.CONNECTED, ""))
         assertEquals(
-            "届かない（接続できません）",
+            "つながりません（接続できません）",
             connectionResultLabel(ConnectionBarState.UNREACHABLE, "接続できません"),
         )
     }
@@ -157,11 +157,11 @@ class ConnectionStatusTest {
     @Test
     fun barTextDistinguishesHasOutboxFromPendingOnly() {
         assertEquals(
-            "○ PCに届かない（送信箱に保存中）　未着 2件　接続できません",
+            "▲ PCにつながりません（端末に保存中）　未着 2枚　接続できません",
             connectionBarText(ConnectionBarState.UNREACHABLE, 2, "なし", "接続できません", hasOutbox = true),
         )
         assertEquals(
-            "○ PCに届かない（送信待ち）　未着 2件　接続できません",
+            "▲ PCにつながりません（送信待ち）　未着 2枚　接続できません",
             connectionBarText(ConnectionBarState.UNREACHABLE, 2, "なし", "接続できません", hasOutbox = false),
         )
     }

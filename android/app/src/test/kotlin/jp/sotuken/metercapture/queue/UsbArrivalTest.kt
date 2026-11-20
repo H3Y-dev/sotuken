@@ -100,7 +100,7 @@ class UsbArrivalTest {
         assertFalse(arrived.copy(sendState = SendState.FAILED).hasArrived())
         assertEquals(0, countUndelivered(listOf(arrived)))
         assertFalse(isUndelivered(arrived))
-        assertEquals("送信済み(USB)", sendStatusLabel(arrived))
+        assertEquals("PCに到着（USB）", sendStatusLabel(arrived))
         assertEquals(Instant.parse(item.capturedAt), latestHttpSentAt(listOf(arrived)))
         assertEquals(RoundOutcome.ReadyForManifest(emptyList()), decideAfterRound(listOf(arrived), null))
     }
