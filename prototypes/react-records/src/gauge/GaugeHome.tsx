@@ -15,8 +15,8 @@ function rowKind(ins: Inspection): Kind {
   const s = summarize(ins);
   if (ins.summary ? ins.summary.missing : s.missing.length) return "missing";
   if (ins.summary ? ins.summary.fail : s.fail.length) return "fail";
-  if (ins.summary ? !ins.summary.all_ok : s.needsAction) return "warn";
-  if (ins.receive === "receiving") return "wait";
+  if (ins.summary ? ins.summary.needs_action : s.needsAction) return "warn";
+  if (ins.receive === "receiving" || (ins.summary && (ins.summary.wait > 0 || !ins.summary.all_ok))) return "wait";
   return "ok";
 }
 

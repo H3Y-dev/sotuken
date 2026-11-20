@@ -40,8 +40,9 @@ export function ReceiveBadge({ ins }: { ins: Inspection }) {
   const s = summarize(ins);
   if (ins.receive === "short") return <StatusBadge kind="warn" label={`不足あり ${ins.missingPhotos}枚未着`} />;
   if (ins.receive === "receiving") return <StatusBadge kind="wait" label={`受信中 ${s.arrived}/${s.captured}`} />;
-  if (s.allOk) return <StatusBadge kind="ok" label="点検 完了" />;
-  if (s.missing.length + s.fail.length + s.warn.length === 0) return <StatusBadge kind="wait" label="写真受信済み（処理中）" />;
+  const sm = ins.summary;
+  if (sm ? sm.all_ok : s.allOk) return <StatusBadge kind="ok" label="点検 完了" />;
+  if ((sm ? sm.missing + sm.fail + sm.warn : s.missing.length + s.fail.length + s.warn.length) === 0) return <StatusBadge kind="wait" label="写真受信済み（処理中）" />;
   return (
     <Badge variant="tag" size="field">
       <Inbox aria-hidden />

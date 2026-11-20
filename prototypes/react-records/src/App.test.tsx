@@ -270,6 +270,7 @@ describe("点検確認", () => {
     const row = container.querySelector('[data-kind="fail"]');
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain("\u5931\u6557 1");
+    expect(row?.textContent).not.toContain("\u70b9\u691c \u5b8c\u4e86");
   });
 
   it("does not mark an incomplete summary complete when the preview is normal", async () => {
@@ -277,7 +278,33 @@ describe("点検確認", () => {
     Object.assign(result.items[0].summary, { fail: 0, missing: 0, needs_action: false, all_ok: false });
     vi.mocked(fetchInspections).mockResolvedValue(result);
     await render();
-    expect(container.querySelector('[data-kind="warn"]')).not.toBeNull();
+    const row = container.querySelector('[data-kind="wait"]');
+    expect(row).not.toBeNull();
+    expect(row?.textContent).not.toContain("\u70b9\u691c \u5b8c\u4e86");
+  });
+
+  it.each([["#gauge/A", "#/gauge/A"], ["#/gauge/A", "#gauge/A"]])("CSV\u51e6\u7406\u4e2d\u306b%s\u304b\u3089%s\u3078\u79fb\u3063\u3066\u3082\u51e6\u7406\u4e2d\u306e\u307e\u307e\u306b\u306a\u3089\u305a\u7d50\u679c\u304c\u51fa\u308b", async (from, to) => {
+    location.hash = from;
+    const request = deferredCsv();
+    vi.mocked(downloadInspectionCsv).mockReturnValueOnce(request.promise);
+    await render();
+    await click("CSV\u3092\u4fdd\u5b58");
+    await go(to);
+    expect(button("CSV\u3092\u4fdd\u5b58").disabled).toBe(true);
+    await act(async () => request.resolve({ blob: new Blob(), name: "A.csv" }));
+    expect(container.textContent).toContain("A.csv");
+    expect(button("CSV\u3092\u4fdd\u5b58").disabled).toBe(false);
+    expect(button("CSV\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9").disabled).toBe(false);
+  });
+
+  it.each(["#/gauge/", "#/gauge/a/b", "#/gauge/%"])("\u4e0d\u6b63\u306ahash %s \u306f\u53d6\u5f97\u305b\u305a\u3001\u70b9\u691cID\u304c\u4e0d\u6b63\u3068\u4e00\u89a7\u3078\u623b\u308b\u30ea\u30f3\u30af\u3092\u51fa\u3059", async (hash) => {
+    location.hash = hash;
+    await render();
+    expect(fetchInspections).not.toHaveBeenCalled();
+    expect(fetchInspection).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("\u70b9\u691cID\u304c\u4e0d\u6b63\u3067\u3059");
+    const back = Array.from(container.querySelectorAll("a")).find((el) => el.textContent.trim() === "\u4e00\u89a7\u3078\u623b\u308b");
+    expect(back?.getAttribute("href")).toBe("#/gauge");
   });
 
   it("production CSS keeps the needle pivot and segmented progress rules", () => {

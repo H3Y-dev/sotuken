@@ -32,10 +32,27 @@ function tabFromHash(hash: string): Tab {
   return "records";
 }
 
+// 旧形式 #gauge/... を #/gauge/... にそろえる。state には正規化済みだけ持つ。
+const normalizeHash = (hash: string) => hash.replace(/^#gauge(?=\/|$)/, "#/gauge");
+
+// 点検確認の hash を一覧 / 詳細 / 不正のどれかに解釈する。描画と取得で同じ結果を使う。
+type GaugeRoute = { kind: "list" } | { kind: "detail"; id: string } | { kind: "invalid" };
+function parseGaugeRoute(hash: string): GaugeRoute {
+  if (hash === "#/gauge") return { kind: "list" };
+  const match = hash.match(/^#\/gauge\/([^/]+)$/);
+  if (!match) return { kind: "invalid" };
+  try {
+    return { kind: "detail", id: decodeURIComponent(match[1]) };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+
 export default function App() {
-  const [rawHash, setHash] = useState(() => window.location.hash);
-  const hash = rawHash.replace(/^#gauge(?=\/|$)/, "#/gauge");
+  const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
   const tab = tabFromHash(hash);
+  const route = parseGaugeRoute(hash);
+  const isDetail = route.kind === "detail";
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [gaugeError, setGaugeError] = useState("");
@@ -85,13 +102,14 @@ export default function App() {
   const resetGaugeList = useCallback(() => {
     setInspections([]);
     setGaugeCursor(undefined);
+    loadedGaugeCursor.current = undefined;
     setGaugeNext(null);
     setGaugeTotals({ all: 0, action: 0 });
   }, []);
 
   useEffect(() => {
     const onHash = () => {
-      const nextHash = window.location.hash;
+      const nextHash = normalizeHash(window.location.hash);
       if (nextHash === hash) return;
       csvRequest.current?.abort();
       csvRequest.current = null;
@@ -100,6 +118,7 @@ export default function App() {
       setCsvSaved("");
       setInspection(null);
       resetGaugeList();
+      setGaugeLoading(false);
       setGaugeError("");
       setHash(nextHash);
     };
@@ -120,16 +139,17 @@ export default function App() {
 
   useEffect(() => {
     if (tab !== "gauge" || !visible) return;
-    const match = hash.match(/^#\/gauge\/([^/]+)$/);
+    const target = parseGaugeRoute(hash);
+    if (target.kind === "invalid") return;
     // 表示復帰時は追加済みのページを再取得しない。
-    if (!match && gaugeCursor && gaugeCursor === loadedGaugeCursor.current) return;
+    if (target.kind === "list" && gaugeCursor && gaugeCursor === loadedGaugeCursor.current) return;
     const controller = new AbortController();
     setGaugeLoading(true);
     setGaugeError("");
     const load = async () => {
       try {
-        if (match) {
-          const data = await fetchInspection(decodeURIComponent(match[1]), controller.signal);
+        if (target.kind === "detail") {
+          const data = await fetchInspection(target.id, controller.signal);
           if (!controller.signal.aborted) setInspection(toInspection(data));
         } else {
           const page = await fetchInspections(gaugeFilter, 50, gaugeCursor, controller.signal);
@@ -160,7 +180,7 @@ export default function App() {
     if (!inspection || csvRequest.current) return;
     const controller = new AbortController();
     csvRequest.current = controller;
-    const isCurrent = () => !controller.signal.aborted && window.location.hash === rawHash;
+    const isCurrent = () => csvRequest.current === controller && !controller.signal.aborted;
     setCsvBusy(true);
     setCsvError("");
     setCsvSaved("");
@@ -174,7 +194,7 @@ export default function App() {
       if (error instanceof ApiError && error.status === 401) setAuthExpired(true);
       setCsvError(describeApiError(error));
     } finally {
-      if (isCurrent()) {
+      if (csvRequest.current === controller) {
         csvRequest.current = null;
         setCsvBusy(false);
       }
@@ -182,20 +202,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (tab !== "gauge" || !hash.startsWith("#/gauge/") || !gaugeAuto || gaugeLoading) return;
+    if (tab !== "gauge" || !isDetail || !gaugeAuto || gaugeLoading) return;
     const timer = window.setTimeout(() => {
       if (!document.hidden) setGaugeRefresh((value) => value + 1);
     }, 5000);
     return () => window.clearTimeout(timer);
-  }, [tab, hash, gaugeAuto, gaugeLoading, gaugeRefresh]);
+  }, [tab, isDetail, gaugeAuto, gaugeLoading, gaugeRefresh]);
 
   useEffect(() => {
     const onVisible = () => {
-      if (!document.hidden && tab === "gauge" && hash.startsWith("#/gauge/") && gaugeAuto) setGaugeRefresh((value) => value + 1);
+      if (!document.hidden && tab === "gauge" && isDetail && gaugeAuto) setGaugeRefresh((value) => value + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [tab, hash, gaugeAuto]);
+  }, [tab, isDetail, gaugeAuto]);
 
   const refreshReadings = useCallback(
     async (signal?: AbortSignal) => {
@@ -432,13 +452,16 @@ export default function App() {
         {tab === "gauge" ? (
           <section className="gauge" aria-live="polite">
             <Button onClick={() => { setGaugeCursor(undefined); setGaugeRefresh((v) => v + 1); }}>更新</Button>
-            {hash.startsWith("#/gauge/") && <label><input type="checkbox" checked={gaugeAuto} onChange={(event) => setGaugeAuto(event.target.checked)} /> 自動更新</label>}
+            {isDetail && <label><input type="checkbox" checked={gaugeAuto} onChange={(event) => setGaugeAuto(event.target.checked)} /> 自動更新</label>}
             {gaugeLoading && <p>点検を読み込み中…</p>}
             {gaugeError && <>
               <p role="alert">{gaugeError}</p>
               <Button onClick={() => setGaugeRefresh((v) => v + 1)}>再試行</Button>
             </>}
-            {hash.startsWith("#/gauge/") ? <>
+            {route.kind === "invalid" ? <>
+              <p role="alert">点検IDが不正です</p>
+              <a href="#/gauge">一覧へ戻る</a>
+            </> : route.kind === "detail" ? <>
               <a href="#/gauge">一覧へ戻る</a>
               {inspection && <GaugeDetail ins={inspection} exporting={csvBusy} exportError={csvError} savedFile={csvSaved} onExport={exportCsv} />}
             </> : <>

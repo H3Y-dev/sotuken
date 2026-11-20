@@ -1,4 +1,4 @@
-﻿from datetime import date
+from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
 

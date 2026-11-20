@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from test_pc_inspection_status import InspectionStatusAPITests
+from tests.test_pc_inspection_status import InspectionStatusAPITests
 from manager.export import export_inspection_csv, filter_readings, latest_per_device
 
 
@@ -38,6 +38,19 @@ class InspectionCSVTests(InspectionStatusAPITests):
             expected = Path(export_inspection_csv(rows, out_dir=self.root)).read_bytes()
             self.assertEqual(data, expected)
             self.assertIn('filename*=', headers['Content-Disposition'])
+
+    def test_literal_bytes(self):
+        with self.storage.connection() as conn:
+            conn.execute('INSERT INTO meter_readings (timestamp, device_name, value, stage, image_path, inspection_id) VALUES (?, ?, ?, ?, ?, ?)', ('2026-11-19T11:00:00', '=x', 7, 'done', 'x.png', 'I-1'))
+        header = 'メーター名称,読み取り値,状態,取込時刻,画像参照\r\n'
+        cases = [
+            ({'device_name': '=x'}, header + "'=x,7.0,要確認,2026-11-19T11:00:00,x.png\r\n"),
+            ({'device_name': 'missing'}, header),
+        ]
+        for filters, text in cases:
+            status, data, _ = self.post(json.dumps(filters).encode())
+            self.assertEqual(status, 200)
+            self.assertEqual(data, b'\xef\xbb\xbf' + text.encode('utf-8'))
 
     def test_validation_and_security(self):
         for payload, status in [(b'{"x":1}', 400), (b'{"device_name":"a","device_name":"b"}', 400), (b'{"date_from":"2026-02-30"}', 422), (b'{"date_from":"2026-11-19","date_to":"2026-11-18"}', 422), (json.dumps({'device_name':'x'*257}).encode(), 422), (b' '*4097, 413)]:
