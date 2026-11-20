@@ -61,7 +61,7 @@ class Reading:
     failure_detail: Optional[str]  # 人が読む失敗説明
     pipeline_version: str  # 使用したパイプラインの版。gitタグ名をそのまま入れる
     log_path: str  # 相対パス: 詳細ログ
-    overlay_path: Optional[str]  # 相対パスまたはnull: 中間オーバーレイ画像
+    overlay_path: Optional[str]  # 絶対パスまたはnull: 中間オーバーレイ画像
 
 
 @dataclass
