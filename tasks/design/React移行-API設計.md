@@ -198,4 +198,4 @@ Reactで開発を進めることは確定している。ここでのGo / No-Go�
 
 ### 点検CSV API
 
-`POST /api/v1/inspections/{id}/csv` はCSVを添付で返し、`POST /api/v1/inspections/{id}/csv/save` はPCのドキュメント内「メーター点検」に保存して `{"filename": "..."}` を返す。両方とも同一オリジン、セッション、CSRFトークンとJSONが必要。入力は `device_name`、`date_from`、`date_to` の任意フィルターのみで、本文は最大4096バイト。機器名は最大256文字、日付は実在する `YYYY-MM-DD` で範囲の両端を含む。選択点検の履歴は最大10000行。ファイルの保存先は指定できない。
+`POST /api/v1/inspections/{id}/csv` はCSVを添付で返し、`POST /api/v1/inspections/{id}/csv/save` はPCのドキュメント内「メーター点検」に保存して `{"filename": "..."}` を返す。両方とも同一オリジン、セッション、CSRFトークンとJSONが必要。入力は `device_name`、`date_from`、`date_to` の任意フィルターのみで、本文は最大4096バイト。機器名は最大256文字、日付は実在する `YYYY-MM-DD` で範囲の両端を含む。選択点検の履歴は最大10000行。ファイルの保存先は指定できない。CSVの「画像参照」列は、同じPCで画像を探すためのPC上の絶対パスを、Streamlit版と同じ生成関数のまま出す（バイト一致の受入条件。`PCインストーラー化.md`の記述と同じ前提）。「絶対パスを返さない」はJSON応答の規約でCSVには及ばない。CSVをPC外へ出す運用が常態になった場合は、Streamlit版も含めて別途見直す（2026-11-20、4者の相談で確認）。

@@ -14,13 +14,13 @@ class InspectionCSVTests(InspectionStatusAPITests):
             for name, stamp in [('A', '2026-11-18T09:00:00'), ('A', '2026-11-19T09:00:00'), ('B', '2026-11-18T10:00:00')]:
                 conn.execute('INSERT INTO meter_readings (timestamp, device_name, value, stage, image_path, inspection_id) VALUES (?, ?, ?, ?, ?, ?)', (stamp, name, 12, 'done', 'image.png', 'I-1'))
 
-    def post(self, payload=b'{}', suffix='', headers=None, auth=True):
+    def post(self, payload=b'{}', suffix='', headers=None, auth=True, inspection_id='I-1'):
         conn = http.client.HTTPConnection('127.0.0.1', self.api.port, timeout=3)
         h = {'Content-Type': 'application/json', 'Origin': f'http://127.0.0.1:{self.api.port}', 'X-CSRF-Token': self.csrf_token}
         if auth:
             h['Cookie'] = self.session_cookie
         h.update(headers or {})
-        conn.request('POST', '/api/v1/inspections/I-1/csv' + suffix, body=payload, headers=h)
+        conn.request('POST', f'/api/v1/inspections/{inspection_id}/csv' + suffix, body=payload, headers=h)
         res = conn.getresponse()
         result = (res.status, res.read(), dict(res.getheaders()))
         conn.close()
@@ -58,6 +58,23 @@ class InspectionCSVTests(InspectionStatusAPITests):
         self.assertEqual(self.post(auth=False)[0], 401)
         self.assertEqual(self.post(headers={'X-CSRF-Token': 'bad'})[0], 403)
         self.assertEqual(self.post(headers={'Origin': 'http://evil'})[0], 403)
+
+    def test_unknown_inspection(self):
+        status, body, _ = self.post(inspection_id='NOPE')
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(body)['error']['code'], 'not_found')
+
+    def test_query_and_invalid_ids(self):
+        for inspection_id, suffix in (('I-1', '?x=1'), ('%2e%2e', ''), ('a%2Fb', '')):
+            with self.subTest(inspection_id=inspection_id, suffix=suffix):
+                status, _, _ = self.post(inspection_id=inspection_id, suffix=suffix)
+                self.assertEqual(status, 400)
+
+    def test_non_json_content_type(self):
+        with patch('manager.export._documents_dir', return_value=self.root):
+            before = set(self.root.rglob('*.csv'))
+            self.assertEqual(self.post(headers={'Content-Type': 'text/plain'})[0], 400)
+            self.assertEqual(set(self.root.rglob('*.csv')), before)
 
     def test_save_collision_and_download_cleanup(self):
         with patch('manager.export._documents_dir', return_value=self.root):
