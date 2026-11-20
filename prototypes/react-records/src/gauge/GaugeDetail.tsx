@@ -190,9 +190,10 @@ function Attention({ ins }: { ins: Inspection }) {
 
 function Pipeline({ ins }: { ins: Inspection }) {
   const s = summarize(ins);
+  const hasRoute = ins.routeName !== null;
   // 撮影の分母はルートの台数。ルート外は分母に混ぜず、別に「＋ルート外」と書く
   const steps = [
-    ins.routeId
+    hasRoute
       ? { label: "撮影", n: s.routeCaptured, of: s.routeTotal, extra: s.offRoute.length ? `＋ルート外 ${s.offRoute.length}台` : "" }
       : { label: "撮影", n: s.captured, of: ins.meters.length, extra: "" },
     { label: "PCに到着", n: s.arrived, of: s.captured, extra: "" },
@@ -204,7 +205,7 @@ function Pipeline({ ins }: { ins: Inspection }) {
       {steps.map((st, i) => (
         <li key={st.label} className="flex items-center gap-2">
           <div className="flex min-w-[150px] flex-col rounded-md border border-hairline bg-card px-4 py-2">
-            <span className="text-steel">{st.label}{ins.routeId && i > 0 ? "（ルート外を含む）" : ""}</span>
+            <span className="text-steel">{st.label}{hasRoute && i > 0 ? "（ルート外を含む）" : ""}</span>
             <span className="g-num text-[28px] leading-tight font-bold text-ink">
               {st.n}
               <span className="text-lg font-normal text-steel">/{st.of}台</span>
@@ -218,9 +219,10 @@ function Pipeline({ ins }: { ins: Inspection }) {
   );
 }
 
-export function GaugeDetail({ ins }: { ins: Inspection }) {
+export function GaugeDetail({ ins, onExport, exporting, exportError, savedFile }: { ins: Inspection; onExport: (save: boolean) => void; exporting: boolean; exportError: string; savedFile: string }) {
   const [order, setOrder] = useState("route");
   const s = summarize(ins);
+  const hasRoute = ins.routeName !== null;
   // ルート順（seq の昇順。seq の無いものは後ろに元の順で）。sort は安定なので同順位はルート順のまま
   const sort = (list: MeterResult[]) => {
     const byRoute = [...list].sort((a, b) => (a.seq ?? Number.MAX_SAFE_INTEGER) - (b.seq ?? Number.MAX_SAFE_INTEGER));
@@ -232,7 +234,7 @@ export function GaugeDetail({ ins }: { ins: Inspection }) {
 
   return (
     <section className="flex flex-col gap-3 pt-2">
-      <a href="#gauge" className={cn(buttonVariants({ variant: "ghost", size: "field" }), "-ml-4 w-fit text-ink")}>
+      <a href="#/gauge" className={cn(buttonVariants({ variant: "ghost", size: "field" }), "-ml-4 w-fit text-ink")}>
         <ArrowLeft data-icon="inline-start" aria-hidden />
         点検の一覧へ戻る
       </a>
@@ -245,7 +247,7 @@ export function GaugeDetail({ ins }: { ins: Inspection }) {
         <dl className="flex flex-wrap gap-x-8 gap-y-1">
           {[
             ["点検ID", <span key="id" className="g-num">{ins.id}</span>],
-            ["ルート", ins.routeId ? `${ins.routeName}（${s.routeTotal}台）` : "なし"],
+            ["ルート", hasRoute ? `${ins.routeName}（${s.routeTotal}台）` : ins.routeId ? "ルート未取得" : "なし"],
             ["担当", ins.operator],
             ["日時", <span key="at" className="g-num">{day(ins.startedAt)} {time(ins.startedAt)}〜{time(ins.completedAt)}</span>],
             ["写真", `${s.photos}枚`],
@@ -259,11 +261,18 @@ export function GaugeDetail({ ins }: { ins: Inspection }) {
       </div>
 
       <Pipeline ins={ins} />
+      <div className="flex flex-wrap items-center gap-3">
+        <button className={cn(buttonVariants({ variant: "outline" }))} disabled={exporting} onClick={() => onExport(false)}>CSVをダウンロード</button>
+        <button className={cn(buttonVariants({ variant: "outline" }))} disabled={exporting} onClick={() => onExport(true)}>CSVを保存</button>
+        {exporting && <span>CSVを処理中…</span>}
+        {exportError && <p role="alert">{exportError}</p>}
+        {savedFile && <p role="status">保存しました: {savedFile}（保存先: PCのドキュメントフォルダー内「メーター点検」。Windowsでは既知のドキュメントフォルダー、取得できない場合とその他のOSではホームの Documents）</p>}
+      </div>
       <Attention ins={ins} />
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h2 className="text-xl font-bold">
-          {ins.routeId ? `ルートの機器 ${onRoute.length}台` : `撮影した機器 ${onRoute.length}台`}
+          {hasRoute ? `ルートの機器 ${onRoute.length}台` : `撮影した機器 ${onRoute.length}台`}
         </h2>
         <ToggleGroup variant="field" spacing={0} value={[order]} onValueChange={(v) => v[0] && setOrder(v[0] as string)} aria-label="並び順">
           <ToggleGroupItem value="route" className="h-11 px-4 text-base">ルート順</ToggleGroupItem>

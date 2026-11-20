@@ -195,3 +195,7 @@ Reactで開発を進めることは確定している。ここでのGo / No-Go�
 一度限りの起動鍵をURL fragmentで渡し、JSが直ちにhistory.replaceStateで消してPOST /sessionで交換する。起動鍵は60秒・1回限り、定数時間照合とする。交換後はHttpOnly・SameSite=Strict・Path=/のCookie、8時間またはAPI終了までのセッションとする。更新にはセッションに紐づくX-CSRF-TokenとJSON Content-Type、同一Originを必須とする。GET /sessionで再読込時の復元、DELETE /sessionで失効する。検証用のHTMLへのPCトークン埋め込みはこの方式へ置き換える。
 
 カーソルと60秒の結果スナップショット、limit既定50（1〜200）、セッション・条件への紐付け、期限切れ時の再取得、保有数制限は本移行で設計・実装する。第3節の後段6画面のページング契約はこの段階に適用する。
+
+### 点検CSV API
+
+`POST /api/v1/inspections/{id}/csv` はCSVを添付で返し、`POST /api/v1/inspections/{id}/csv/save` はPCのドキュメント内「メーター点検」に保存して `{"filename": "..."}` を返す。両方とも同一オリジン、セッション、CSRFトークンとJSONが必要。入力は `device_name`、`date_from`、`date_to` の任意フィルターのみで、本文は最大4096バイト。機器名は最大256文字、日付は実在する `YYYY-MM-DD` で範囲の両端を含む。選択点検の履歴は最大10000行。ファイルの保存先は指定できない。

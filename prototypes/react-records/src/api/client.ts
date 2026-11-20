@@ -2,6 +2,8 @@ import type {
   Device,
   DeviceInput,
   Filters,
+  InspectionListPage,
+  InspectionProgress,
   Page,
   PairingStatus,
   Reading,
@@ -143,6 +145,21 @@ async function apiJson<T>(
   return (await res.json()) as T;
 }
 
+export async function downloadInspectionCsv(id: string, save = false, signal?: AbortSignal): Promise<{ blob: Blob; name: string }> {
+  const res = await apiRequest(`/api/v1/inspections/${encodeURIComponent(id)}/csv${save ? "/save" : ""}`, {
+    method: "POST", body: "{}", signal,
+  });
+  if (save) {
+    const data = (await res.json()) as { filename: string };
+    return { blob: new Blob(), name: data.filename };
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  let name = "inspection.csv";
+  if (encoded) { try { name = decodeURIComponent(encoded); } catch { /* keep fallback */ } }
+  return { blob: await res.blob(), name };
+}
+
 export function buildReadingsQuery(f: Filters): string {
   const params = new URLSearchParams();
   if (f.inspection === "none") {
@@ -165,6 +182,16 @@ export function buildReadingsQuery(f: Filters): string {
 
 export function fetchReadings(filters: Filters, signal?: AbortSignal): Promise<Page<Reading>> {
   return apiJson<Page<Reading>>(`/api/v1/readings${buildReadingsQuery(filters)}`, { signal });
+}
+
+export function fetchInspections(filter: "all" | "action", limit = 50, cursor?: string, signal?: AbortSignal): Promise<InspectionListPage> {
+  const params = new URLSearchParams({ filter, limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return apiJson<InspectionListPage>(`/api/v1/inspections?${params}`, { signal });
+}
+
+export function fetchInspection(id: string, signal?: AbortSignal): Promise<InspectionProgress> {
+  return apiJson<InspectionProgress>(`/api/v1/inspections/${encodeURIComponent(id)}/progress`, { signal });
 }
 
 export function fetchReading(id: string, signal?: AbortSignal): Promise<Reading> {

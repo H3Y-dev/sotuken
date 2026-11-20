@@ -9,13 +9,14 @@ from http.server import BaseHTTPRequestHandler
 import json
 import math
 import os
+import re
 from pathlib import Path, PureWindowsPath
 import secrets
 import sqlite3
 import sys
 import threading
 import time
-from urllib.parse import parse_qs, urlsplit, unquote
+from urllib.parse import parse_qs, urlsplit, unquote, quote
 
 from manager.export import filter_readings
 from manager.storage import MeterReading
@@ -268,7 +269,7 @@ class PCAPI:
                 return 200, data, 'text/html; charset=utf-8'
             if not self.static_dir:
                 raise APIError(404, 'not_found')
-            types = {'.js':'text/javascript', '.css':'text/css', '.png':'image/png', '.svg':'image/svg+xml', '.ico':'image/x-icon'}
+            types = {'.js':'text/javascript', '.css':'text/css', '.png':'image/png', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.woff2':'font/woff2'}
             suffix = Path(relative).suffix.lower()
             if suffix not in types:
                 raise APIError(404, 'not_found')
@@ -280,7 +281,7 @@ class PCAPI:
             return (204, None, None) if method == 'DELETE' else (200, body, None)
         if path == '/api/v1/inspections' or path.startswith('/api/v1/inspections/'):
             from pc_api.inspection_routes import dispatch_inspection
-            return dispatch_inspection(self, method, url, session_id=session_id)
+            return dispatch_inspection(self, method, url, session_id=session_id, body=body)
         if path == '/api/v1/devices' or path.startswith('/api/v1/devices/'):
             if url.query:
                 raise APIError(400, 'invalid_request')
@@ -365,7 +366,8 @@ class PCAPI:
                         (parsed_url.path == '/api/v1/devices' and self.command == 'POST')
                         or (parsed_url.path.startswith('/api/v1/devices/id-') and self.command == 'PUT')
                     )
-                    max_body_bytes = 16384 if is_device_write else 1024
+                    is_csv_write = self.command == 'POST' and bool(re.fullmatch(r'/api/v1/inspections/[^/]+/csv(?:/save)?', parsed_url.path))
+                    max_body_bytes = 16384 if is_device_write else 4096 if is_csv_write else 1024
                     if int(length) > max_body_bytes:
                         raise APIError(413, 'too_large')
                     def read_json_body():
@@ -418,7 +420,7 @@ class PCAPI:
                         session_id = None
                         if parsed_url.path.startswith('/api/'):
                             session_id, _ = api.authenticate_session(self.headers, self.command)
-                            if is_device_write:
+                            if is_device_write or is_csv_write:
                                 request_body = read_json_body()
                             elif self.command in ('POST', 'PUT', 'PATCH', 'DELETE') or int(length):
                                 if read_json_body() != {}:
@@ -464,10 +466,15 @@ class PCAPI:
                     except (ValueError, OSError):
                         pass
                 self.connection.settimeout(None)
+                csv_filename = None
+                if mime and mime.startswith('text/csv') and status == 200:
+                    body, csv_filename = body
                 data = b'' if body is None else body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False, allow_nan=False).encode('utf-8')
                 self.send_response(status)
                 self.send_header('Content-Length', str(len(data)))
                 self.send_header('Content-Type', mime or 'application/json; charset=utf-8')
+                if mime and mime.startswith('text/csv') and status == 200:
+                    self.send_header('Content-Disposition', f"attachment; filename=\"inspection.csv\"; filename*=UTF-8''{quote(csv_filename)}")
                 self.send_header('Cache-Control', 'no-store')
                 self.send_header('X-Content-Type-Options', 'nosniff')
                 self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; img-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'")
@@ -547,4 +554,6 @@ def main():
 
 
 if __name__ == '__main__':
+    # Route modules import pc_api.server; keep one module identity under -m.
+    sys.modules['pc_api.server'] = sys.modules[__name__]
     main()

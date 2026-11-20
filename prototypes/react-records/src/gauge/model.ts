@@ -36,6 +36,7 @@ export interface MeterResult {
 }
 
 export interface Inspection {
+  summary?: import("@/api/types").InspectionSummary;
   id: string;
   name: string;
   routeId: string | null;
