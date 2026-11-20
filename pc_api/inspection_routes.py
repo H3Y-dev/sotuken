@@ -204,8 +204,17 @@ def list_inspections(storage, incoming_dir, session_id, query, *, page_cache=Non
     )
 
 
-def dispatch_inspection(api, method, url, session_id=None):
+def dispatch_inspection(api, method, url, session_id=None, body=None):
     """Dispatch authenticated /api/v1/inspections* requests."""
+    match = re.fullmatch(r'/api/v1/inspections/([^/]+)/csv(/save)?', url.path)
+    if match and method == 'POST':
+        if url.query:
+            raise APIError(400, 'invalid_request')
+        from pc_api.inspection_csv import inspection_csv
+        inspection_id = validate_inspection_id(unquote(match.group(1)))
+        with _open_read_adapter(api.storage) as adapter:
+            _ensure_inspection_exists(adapter, inspection_id)
+            return inspection_csv(adapter, inspection_id, body, bool(match.group(2)))
     if method != 'GET':
         raise APIError(400, 'invalid_request')
     if url.path == '/api/v1/inspections':

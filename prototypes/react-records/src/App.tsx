@@ -9,22 +9,66 @@ import {
   ApiError,
   describeApiError,
   fetchReadings,
+  fetchInspections,
+  fetchInspection,
   fetchRuntime,
   fetchUsbStatus,
+  downloadInspectionCsv,
 } from "@/api/client";
+import { download } from "@/lib/download";
 import type { Filters, Reading, RuntimeStatus, UsbStatus } from "@/api/types";
 import { inspectionOptions } from "@/lib/records";
+import { GaugeHome } from "@/gauge/GaugeHome";
+import { GaugeDetail } from "@/gauge/GaugeDetail";
+import "@/gauge/gauge.css";
+import { toInspection, toMeter, type Inspection } from "@/gauge/model";
 
-type Tab = "records" | "devices" | "settings";
+type Tab = "records" | "devices" | "settings" | "gauge";
 
 function tabFromHash(hash: string): Tab {
+  if (hash.startsWith("#/gauge")) return "gauge";
   if (hash === "#settings") return "settings";
   if (hash === "#devices") return "devices";
   return "records";
 }
 
+// 旧形式 #gauge/... を #/gauge/... にそろえる。state には正規化済みだけ持つ。
+const normalizeHash = (hash: string) => hash.replace(/^#gauge(?=\/|$)/, "#/gauge");
+
+// 点検確認の hash を一覧 / 詳細 / 不正のどれかに解釈する。描画と取得で同じ結果を使う。
+type GaugeRoute = { kind: "list" } | { kind: "detail"; id: string } | { kind: "invalid" };
+function parseGaugeRoute(hash: string): GaugeRoute {
+  if (hash === "#/gauge") return { kind: "list" };
+  const match = hash.match(/^#\/gauge\/([^/]+)$/);
+  if (!match) return { kind: "invalid" };
+  try {
+    return { kind: "detail", id: decodeURIComponent(match[1]) };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>(() => tabFromHash(window.location.hash));
+  const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
+  const tab = tabFromHash(hash);
+  const route = parseGaugeRoute(hash);
+  const isDetail = route.kind === "detail";
+  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [inspection, setInspection] = useState<Inspection | null>(null);
+  const [gaugeError, setGaugeError] = useState("");
+  const [csvBusy, setCsvBusy] = useState(false);
+  const csvRequest = useRef<AbortController | null>(null);
+  const [csvError, setCsvError] = useState("");
+  const [csvSaved, setCsvSaved] = useState("");
+  const [gaugeLoading, setGaugeLoading] = useState(false);
+  const [gaugeFilter, setGaugeFilter] = useState<"all" | "action">("all");
+  const [gaugeCursor, setGaugeCursor] = useState<string | undefined>();
+  const loadedGaugeCursor = useRef<string | undefined>(undefined);
+  const [gaugeNext, setGaugeNext] = useState<string | null>(null);
+  const [gaugeTotals, setGaugeTotals] = useState({ all: 0, action: 0 });
+  const [gaugeRefresh, setGaugeRefresh] = useState(0);
+  const [gaugeAuto, setGaugeAuto] = useState(false);
+  const [visible, setVisible] = useState(() => !document.hidden);
   const [rows, setRows] = useState<Reading[]>([]);
   const [total, setTotal] = useState(0);
   const [knownDevices, setKnownDevices] = useState<string[]>([]);
@@ -50,18 +94,128 @@ export default function App() {
   const lastRuntimeFetchRef = useRef(0);
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash(window.location.hash));
+    const onVisibility = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  const resetGaugeList = useCallback(() => {
+    setInspections([]);
+    setGaugeCursor(undefined);
+    loadedGaugeCursor.current = undefined;
+    setGaugeNext(null);
+    setGaugeTotals({ all: 0, action: 0 });
+  }, []);
+
+  useEffect(() => {
+    const onHash = () => {
+      const nextHash = normalizeHash(window.location.hash);
+      if (nextHash === hash) return;
+      csvRequest.current?.abort();
+      csvRequest.current = null;
+      setCsvBusy(false);
+      setCsvError("");
+      setCsvSaved("");
+      setInspection(null);
+      resetGaugeList();
+      setGaugeLoading(false);
+      setGaugeError("");
+      setHash(nextHash);
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
+  }, [hash, resetGaugeList]);
+
+  useEffect(() => {
+    return () => csvRequest.current?.abort();
   }, []);
 
   const switchTab = (next: Tab) => {
-    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : "#";
+    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : next === "gauge" ? "#/gauge" : "#";
     if (window.location.hash !== target) {
       window.location.hash = target;
     }
-    setTab(next);
   };
+
+  useEffect(() => {
+    if (tab !== "gauge" || !visible) return;
+    const target = parseGaugeRoute(hash);
+    if (target.kind === "invalid") return;
+    // 表示復帰時は追加済みのページを再取得しない。
+    if (target.kind === "list" && gaugeCursor && gaugeCursor === loadedGaugeCursor.current) return;
+    const controller = new AbortController();
+    setGaugeLoading(true);
+    setGaugeError("");
+    const load = async () => {
+      try {
+        if (target.kind === "detail") {
+          const data = await fetchInspection(target.id, controller.signal);
+          if (!controller.signal.aborted) setInspection(toInspection(data));
+        } else {
+          const page = await fetchInspections(gaugeFilter, 50, gaugeCursor, controller.signal);
+          if (!controller.signal.aborted) {
+            const items: Inspection[] = page.items.map((item) => ({ id: item.id, name: item.name, routeId: item.route_id, routeName: item.route_name, operator: item.operator ?? "—", place: item.place ?? "—", startedAt: item.started_at, completedAt: item.completed_at, receive: item.status.state === "完了" ? "complete" : item.status.state === "不足あり" ? "short" : "receiving", missingPhotos: item.missing_photo_count, meters: item.preview.map(toMeter), summary: item.summary }));
+            loadedGaugeCursor.current = gaugeCursor;
+            setInspections((previous) => gaugeCursor ? [...previous, ...items] : items);
+            setGaugeNext(page.next_cursor);
+            setGaugeTotals({ all: page.all_total, action: page.action_total });
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          if (error instanceof ApiError && error.status === 410 && gaugeCursor) {
+            resetGaugeList();
+            return;
+          }
+          if (error instanceof ApiError && error.status === 401) setAuthExpired(true);
+          setGaugeError(error instanceof ApiError && error.status === 404 ? "点検が見つかりません" : error instanceof ApiError && error.status === 410 ? "一覧の期限が切れました。更新してください" : describeApiError(error));
+        }
+      } finally { if (!controller.signal.aborted) setGaugeLoading(false); }
+    };
+    void load();
+    return () => controller.abort();
+  }, [tab, hash, gaugeFilter, gaugeCursor, gaugeRefresh, visible, resetGaugeList]);
+
+  const exportCsv = async (save: boolean) => {
+    if (!inspection || csvRequest.current) return;
+    const controller = new AbortController();
+    csvRequest.current = controller;
+    const isCurrent = () => csvRequest.current === controller && !controller.signal.aborted;
+    setCsvBusy(true);
+    setCsvError("");
+    setCsvSaved("");
+    try {
+      const { blob, name } = await downloadInspectionCsv(inspection.id, save, controller.signal);
+      if (!isCurrent()) return;
+      if (save) setCsvSaved(name);
+      else download(name, blob, "text/csv;charset=utf-8");
+    } catch (error) {
+      if (!isCurrent()) return;
+      if (error instanceof ApiError && error.status === 401) setAuthExpired(true);
+      setCsvError(describeApiError(error));
+    } finally {
+      if (csvRequest.current === controller) {
+        csvRequest.current = null;
+        setCsvBusy(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (tab !== "gauge" || !isDetail || !gaugeAuto || gaugeLoading) return;
+    const timer = window.setTimeout(() => {
+      if (!document.hidden) setGaugeRefresh((value) => value + 1);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [tab, isDetail, gaugeAuto, gaugeLoading, gaugeRefresh]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && tab === "gauge" && isDetail && gaugeAuto) setGaugeRefresh((value) => value + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [tab, isDetail, gaugeAuto]);
 
   const refreshReadings = useCallback(
     async (signal?: AbortSignal) => {
@@ -187,6 +341,12 @@ export default function App() {
               <Button
                 type="button"
                 size="field"
+                variant={tab === "gauge" ? "secondary" : "ghost"}
+                onClick={() => switchTab("gauge")}
+              >点検確認</Button>
+              <Button
+                type="button"
+                size="field"
                 variant={tab === "records" ? "secondary" : "ghost"}
                 aria-current={tab === "records" ? "page" : undefined}
                 className={
@@ -289,7 +449,31 @@ export default function App() {
           </div>
         )}
 
-        {tab === "records" ? (
+        {tab === "gauge" ? (
+          <section className="gauge" aria-live="polite">
+            <Button onClick={() => { setGaugeCursor(undefined); setGaugeRefresh((v) => v + 1); }}>更新</Button>
+            {isDetail && <label><input type="checkbox" checked={gaugeAuto} onChange={(event) => setGaugeAuto(event.target.checked)} /> 自動更新</label>}
+            {gaugeLoading && <p>点検を読み込み中…</p>}
+            {gaugeError && <>
+              <p role="alert">{gaugeError}</p>
+              <Button onClick={() => setGaugeRefresh((v) => v + 1)}>再試行</Button>
+            </>}
+            {route.kind === "invalid" ? <>
+              <p role="alert">点検IDが不正です</p>
+              <a href="#/gauge">一覧へ戻る</a>
+            </> : route.kind === "detail" ? <>
+              <a href="#/gauge">一覧へ戻る</a>
+              {inspection && <GaugeDetail ins={inspection} exporting={csvBusy} exportError={csvError} savedFile={csvSaved} onExport={exportCsv} />}
+            </> : <>
+              <GaugeHome items={inspections} filter={gaugeFilter} totals={gaugeTotals} showEmpty={!gaugeLoading && !gaugeError} onFilterChange={(value) => {
+                if (value === gaugeFilter) return;
+                resetGaugeList();
+                setGaugeFilter(value);
+              }} />
+              <Button disabled={!gaugeNext || gaugeLoading || !!gaugeError} onClick={() => setGaugeCursor(gaugeNext ?? undefined)}>次のページ</Button>
+            </>}
+          </section>
+        ) : tab === "records" ? (
           <RecordsView
             rows={rows}
             total={total}

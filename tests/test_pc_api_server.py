@@ -218,9 +218,12 @@ class ServerTests(unittest.TestCase):
         static.mkdir()
         (static/'index.html').write_bytes(b'<html><head></head><body>React</body></html>')
         (static/'app.js').write_bytes(b'console.log(1)')
+        (static/'font.woff2').write_bytes(b'font-data')
         self.api.static_dir = static
         self.assertIn(b'React',self.request('/')[1])
         self.assertEqual(self.request('/app.js',auth=False)[1],b'console.log(1)')
+        status, body, headers = self.request('/font.woff2',auth=False)
+        self.assertEqual((status, body, headers['Content-Type']), (200, b'font-data', 'font/woff2'))
         self.assertEqual(self.request('/%2e%2e/manager.db',auth=False)[0],404)
 
     def test_owner_unavailable(self):
