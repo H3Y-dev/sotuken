@@ -9,6 +9,8 @@ import { ApiError, downloadInspectionCsv, fetchImageBlobUrl, fetchInspection, fe
 import type { InspectionListItem, InspectionProgress } from "@/api/types";
 import { download } from "@/lib/download";
 import { FakeElement, FakeEvent, setupFakeDom } from "@/lib/fakeDom.test-support";
+import { OverlayPreview } from "@/components/OverlayPreview";
+import type { Reading } from "@/api/types";
 
 vi.mock("@/api/client", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/api/client")>(),
@@ -130,6 +132,7 @@ describe("点検確認", () => {
     expect(container.textContent).toContain("テスト計器");
     const close = doc.body.querySelectorAll("button").find((el) => el.textContent.trim() === "閉じる")!;
     expect(doc.activeElement).toBe(close);
+    expect(doc.body.querySelectorAll("[data-preview-reading-id]")).toHaveLength(0);
     const src = doc.body.querySelectorAll("img").map((img) => img.getAttribute("src"));
     expect(src).toEqual(expect.arrayContaining(["blob:original", "blob:overlay"]));
     expect(doc.body.querySelectorAll("img").every((img) => img.getAttribute("alt")?.includes("テスト計器"))).toBe(true);
@@ -139,6 +142,28 @@ describe("点検確認", () => {
     await act(async () => close.click());
     expect(revoke).toHaveBeenCalledTimes(2);
     expect(doc.activeElement).toBe(trigger);
+  });
+
+  it("記録モードは詳細を取得しフォーカスを移さずEscapeで閉じる", async () => {
+    const reading: Reading = {
+      id: "42", reading_id: null, device_name: "計器", device_id: null,
+      captured_at: "2026-11-18T09:00:00+09:00", timestamp: null, received_at: null,
+      value: 1, unit: null, status: "ok", stage: "done", confidence: null,
+      failure_stage: null, inspection_id: null, inspection_name: null, route_id: null,
+      image_id: null, overlay_image_id: null,
+    };
+    const onClose = vi.fn();
+    vi.mocked(fetchReading).mockResolvedValue(reading);
+    await act(async () => root.render(<OverlayPreview reading={reading} onClose={onClose} />));
+    expect(fetchReading).toHaveBeenCalledWith("42", expect.any(AbortSignal));
+    expect(doc.body.textContent).toContain("42");
+    expect(doc.body.textContent).toContain("2026");
+    expect(doc.body.textContent).toContain("正常");
+    expect(doc.body.querySelectorAll("[data-preview-reading-id]")).toHaveLength(1);
+    const close = doc.body.querySelectorAll("button").find((el) => el.textContent.trim() === "閉じる");
+    expect(doc.activeElement).not.toBe(close);
+    await act(async () => doc.dispatchEvent(new FakeEvent("keydown", { key: "Escape" })));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("画像IDのある機器だけボタンを表示し、欠落画像と残った画像を表示する", async () => {

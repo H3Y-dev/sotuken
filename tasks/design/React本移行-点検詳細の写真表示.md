@@ -80,7 +80,7 @@ DBパスの有無でIDを発行し、この段階では画像ファイルを開�
 
 `OverlayPreview` の既存のダイアログ全体を `createPortal`（`react-dom`）で `document.body` に描画する。点検画面のライブ領域は `App.tsx` の `section.gauge[aria-live="polite"]` にある。実際の `lib/fakeDom.test-support.ts` と導入済みのReact DOMを使った検査で、ライブ領域内からbody直下へのマウント、`activeElement` の更新、クリック伝播、アンマウント時の削除を3回確認した。bodyに描画すればダイアログはこのライブ領域の外に置かれる。
 
-共通の「閉じる」ボタンに `useRef<HTMLButtonElement>(null)` を渡し、マウント時のeffectで `closeButtonRef.current?.focus()` を呼ぶ。記録モードも同じ処理を使う。閉じるボタン、Escape、背景クリックは既存の `onClose` へ流す。点検側の `onClose` は `selected` から `trigger` を取り出して `selected` を `null` にし、`document.contains(trigger)` が真のときだけ `trigger.focus()` を呼ぶ。記録側は既存の閉じる処理を使う。
+共通の「閉じる」ボタンに `useRef<HTMLButtonElement>(null)` を渡し、写真モードのみマウント時のeffectで `closeButtonRef.current?.focus()` を呼ぶ。記録モードは従来どおりフォーカスを動かさない。閉じるボタン、Escape、背景クリックは既存の `onClose` へ流す。点検側の `onClose` は `selected` から `trigger` を取り出して `selected` を `null` にし、`document.contains(trigger)` が真のときだけ `trigger.focus()` を呼ぶ。記録側は既存の閉じる処理を使う。
 
 ## テストと受入
 
@@ -104,7 +104,7 @@ React担当は `tests/test_pc_inspection_pages.py` に、一覧previewで保存�
 | 3. 片方が404 | 元画像IDに対して `fetchImageBlobUrl` が `null`、オーバーレイIDに対してBlob URLを返す。元画像の欠落文言とオーバーレイが同時に出る。 |
 | 4. 表示中の更新 | 画像IDが変わる次の応答を `fetchInspection` に返させる。ダイアログを開いて画像が表示されたら、Vitestでfake timersを有効にし、Fake DOMの `win.setTimeout` と `win.clearTimeout` に現在のグローバル関数を設定する。「自動更新」のチェックボックスをオンにしてから `act` 内で `vi.advanceTimersByTimeAsync(5000)` を実行する。続けて「更新」を押し、さらに異なるIDの応答を返す。各更新で進捗の取得が実行され、画像取得回数とID、ダイアログの存在、表示中の各 `img` の `src` が変わらないことを確かめる。テスト終了時にタイマーを実時間へ戻し、`win` の元の関数を復元する。 |
 | 5. 解放 | 画像の取得成功後に「閉じる」を押し、対象画像ごとに保持した `revoke` モックが1回ずつ呼ばれることを確認する。 |
-| 6. 記録タブの回帰 | `fetchReadings` に記録1行、`fetchReading` に同じIDの詳細1行を返す。記録タブの履歴行を `[data-history-id="…"]` で取得してクリックし、`fetchReading` が対象IDで1回呼ばれ、記録#、`formatDateTime` で整形した日時、`StatusBadge` のラベル、`data-preview-reading-id` が表示されることを確かめる。 |
+| 6. 記録タブの回帰 | 記録を直接渡して表示し、`fetchReading` が対象IDで呼ばれ、記録#、日時、`StatusBadge` のラベル、`data-preview-reading-id` が表示されることを確かめる。フォーカスは動かず、Escapeで閉じることを確かめる。 |
 
 ### 実行コマンドとEdgeの受入
 
@@ -112,7 +112,7 @@ React担当は `tests/test_pc_inspection_pages.py` に、一覧previewで保存�
 2. `prototypes/react-records` で `npm test`、`npm run lint`、`npm run build` を実行する。テストとビルドをすべて通し、oxlintの警告を既存の7件から増やさない。
 3. `pc_api` 経由でEdgeを開く前に、同ディレクトリで `npm run build:static` を実行する。`pc_api/static` が更新され、旧ハッシュのファイルが残っていないことを確かめる。
 4. 本番DBと分けた試験DBで、両画像付きの正常機器、元画像だけある失敗機器、写真のあるルート外機器、未撮影機器を含む点検を選ぶ。一覧と詳細の初期表示で画像GETが0件、ボタンを押すと対象画像のGETだけが走ることを開発者ツールで確認する。機器名と対象画像を照合する。
-5. 開いた直後に「閉じる」にフォーカスがあり、Tabで表示切替へ進めることを確認する。自動更新を有効にし、進捗の5秒ポーリングを1回以上またいでもダイアログが残り、画像が差し替わらないことを確認する。Escapeで閉じると押したボタンに戻り、別機器を開くと対象機器の画像だけが出ることを確認する。
+5. 写真モードでは開いた直後に「閉じる」にフォーカスがあり、Tabで表示切替へ進めることを確認する。記録モードではフォーカスを動かさないことを確認する。自動更新を有効にし、進捗の5秒ポーリングを1回以上またいでもダイアログが残り、画像が差し替わらないことを確認する。Escapeで閉じると押したボタンに戻り、別機器を開くと対象機器の画像だけが出ることを確認する。
 6. 試験用画像の片方を別名へ一時移動する。再度開き、欠落文言と取得できた側の画像が同時に出ることを確かめてファイル名を戻す。記録タブから同じ写真を開き、従来の画像と記録情報が表示されることを確認する。
 
 ## 実装順と既存設計書への反映

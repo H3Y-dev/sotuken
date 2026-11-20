@@ -109,8 +109,9 @@ class InspectionProgressAPITests(unittest.TestCase):
         for device in devices.values():
             self.assertNotIn('image_path', device)
             self.assertNotIn('overlay_path', device)
-            self.assertNotIn(str(self.images), json.dumps(device))
-            self.assertNotIn(str(self.overlays), json.dumps(device))
+            for path in (self.images / 'x.jpg', self.overlays / 'result.jpg'):
+                self.assertNotIn(path.name, json.dumps(device))
+                self.assertNotIn(str(path).replace('\\', '\\\\'), json.dumps(device))
 
     def test_missing_image_ids_are_explicit_null(self):
         route = save_route(self.storage, 'route', [{'id': 'D1', 'name': 'D1'}])

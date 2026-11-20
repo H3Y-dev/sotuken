@@ -138,8 +138,9 @@ class InspectionPagesAPITests(unittest.TestCase):
         for row in preview:
             self.assertNotIn('image_path', row)
             self.assertNotIn('overlay_path', row)
-            self.assertNotIn(str(self.images / 'x.jpg'), json.dumps(row))
-            self.assertNotIn(str(self.overlays / 'result.jpg'), json.dumps(row))
+            for path in (self.images / 'x.jpg', self.overlays / 'result.jpg'):
+                self.assertNotIn(path.name, json.dumps(row))
+                self.assertNotIn(str(path).replace('\\', '\\\\'), json.dumps(row))
 
     def test_manifest_only_and_readings_only_listed_and_sorted(self):
         # manifestのみ (2026-11-18T10:00:00+09:00)

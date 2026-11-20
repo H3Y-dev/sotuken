@@ -31,14 +31,16 @@ export function OverlayPreview(props: { reading: Reading; photo?: never; onClose
   const overlayImageId = props.photo?.overlayImageId ?? null;
   const [detail, setDetail] = useState<Reading | null>(props.reading ?? null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const initialReading = useRef(props.reading);
+  const initialReading = useRef<Reading | null>(props.reading ?? null);
   const [mode, setMode] = useState<ViewMode>("both");
   const [original, setOriginal] = useState<ImageSlot>(() => emptySlot(Boolean(props.reading?.image_id ?? imageId)));
   const [overlay, setOverlay] = useState<ImageSlot>(() => emptySlot(Boolean(props.reading?.overlay_image_id ?? overlayImageId)));
   const [detailError, setDetailError] = useState("");
   const [loadedAt, setLoadedAt] = useState<Record<string, string>>({});
 
-  useEffect(() => { closeRef.current?.focus(); }, []);
+  const photoMode = Boolean(props.photo);
+  useEffect(() => { if (photoMode) closeRef.current?.focus(); }, [photoMode]);
+  useEffect(() => { initialReading.current = props.reading ?? null; }, [props.reading]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
