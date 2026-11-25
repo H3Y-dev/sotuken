@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -20,13 +21,18 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import java.io.File
 import java.time.Instant
 import jp.sotuken.metercapture.inspection.Inspection
+import jp.sotuken.metercapture.inspection.RouteDevice
 import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueItem
 import jp.sotuken.metercapture.route.parseRouteJson
 import jp.sotuken.metercapture.ui.*
+import jp.sotuken.metercapture.ui.components.*
+import jp.sotuken.metercapture.ui.theme.GaugeColors
+import jp.sotuken.metercapture.ui.theme.gaugeNum
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InspectionCaptureScreen(
     inspection: Inspection,
@@ -72,25 +78,25 @@ fun InspectionCaptureScreen(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(if (saved == null) "点検中の撮影" else "撮影できました", style = MaterialTheme.typography.headlineSmall)
         Text(state.header, style = MaterialTheme.typography.titleMedium)
-        Text(state.progress)
+        Text(state.progress, style = MaterialTheme.typography.titleLarge.gaugeNum(), color = GaugeColors.Ink)
         if (saved == null && !saving) {
-            state.missingChips.forEach { device ->
-                OutlinedButton(onClick = {
-                    if (!shouldKeepQrTarget(target, device)) select(targetFromRoute(device))
-                }) { Text("未撮影：${device.name} ${device.id}") }
+            if (state.missingChips.isNotEmpty()) {
+                Text("未撮影 ${state.missingChips.size}台", style = MaterialTheme.typography.titleMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    state.missingChips.forEach { device -> MissingChip(device) { if (!shouldKeepQrTarget(target, device)) select(targetFromRoute(device)) } }
+                }
             }
             if (hasPermission) DeviceQrSection(null, { scanning = it }, { select(targetFromQr(it)) }, {})
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
+            GaugeCard(kind = null, modifier = Modifier.fillMaxWidth()) {
+                    Text("撮影する機器", style = MaterialTheme.typography.labelLarge, color = GaugeColors.Steel)
                     Text(state.targetName, style = MaterialTheme.typography.titleLarge)
-                    Text(state.targetId)
-                    Text("出所: ${state.targetSourceLabel}")
+                    Text(state.targetId, style = MaterialTheme.typography.bodyLarge.gaugeNum(), color = GaugeColors.Steel)
+                    Text("出所：${state.targetSourceLabel}", style = MaterialTheme.typography.bodyMedium, color = GaugeColors.Steel)
                     TextButton(onClick = { manual = true }) { Text("機器名・IDを手入力する") }
-                }
             }
             if (!hasPermission) {
                 Text("カメラの使用を許可してください")
-                Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) { Text("許可") }
+                GaugePrimaryButton("許可", onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) })
             } else if (!scanning) {
                 Column(Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     CameraCapturePanel(large = true, onError = { error = it }, onSaved = { captured ->
@@ -110,29 +116,39 @@ fun InspectionCaptureScreen(
                 }
             }
         }
-        if (saving) Text("保存中...")
+        if (saving) Text("保存中...", style = MaterialTheme.typography.bodyLarge, color = GaugeColors.Steel)
         state.justSaved?.let { card ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            GaugeCard(kind = GaugeKind.NEUTRAL, modifier = Modifier.fillMaxWidth()) {
                     Thumbnail(card.imagePath, Modifier.fillMaxWidth().height(160.dp))
+                    StatusBadge(GaugeKind.NEUTRAL, "端末に保存済み")
                     Text(card.deviceName ?: "機器名なし", style = MaterialTheme.typography.titleMedium)
-                    Text(card.deviceId ?: "機器IDなし")
+                    Text(card.deviceId ?: "機器IDなし", style = MaterialTheme.typography.bodyMedium.gaugeNum(), color = GaugeColors.Steel)
                     val savedAt = photos.firstOrNull { it.imagePath == card.imagePath }?.capturedAt ?: card.capturedAt
-                    Text("${formatInspectionCaptureTime(savedAt)} 撮影")
-                }
+                    Text("${formatInspectionCaptureTime(savedAt)} 撮影", style = MaterialTheme.typography.bodyMedium.gaugeNum(), color = GaugeColors.Steel)
             }
-            Button(onClick = {
+            GaugePrimaryButton("次の機器を撮る", onClick = {
                 select(targetAfterCapture(route, photos, target))
                 saved = null
-            }, enabled = photos.any { it.imagePath == card.imagePath }, modifier = Modifier.fillMaxWidth()) { Text("次の機器を撮る") }
+            }, enabled = photos.any { it.imagePath == card.imagePath }, modifier = Modifier.fillMaxWidth())
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Text(state.countLine, style = MaterialTheme.typography.titleMedium)
-        OutlinedButton(onClick = onHistory, enabled = !saving, modifier = Modifier.fillMaxWidth()) { Text(if (saved == null) "この点検の履歴を見る" else "履歴を確認する") }
-        OutlinedButton(onClick = onComplete, enabled = !saving, modifier = Modifier.fillMaxWidth()) { Text("点検完了へ") }
+        Text(state.countLine, style = MaterialTheme.typography.titleMedium.gaugeNum())
+        GaugeSecondaryButton(if (saved == null) "この点検の履歴を見る" else "履歴を確認する", onClick = onHistory, enabled = !saving, modifier = Modifier.fillMaxWidth())
+        GaugeSecondaryButton("点検完了へ", onClick = onComplete, enabled = !saving, modifier = Modifier.fillMaxWidth())
         TextButton(onClick = onHome, enabled = !saving) { Text("点検一覧") }
     }
     if (manual) ManualDeviceDialog(target, { manual = false }) { select(it); manual = false }
+}
+
+@Composable
+private fun MissingChip(device: RouteDevice, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = MaterialTheme.shapes.small, color = GaugeColors.Dial, contentColor = GaugeColors.Ink,
+        modifier = Modifier.heightIn(min = 48.dp).dashedOutline(GaugeColors.Ink, 2.dp, 4.dp)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            StatusShape(GaugeKind.MISSING, GaugeColors.Ink, Modifier.size(18.dp))
+            Text("${device.name}（${device.id}）", style = MaterialTheme.typography.labelLarge, color = GaugeColors.Ink)
+        }
+    }
 }
 
 @Composable

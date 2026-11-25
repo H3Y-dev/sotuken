@@ -2,10 +2,27 @@ package jp.sotuken.metercapture.ui.inspection
 
 import jp.sotuken.metercapture.inspection.*
 import jp.sotuken.metercapture.queue.SendState
+import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.ui.components.GaugeKind
+import jp.sotuken.metercapture.ui.sendStatusLabel
 import org.junit.Assert.*
 import org.junit.Test
 
 class HistoryUiStateTest {
+    @Test fun historyRowShowsSendStateWhileInProgress() {
+        val normal = photo().copy(inspectionId = displayInspection.inspectionId, receiverId = "new", sendState = SendState.PENDING)
+        val held = normal.copy(receiverId = "old")
+        for ((item, label, kind) in listOf(Triple(normal, "完了後に送信", GaugeKind.WAIT), Triple(held, "別のPC宛て（保留）", GaugeKind.WARN))) {
+            val row = buildHistoryUiState(displayInspection, null, listOf(item), "new").rows.single()
+            assertEquals(label, row.sendLabel)
+            assertEquals(kind, row.sendKind)
+            assertNull(row.reason)
+            assertEquals(label, sendStatusLabel(item, "new") { isPhotoDisplaySendable(it, InspectionState.IN_PROGRESS) })
+        }
+        val sent = normal.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_HTTP)
+        assertTrue(isPhotoDisplaySendable(sent, InspectionState.SENT))
+        assertEquals("PCに到着", sendStatusLabel(sent, "new") { isPhotoDisplaySendable(it, InspectionState.SENT) })
+    }
     @Test fun routeRowsMarkDoneAndCounts() {
         val state = buildHistoryUiState(displayInspection, displayRoute, listOf(photo(), photo("two")))
         assertEquals(listOf(RouteCheckRow(displayRoute[0], 2, true), RouteCheckRow(displayRoute[1], 0, false)), state.routeRows)

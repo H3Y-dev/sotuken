@@ -19,6 +19,7 @@ import java.io.File
 import java.time.Instant
 import jp.sotuken.metercapture.settings.ReceiverSettings
 import jp.sotuken.metercapture.ui.*
+import jp.sotuken.metercapture.ui.components.GaugeDangerTextButton
 import jp.sotuken.metercapture.ui.theme.GaugeTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -167,7 +168,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                     is AppScreen.Capture -> {
                         val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
                         if (inspection != null) {
-                            TextButton(onClick = { deleteInspection = inspection }, enabled = !busy) { Text("この点検を削除する") }
+                            GaugeDangerTextButton("この点検を削除する", onClick = { deleteInspection = inspection }, enabled = !busy)
                             val pendingTarget = if (pendingId == null && pendingName == null) null else CaptureTarget(pendingId, pendingName, pendingSource)
                             InspectionCaptureScreen(
                                 inspection, photos.filter { it.inspectionId == inspection.inspectionId }, health, pendingTarget,
@@ -182,7 +183,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                     is AppScreen.History -> {
                         val inspection = inspections.firstOrNull { it.inspection.inspectionId == screen.inspectionId }?.inspection
                         if (inspection != null) InspectionHistoryScreen(
-                            buildHistoryUiState(inspection, inspection.routeSnapshot?.let { parseRouteJson(it)?.devices }, photos.filter { it.inspectionId == inspection.inspectionId }),
+                            buildHistoryUiState(inspection, inspection.routeSnapshot?.let { parseRouteJson(it)?.devices }, photos.filter { it.inspectionId == inspection.inspectionId }, settings.getReceiverId()),
                             onPhotoClick = { selectedPhoto = it },
                             onRetake = { capture(inspection.inspectionId, targetFromPhoto(it)) },
                             onShootDevice = { capture(inspection.inspectionId, targetFromRoute(it)) },
@@ -321,7 +322,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
             onDismissRequest = { if (!busy) deleteInspection = null },
             title = { Text("この点検を削除しますか") },
             text = { Text("この点検と、点検に含まれる写真を削除します。") },
-            confirmButton = { TextButton(enabled = !busy, onClick = {
+            confirmButton = { GaugeDangerTextButton("削除する", enabled = !busy, onClick = {
                 busy = true
                 scope.launch {
                     try {
@@ -331,10 +332,10 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                     } catch (e: Exception) { operationError = "点検の削除に失敗しました: ${e.message}"
                     } finally { busy = false; deleteInspection = null }
                 }
-            }) { Text("削除する") } },
+            }) },
             dismissButton = { TextButton(enabled = !busy, onClick = { deleteInspection = null }) { Text("キャンセル") } },
         ) }
-        selectedPhoto?.let { FullImageDialog(it, { selectedPhoto = null }, settings.getReceiverId()) }
+        selectedPhoto?.let { FullImageDialog(it, { selectedPhoto = null }, settings.getReceiverId(), isSendable = { photo -> isPhotoDisplaySendable(photo, stateById[photo.inspectionId]) }) }
         operationError?.let { message -> AlertDialog(
             onDismissRequest = { operationError = null }, text = { Text(message) },
             confirmButton = { TextButton(onClick = { operationError = null }) { Text("閉じる") } },
