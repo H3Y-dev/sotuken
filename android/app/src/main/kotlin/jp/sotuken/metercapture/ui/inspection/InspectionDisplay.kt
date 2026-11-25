@@ -6,15 +6,18 @@ import jp.sotuken.metercapture.queue.sender.SenderPayloads
 import jp.sotuken.metercapture.route.parseRouteJson
 import jp.sotuken.metercapture.ui.countUndelivered
 import jp.sotuken.metercapture.ui.components.GaugeKind
+import jp.sotuken.metercapture.ui.components.BadgeSpec
+import jp.sotuken.metercapture.ui.components.edgeKindOf
 import jp.sotuken.metercapture.ui.sendStatusKind
 import jp.sotuken.metercapture.ui.sendStatusLabel
 import jp.sotuken.metercapture.ui.undeliveredReason
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.serialization.json.*
 
-data class HomeCard(val inspectionId: String, val title: String, val stateLabel: String, val subtitle: String, val progress: String?, val action: String, val target: AppScreen)
+data class HomeCard(val inspectionId: String, val title: String, val stateLabel: String, val subtitle: String, val progress: String?, val action: String, val target: AppScreen, val kind: GaugeKind = GaugeKind.WAIT, val badges: List<BadgeSpec> = emptyList(), val edgeKind: GaugeKind = GaugeKind.WAIT, val startedLabel: String = "")
 data class HomeUiState(val inProgress: List<HomeCard>, val waiting: List<HomeCard>, val sent: List<HomeCard>, val legacyUndelivered: String?)
 
 data class SavedCard(val imagePath: String, val deviceName: String?, val deviceId: String?, val capturedAt: String)
@@ -107,6 +110,25 @@ fun inspectionStateLabel(state: InspectionState, undeliveredCount: Int = 0): Str
     InspectionState.SENT_INCOMPLETE -> "未着あり ${undeliveredCount}枚"
 }
 
+fun inspectionBadge(state: InspectionState, summary: InspectionSummary, undelivered: Int): BadgeSpec = when (state) {
+    InspectionState.IN_PROGRESS -> BadgeSpec(GaugeKind.WAIT, "作業中")
+    InspectionState.WAITING -> BadgeSpec(GaugeKind.WAIT, "送信待ち")
+    InspectionState.SENDING -> BadgeSpec(GaugeKind.WAIT, "送信中")
+    InspectionState.SENT_INCOMPLETE -> BadgeSpec(GaugeKind.WARN, "未着あり ${undelivered}枚")
+    InspectionState.SENT -> if (summary.missing.isEmpty() && summary.duplicates.isEmpty() && summary.unidentifiedCount == 0) BadgeSpec(GaugeKind.OK, "送信済み") else BadgeSpec(GaugeKind.NEUTRAL, "送信済み（要確認あり）")
+}
+
+fun extraBadges(state: InspectionState, summary: InspectionSummary): List<BadgeSpec> =
+    if (state == InspectionState.IN_PROGRESS) emptyList() else buildList {
+        if (summary.missing.isNotEmpty()) add(BadgeSpec(GaugeKind.MISSING, "未撮影 ${summary.missing.size}台"))
+        if (summary.duplicates.isNotEmpty()) add(BadgeSpec(GaugeKind.WARN, "重複 ${summary.duplicates.size}台"))
+        if (summary.unidentifiedCount > 0) add(BadgeSpec(GaugeKind.WARN, "機器IDなし ${summary.unidentifiedCount}枚"))
+        if (summary.extra.isNotEmpty()) add(BadgeSpec(GaugeKind.NEUTRAL, "ルート外 ${summary.extra.size}台"))
+    }
+
+fun formatStartedLabel(startedAt: String, zone: ZoneId = ZoneId.systemDefault()): String =
+    runCatching { DateTimeFormatter.ofPattern("M/d(E) HH:mm", Locale.JAPAN).withZone(zone).format(Instant.parse(startedAt)) }.getOrDefault(startedAt)
+
 internal fun inspectionUndelivered(inspection: Inspection, photos: List<QueueItem>): Int {
     val failed = photos.filter { it.sendState == SendState.FAILED }.map { SenderPayloads.buildImageFileName(it) }
     val missing = inspection.pcMissingFileNames?.let { json -> runCatching { Json.parseToJsonElement(json).jsonArray.map { it.jsonPrimitive.content } }.getOrNull() }.orEmpty()
@@ -121,6 +143,8 @@ fun buildHomeUiState(items: List<InspectionListItem>, legacyItems: List<QueueIte
         val count = item.counts?.photoCount ?: summary.photoCount
         val devices = item.counts?.deviceCount ?: summary.deviceCount
         val undelivered = inspectionUndelivered(inspection, photos)
+        val badge = inspectionBadge(inspection.state, summary, undelivered)
+        val extras = extraBadges(inspection.state, summary)
         val subtitle = when (inspection.state) {
             InspectionState.IN_PROGRESS -> listOfNotNull(inspection.operatorName, inspection.place).joinToString(" ・ ").let { "${if (it.isEmpty()) "" else "$it "}写真${count}枚 ・ ${devices}台" }
             InspectionState.WAITING -> "写真${count}枚 ・ 接続確認後に自動送信"
@@ -128,10 +152,11 @@ fun buildHomeUiState(items: List<InspectionListItem>, legacyItems: List<QueueIte
             InspectionState.SENT -> "写真${count}枚 ・ すべてPCに到着"
             InspectionState.SENT_INCOMPLETE -> "写真${count}枚 ・ 未着 ${undelivered}枚"
         }
-        HomeCard(inspection.inspectionId, inspection.name, inspectionStateLabel(inspection.state, undelivered), subtitle,
+        HomeCard(inspection.inspectionId, inspection.name, badge.label, subtitle,
             if (inspection.state == InspectionState.IN_PROGRESS && summary.routeDeviceCount != null) "撮影 ${summary.shotRouteDeviceCount}/${summary.routeDeviceCount}台" else null,
             when (inspection.state) { InspectionState.IN_PROGRESS -> "点検を続ける"; InspectionState.WAITING, InspectionState.SENDING -> "状態を見る"; else -> "送信結果を見る" },
-            if (inspection.state == InspectionState.IN_PROGRESS) AppScreen.Capture(inspection.inspectionId) else AppScreen.SendStatus(inspection.inspectionId))
+            if (inspection.state == InspectionState.IN_PROGRESS) AppScreen.Capture(inspection.inspectionId) else AppScreen.SendStatus(inspection.inspectionId),
+            badge.kind, extras, edgeKindOf(listOf(badge.kind) + extras.map { it.kind }), formatStartedLabel(inspection.startedAt))
     }
     val inProgressIds = items.filter { it.inspection.state == InspectionState.IN_PROGRESS }.map { it.inspection.inspectionId }.toSet()
     val waitingIds = items.filter { it.inspection.state in SENDABLE_INSPECTION_STATES }.map { it.inspection.inspectionId }.toSet()

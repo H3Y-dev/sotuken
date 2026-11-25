@@ -8,6 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import jp.sotuken.metercapture.route.*
+import jp.sotuken.metercapture.ui.components.*
+import jp.sotuken.metercapture.ui.theme.GaugeColors
+import jp.sotuken.metercapture.ui.theme.gaugeNum
 
 data class SavedRouteRow(val routeId: String, val name: String, val detail: String)
 data class RouteListUiState(val saved: List<SavedRouteRow>, val remote: List<RouteSummary>?, val loading: Boolean, val error: String?, val confirm: RouteDoc?)
@@ -20,23 +23,22 @@ fun buildRouteListUiState(saved: List<SavedRoute>, remote: List<RouteSummary>?, 
 fun RouteListScreen(state: RouteListUiState, onFetchList: () -> Unit, onPick: (String) -> Unit, onScanQr: () -> Unit, onDelete: (String) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("保存済みのルート", style = MaterialTheme.typography.titleLarge)
-        if (state.saved.isEmpty()) Text("保存済みのルートはありません")
+        if (state.saved.isEmpty()) Text("保存済みのルートはありません", style = MaterialTheme.typography.bodyMedium, color = GaugeColors.Steel)
         state.saved.forEach { row ->
-            OutlinedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
+            GaugeCard(kind = null, modifier = Modifier.fillMaxWidth()) {
                     Text(row.name, style = MaterialTheme.typography.titleMedium)
-                    Text(row.detail)
-                    TextButton(onClick = { onDelete(row.routeId) }, enabled = !state.loading) { Text("削除") }
-                }
+                    Text(row.detail, style = MaterialTheme.typography.bodyMedium.gaugeNum(), color = GaugeColors.Steel)
+                    GaugeDangerTextButton("削除", onClick = { onDelete(row.routeId) }, enabled = !state.loading)
             }
         }
-        Button(onClick = onFetchList, enabled = !state.loading) { Text("PCから取得") }
-        OutlinedButton(onClick = onScanQr, enabled = !state.loading) { Text("ルートのQRを読む") }
-        if (state.loading) Text("読み込み中...")
+        GaugePrimaryButton("PCから取得", onClick = onFetchList, modifier = Modifier.fillMaxWidth(), enabled = !state.loading)
+        GaugeSecondaryButton("ルートのQRを読む", onClick = onScanQr, modifier = Modifier.fillMaxWidth(), enabled = !state.loading)
+        if (state.loading) Text("読み込み中...", style = MaterialTheme.typography.bodyMedium, color = GaugeColors.Steel)
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.remote?.forEach { row ->
-            OutlinedCard(onClick = { onPick(row.routeId) }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) { Text(row.name); Text("${row.count}台 ・ ${row.updatedAt}") }
+            GaugeCard(kind = null, onClick = { onPick(row.routeId) }, enabled = !state.loading, modifier = Modifier.fillMaxWidth()) {
+                Text(row.name, style = MaterialTheme.typography.titleMedium)
+                Text("${row.count}台 ・ ${row.updatedAt}", style = MaterialTheme.typography.bodyMedium.gaugeNum(), color = GaugeColors.Steel)
             }
         }
         TextButton(onClick = onBack) { Text("戻る") }
