@@ -21,6 +21,7 @@ import jp.sotuken.metercapture.settings.ReceiverSettings
 import jp.sotuken.metercapture.ui.*
 import jp.sotuken.metercapture.ui.components.GaugeDangerTextButton
 import jp.sotuken.metercapture.ui.theme.GaugeTheme
+import jp.sotuken.metercapture.ui.theme.gaugeNum
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -126,7 +127,10 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                 health = health,
                 barUndelivered = barUndelivered,
                 barHasOutbox = barHasOutbox,
-                onBarClick = { showStatus = true; health.check(force = true) },
+                onBarClick = {
+                    if (!health.configured) showSettings = true
+                    else { showStatus = true; health.check(force = true) }
+                },
                 onHome = if (screen == AppScreen.Home) null else ({ home() }),
             ) {
                 when (screen) {
@@ -175,6 +179,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                                 onSaved = { file, meta -> withContext(Dispatchers.IO) { inspectionStore.addPhoto(inspection.inspectionId, file, meta) }; Unit },
                                 onHistory = { history(inspection.inspectionId) }, onComplete = { open(AppScreen.Complete(inspection.inspectionId)) }, onHome = { home() },
                                 allPhotos = photos,
+                                onPhotoClick = { selectedPhoto = it },
                             )
                             LaunchedEffect(pendingTarget) {
                                 if (pendingTarget != null) { pendingId = null; pendingName = null; pendingSource = null }
@@ -258,22 +263,25 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                                 } catch (e: Exception) { operationError = "送信先の変更に失敗しました: ${e.message}" }
                             } },
                             onGuide = { open(AppScreen.ConnectionGuide) }, onHome = { home() },
+                            onPhotoClick = { selectedPhoto = it },
                         )
                     }
                     AppScreen.Routes -> RouteListScreen(
                         buildRouteListUiState(savedRoutes, remoteRoutes, routeLoading, routeError, confirmRoute),
                         onFetchList = { routeOperation {
-                            if (!settings.isConfigured()) error("PCに接続できません")
-                            val token = settings.getToken().orEmpty()
-                            val candidates = listOfNotNull(settings.getUrl())
+                            val target = settings.sendTarget()
+                            if (!target.isConfigured()) error("PCに接続できません")
+                            val token = target.token.orEmpty()
+                            val candidates = target.candidateUrls
                             val reachable = pickReachableUrl(candidates) { HttpSender.health(it, token) }
                             // /health の失敗でも /routes を読み、401・404の案内を区別する。
                             remoteRoutes = RouteClient(reachable.url ?: candidates.first(), token).listRoutes().getOrThrow()
                         } },
                         onPick = { id -> routeOperation {
-                            if (!settings.isConfigured()) error("PCに接続できません")
-                            val token = settings.getToken().orEmpty()
-                            val candidates = listOfNotNull(settings.getUrl())
+                            val target = settings.sendTarget()
+                            if (!target.isConfigured()) error("PCに接続できません")
+                            val token = target.token.orEmpty()
+                            val candidates = target.candidateUrls
                             val reachable = pickReachableUrl(candidates) { HttpSender.health(it, token) }
                             confirmRoute = RouteClient(reachable.url ?: candidates.first(), token).fetchRoute(id).getOrThrow()
                             routeSource = "wifi"
@@ -342,13 +350,21 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
             confirmButton = { TextButton(onClick = { operationError = null }) { Text("閉じる") } },
         ) }
         if (showPairing) PairingScreen(pendingCount = countUndelivered(photos), onClose = { showPairing = false; health.onSettingsChanged() })
-        if (showStatus) AlertDialog(
-            onDismissRequest = { showStatus = false }, title = { Text("接続の状態") },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(connectionBarTextWithNetwork(health.network, connectionBarState(health.configured, health.healthOk), barUndelivered, "", health.reason, hasOutbox = barHasOutbox))
-                TextButton(onClick = { showStatus = false; showSettings = true }) { Text("送信先の設定") }
-            } },
-            confirmButton = { TextButton(onClick = { showStatus = false }) { Text("閉じる") } },
-        )
+        if (showStatus) {
+            val barState = connectionBarState(health.configured, health.healthOk)
+            val detail = buildConnectionDetail(barState, health.reason, settings.getUrl(), photos, barUndelivered)
+            AlertDialog(
+                onDismissRequest = { showStatus = false }, title = { Text("接続の詳細") },
+                text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(detail.resultLine)
+                    Text(detail.urlLine, style = MaterialTheme.typography.bodyLarge.gaugeNum())
+                    Text(detail.lastSentLine, style = MaterialTheme.typography.bodyLarge.gaugeNum())
+                    Text(detail.undeliveredLine, style = MaterialTheme.typography.bodyLarge.gaugeNum())
+                    Text(detail.lastFailureLine)
+                    TextButton(onClick = { showStatus = false; showSettings = true }) { Text("送信先の設定") }
+                } },
+                confirmButton = { TextButton(onClick = { showStatus = false }) { Text("閉じる") } },
+            )
+        }
     }
 }

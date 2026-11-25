@@ -21,10 +21,11 @@ class ConnectionStatusTest {
         via: String? = null,
         sentAt: String? = null,
         lastError: String? = null,
+        capturedAt: String = "2026-11-05T00:00:00Z",
     ): QueueItem = QueueItem(
         localId = id,
         imagePath = "/tmp/$id.jpg",
-        capturedAt = "2026-11-05T00:00:00Z",
+        capturedAt = capturedAt,
         deviceName = null,
         operatorValue = null,
         operatorNote = null,
@@ -34,6 +35,36 @@ class ConnectionStatusTest {
         sentAt = sentAt,
         sentVia = via,
     )
+
+    @Test
+    fun buildConnectionDetailFormatsAllFieldsAndNormalizesFailure() {
+        val items = listOf(
+            item("sent", SendState.SENT, via = QueueItem.VIA_HTTP, sentAt = "2026-11-05T03:00:00Z"),
+            item("failed", SendState.FAILED, lastError = "PC未接続: Health check failed with HTTP 401: x", capturedAt = "2026-11-05T02:00:00Z"),
+        )
+        val detail = buildConnectionDetail(ConnectionBarState.CONNECTED, "", "http://192.168.1.20:8765", items, 2, tokyo)
+        assertEquals("接続の結果：接続中", detail.resultLine)
+        assertEquals("PCのURL：http://192.168.1.20:8765", detail.urlLine)
+        assertEquals("最終送信：12:00", detail.lastSentLine)
+        assertEquals("未着：2枚", detail.undeliveredLine)
+        assertEquals("直近の失敗理由：合言葉が違います", detail.lastFailureLine)
+        val empty = buildConnectionDetail(ConnectionBarState.NOT_CONFIGURED, "", null, emptyList(), 0, tokyo)
+        assertEquals("接続の結果：未設定", empty.resultLine)
+        assertEquals("PCのURL：未設定", empty.urlLine)
+        assertEquals("最終送信：なし", empty.lastSentLine)
+        assertEquals("未着：0枚", empty.undeliveredLine)
+        assertEquals("直近の失敗理由：なし", empty.lastFailureLine)
+    }
+
+    @Test
+    fun buildConnectionDetailPicksLatestFailureByInstantAndHandlesBrokenTime() {
+        val old = item("old", SendState.FAILED, lastError = "PC未接続: 接続できません", capturedAt = "2026-11-05T01:00:00Z")
+        val broken = item("broken", SendState.FAILED, lastError = "HTTP失敗: HTTP 400: bad", capturedAt = "zzz-broken")
+        val latest = item("latest", SendState.FAILED, lastError = "PC未接続: Health check failed with HTTP 401: x", capturedAt = "2026-11-05T02:00:00Z")
+        assertEquals("直近の失敗理由：合言葉が違います", buildConnectionDetail(ConnectionBarState.CONNECTED, "", null, listOf(old, broken, latest), 3, tokyo).lastFailureLine)
+        val onlyBroken = item("only", SendState.FAILED, lastError = "PC未接続: 接続できません", capturedAt = "broken")
+        assertEquals("直近の失敗理由：接続できません", buildConnectionDetail(ConnectionBarState.CONNECTED, "", null, listOf(onlyBroken), 1, tokyo).lastFailureLine)
+    }
 
     @Test
     fun connectionErrorsAreClassifiedAsCannotConnect() {
