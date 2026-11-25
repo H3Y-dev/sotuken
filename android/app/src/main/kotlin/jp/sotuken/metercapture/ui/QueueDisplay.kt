@@ -3,6 +3,17 @@ package jp.sotuken.metercapture.ui
 import jp.sotuken.metercapture.queue.QueueItem
 import jp.sotuken.metercapture.queue.SendState
 import jp.sotuken.metercapture.queue.isHeldFor
+import jp.sotuken.metercapture.ui.components.GaugeKind
+
+internal fun sendStatusKind(item: QueueItem, currentReceiverId: String? = null, isSendable: (QueueItem) -> Boolean = { true }): GaugeKind = when {
+    item.isHeldFor(currentReceiverId) -> GaugeKind.WARN
+    !isSendable(item) -> GaugeKind.WAIT
+    else -> when (item.sendState) {
+        SendState.PENDING, SendState.SENDING -> GaugeKind.WAIT
+        SendState.SENT -> if (item.sentVia == QueueItem.VIA_FOLDER) GaugeKind.WAIT else GaugeKind.OK
+        SendState.FAILED -> GaugeKind.FAIL
+    }
+}
 
 /** 履歴画面に出す送信状態の文言。端末（folder）への保存は PC に未着として区別する。点検作業中の写真は意図的に保留。 */
 internal fun sendStatusLabel(

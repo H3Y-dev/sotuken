@@ -2,6 +2,7 @@ package jp.sotuken.metercapture.ui
 
 import jp.sotuken.metercapture.queue.QueueItem
 import jp.sotuken.metercapture.queue.SendState
+import jp.sotuken.metercapture.ui.components.GaugeKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -9,6 +10,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QueueDisplayTest {
+    @Test fun sendStatusKindFollowsLabelOrder() {
+        val held = item(SendState.PENDING).copy(receiverId = "old")
+        assertEquals("別のPC宛て（保留）", sendStatusLabel(held, "new") { false })
+        assertEquals(GaugeKind.WARN, sendStatusKind(held, "new") { false })
+        assertEquals(GaugeKind.WAIT, sendStatusKind(item(SendState.PENDING), isSendable = { false }))
+        assertEquals(GaugeKind.WAIT, sendStatusKind(item(SendState.PENDING)))
+        assertEquals(GaugeKind.WAIT, sendStatusKind(item(SendState.SENDING)))
+        assertEquals(GaugeKind.WAIT, sendStatusKind(item(SendState.SENT, QueueItem.VIA_FOLDER)))
+        assertEquals(GaugeKind.OK, sendStatusKind(item(SendState.SENT, QueueItem.VIA_HTTP)))
+        assertEquals(GaugeKind.OK, sendStatusKind(item(SendState.SENT, QueueItem.VIA_USB)))
+        assertEquals(GaugeKind.OK, sendStatusKind(item(SendState.SENT)))
+        assertEquals(GaugeKind.FAIL, sendStatusKind(item(SendState.FAILED)))
+    }
     @Test
     fun deleteAvailabilityAndConfirmationFollowState() {
         val unsent = "この写真を削除します。まだPCに未着のため、削除するとPCには送られません。"

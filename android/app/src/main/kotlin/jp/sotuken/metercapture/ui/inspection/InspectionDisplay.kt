@@ -5,6 +5,10 @@ import jp.sotuken.metercapture.queue.*
 import jp.sotuken.metercapture.queue.sender.SenderPayloads
 import jp.sotuken.metercapture.route.parseRouteJson
 import jp.sotuken.metercapture.ui.countUndelivered
+import jp.sotuken.metercapture.ui.components.GaugeKind
+import jp.sotuken.metercapture.ui.sendStatusKind
+import jp.sotuken.metercapture.ui.sendStatusLabel
+import jp.sotuken.metercapture.ui.undeliveredReason
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -16,7 +20,7 @@ data class HomeUiState(val inProgress: List<HomeCard>, val waiting: List<HomeCar
 data class SavedCard(val imagePath: String, val deviceName: String?, val deviceId: String?, val capturedAt: String)
 data class CaptureUiState(val header: String, val progress: String, val missingChips: List<RouteDevice>, val targetName: String, val targetId: String, val countLine: String, val justSaved: SavedCard?, val targetSourceLabel: String)
 data class RouteCheckRow(val device: RouteDevice, val count: Int, val done: Boolean)
-data class HistoryRow(val item: QueueItem, val title: String, val idLine: String, val timeLine: String, val sourceLabel: String, val canEdit: Boolean)
+data class HistoryRow(val item: QueueItem, val title: String, val idLine: String, val timeLine: String, val sourceLabel: String, val canEdit: Boolean, val sendLabel: String = "", val sendKind: GaugeKind = GaugeKind.WAIT, val reason: String? = null)
 data class HistoryUiState(val header: String, val photoCount: Int, val deviceLine: String, val routeRows: List<RouteCheckRow>?, val rows: List<HistoryRow>, val notices: List<String>, val noRouteNote: String?)
 data class CompleteUiState(val title: String, val photoCount: Int, val deviceCount: Int, val warnings: List<String>, val canComplete: Boolean, val completeLabel: String, val blockReason: String?)
 
@@ -53,8 +57,12 @@ fun deviceSourceLabel(item: QueueItem, routeIds: Set<String>): String = when {
     else -> "手入力"
 }
 
-fun buildHistoryUiState(inspection: Inspection, routeDevices: List<RouteDevice>?, photos: List<QueueItem>): HistoryUiState {
+internal fun isPhotoDisplaySendable(item: QueueItem, inspectionState: InspectionState?): Boolean =
+    item.inspectionId == null || inspectionState != InspectionState.IN_PROGRESS
+
+fun buildHistoryUiState(inspection: Inspection, routeDevices: List<RouteDevice>?, photos: List<QueueItem>, currentReceiverId: String? = null): HistoryUiState {
     val summary = summarizeInspection(photos, routeDevices)
+    val sendable: (QueueItem) -> Boolean = { isPhotoDisplaySendable(it, inspection.state) }
     val routeIds = routeDevices?.map { it.id }?.toSet().orEmpty()
     return HistoryUiState(
         inspection.name, photos.size,
@@ -66,7 +74,8 @@ fun buildHistoryUiState(inspection: Inspection, routeDevices: List<RouteDevice>?
         photos.sortedByDescending { runCatching { Instant.parse(it.capturedAt) }.getOrDefault(Instant.EPOCH) }.map {
             HistoryRow(it, it.deviceName?.takeIf(String::isNotBlank) ?: "機器名なし", it.deviceId ?: "機器IDなし",
                 "${formatInspectionCaptureTime(it.capturedAt)} 撮影", deviceSourceLabel(it, routeIds),
-                inspection.state == InspectionState.IN_PROGRESS && it.sendState != SendState.SENDING)
+                inspection.state == InspectionState.IN_PROGRESS && it.sendState != SendState.SENDING,
+                sendStatusLabel(it, currentReceiverId, sendable), sendStatusKind(it, currentReceiverId, sendable), undeliveredReason(it))
         },
         summary.duplicates.map { "${it.deviceId ?: it.deviceName}は${it.count}枚あります。撮り直しの写真か確認してください。" },
         if (routeDevices == null) "ルートがないため、未撮影の機器は判定できません" else null,
