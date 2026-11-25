@@ -86,7 +86,7 @@ fun buildSendStatusUiState(inspection: Inspection, photos: List<QueueItem>, heal
 }
 
 @Composable
-fun InspectionSendStatusScreen(state: SendStatusUiState, onSendNow: () -> Unit, onRetryUndelivered: () -> Unit, onReassign: (String) -> Unit, onGuide: () -> Unit, onHome: () -> Unit) {
+fun InspectionSendStatusScreen(state: SendStatusUiState, onSendNow: () -> Unit, onRetryUndelivered: () -> Unit, onReassign: (String) -> Unit, onGuide: () -> Unit, onHome: () -> Unit, onPhotoClick: (QueueItem) -> Unit = {}) {
     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -99,7 +99,7 @@ fun InspectionSendStatusScreen(state: SendStatusUiState, onSendNow: () -> Unit, 
             }
         }
         items(state.rows, key = { it.item.localId }) { row ->
-            GaugeCard(kind = row.kind, modifier = Modifier.fillMaxWidth()) {
+            GaugeCard(kind = row.kind, modifier = Modifier.fillMaxWidth(), onClick = { onPhotoClick(row.item) }) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Thumbnail(row.item.imagePath, Modifier.size(76.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

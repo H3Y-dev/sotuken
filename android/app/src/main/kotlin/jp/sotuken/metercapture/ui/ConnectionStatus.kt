@@ -95,3 +95,25 @@ fun connectionResultLabel(state: ConnectionBarState, reason: String): String = w
     ConnectionBarState.CONNECTED -> "接続中"
     ConnectionBarState.UNREACHABLE -> "つながりません（$reason）"
 }
+
+data class ConnectionDetail(
+    val resultLine: String,
+    val urlLine: String,
+    val lastSentLine: String,
+    val undeliveredLine: String,
+    val lastFailureLine: String,
+)
+
+fun buildConnectionDetail(state: ConnectionBarState, reason: String, url: String?, items: List<QueueItem>, undelivered: Int, zone: ZoneId = ZoneId.systemDefault()): ConnectionDetail {
+    val lastSent = formatHHmm(latestHttpSentAt(items), zone)
+    val rawFailure = items.filter { !it.lastError.isNullOrBlank() }
+        .maxByOrNull { runCatching { Instant.parse(it.capturedAt) }.getOrDefault(Instant.EPOCH) }?.lastError
+    val failureLabel = reasonFromLastError(rawFailure) ?: "なし"
+    return ConnectionDetail(
+        resultLine = "接続の結果：${connectionResultLabel(state, reason)}",
+        urlLine = "PCのURL：${url?.takeIf { it.isNotBlank() } ?: "未設定"}",
+        lastSentLine = "最終送信：$lastSent",
+        undeliveredLine = "未着：${undelivered}枚",
+        lastFailureLine = "直近の失敗理由：$failureLabel",
+    )
+}

@@ -48,6 +48,7 @@ fun InspectionCaptureScreen(
     onComplete: () -> Unit,
     onHome: () -> Unit,
     allPhotos: List<QueueItem> = photos,
+    onPhotoClick: (QueueItem) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -157,12 +158,13 @@ fun InspectionCaptureScreen(
         }
         if (saving) Text("保存中...", style = MaterialTheme.typography.bodyLarge, color = GaugeColors.Steel)
         state.justSaved?.let { card ->
-            GaugeCard(kind = GaugeKind.NEUTRAL, modifier = Modifier.fillMaxWidth()) {
+            val savedItem = photos.firstOrNull { it.imagePath == card.imagePath }
+            GaugeCard(kind = GaugeKind.NEUTRAL, modifier = Modifier.fillMaxWidth(), onClick = savedItem?.let { item -> { onPhotoClick(item) } }) {
                     Thumbnail(card.imagePath, Modifier.fillMaxWidth().height(160.dp))
                     StatusBadge(GaugeKind.NEUTRAL, "端末に保存済み")
                     Text(card.deviceName ?: "機器名なし", style = MaterialTheme.typography.titleMedium)
                     Text(card.deviceId ?: "機器IDなし", style = MaterialTheme.typography.bodyMedium.gaugeNum(), color = GaugeColors.Steel)
-                    val savedAt = photos.firstOrNull { it.imagePath == card.imagePath }?.capturedAt ?: card.capturedAt
+                    val savedAt = savedItem?.capturedAt ?: card.capturedAt
                     Text("${formatInspectionCaptureTime(savedAt)} 撮影", style = MaterialTheme.typography.bodyMedium.gaugeNum(), color = GaugeColors.Steel)
             }
             GaugePrimaryButton("次の機器を撮る", onClick = {

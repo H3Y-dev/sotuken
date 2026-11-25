@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +24,8 @@ import jp.sotuken.metercapture.device.DeviceQr
 import jp.sotuken.metercapture.device.HeldDevice
 import jp.sotuken.metercapture.device.label
 import jp.sotuken.metercapture.device.parseDeviceQr
+import jp.sotuken.metercapture.ui.components.GaugePrimaryButton
+import jp.sotuken.metercapture.ui.components.GaugeSecondaryButton
 
 internal const val NOT_DEVICE_QR_MESSAGE = "機器のQRではありません"
 
@@ -56,7 +56,7 @@ internal fun DeviceQrSection(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedButton(onClick = { error = null; setScanning(true) }) { Text("機器QRを読む") }
+        GaugeSecondaryButton("機器QRを読む", onClick = { error = null; setScanning(true) })
         if (held != null) {
             Text(held.label(), style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = onClear) { Text("解除") }
@@ -113,7 +113,7 @@ internal fun DeviceQrSection(
                 }
             },
             confirmButton = {
-                Button(onClick = { onUse(qr); scanned = null }) { Text("使う") }
+                GaugePrimaryButton("使う", onClick = { onUse(qr); scanned = null })
             },
             dismissButton = {
                 TextButton(onClick = { scanned = null }) { Text("キャンセル") }
