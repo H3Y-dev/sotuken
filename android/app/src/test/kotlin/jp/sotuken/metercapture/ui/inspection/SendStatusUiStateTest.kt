@@ -4,10 +4,40 @@ import jp.sotuken.metercapture.inspection.*
 import jp.sotuken.metercapture.queue.*
 import jp.sotuken.metercapture.queue.sender.SenderPayloads
 import jp.sotuken.metercapture.ui.NetworkSnapshot
+import jp.sotuken.metercapture.ui.components.GaugeKind
 import org.junit.Assert.*
 import org.junit.Test
 
 class SendStatusUiStateTest {
+    @Test fun incompleteBadgeAndMissingRowAreWarn() {
+        val sent = photo.copy(deviceId = "A-1", sendState = SendState.SENT, sentVia = QueueItem.VIA_HTTP)
+        val missing = build(inspection.copy(state = InspectionState.SENT_INCOMPLETE, pcMissingFileNames = "[\"${SenderPayloads.buildImageFileName(sent)}\"]"), listOf(sent))
+        assertEquals(GaugeKind.WARN, missing.badgeKind)
+        assertEquals("未着あり 1枚", missing.badge)
+        assertEquals(GaugeKind.WARN, missing.rows.single().kind)
+        assertEquals("PCに未着", missing.rows.single().status)
+        assertEquals("PCで写真が見つかりません", missing.rows.single().reason)
+        val complete = build(inspection.copy(state = InspectionState.SENT), listOf(sent))
+        assertEquals(GaugeKind.OK, complete.badgeKind)
+        assertEquals("送信済み", complete.badge)
+        assertEquals(GaugeKind.OK, complete.rows.single().kind)
+        assertNull(complete.rows.single().reason)
+    }
+
+    @Test fun pendingOmitsReasonWhileFailedAndOutboxShowReason() {
+        val pending = build(photos = listOf(photo.copy(lastError = "PC未接続: 接続できません"))).rows.single()
+        assertEquals(GaugeKind.WAIT, pending.kind)
+        assertEquals("未送信", pending.status)
+        assertNull(pending.reason)
+        val outbox = build(photos = listOf(photo.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_FOLDER, lastError = "PC未接続: 接続できません"))).rows.single()
+        assertEquals(GaugeKind.WAIT, outbox.kind)
+        assertEquals("PCに未着（端末に保存済み）", outbox.status)
+        assertEquals("接続できません", outbox.reason)
+        val failed = build(inspection.copy(state = InspectionState.SENT_INCOMPLETE), listOf(photo.copy(sendState = SendState.FAILED, lastError = "HTTP失敗: HTTP 409: conflict"))).rows.single()
+        assertEquals(GaugeKind.FAIL, failed.kind)
+        assertEquals("送信失敗", failed.status)
+        assertEquals("PCが写真を受け付けませんでした", failed.reason)
+    }
     @Test fun usbArrivalCountsInPhotoProgressAndManifestRetry() {
         val arrived = photo.copy(sendState = SendState.SENT, sentVia = QueueItem.VIA_USB)
         val state = build(inspection.copy(manifestError = "offline"), listOf(arrived))
