@@ -174,6 +174,7 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                                 inspection, photos.filter { it.inspectionId == inspection.inspectionId }, health, pendingTarget,
                                 onSaved = { file, meta -> withContext(Dispatchers.IO) { inspectionStore.addPhoto(inspection.inspectionId, file, meta) }; Unit },
                                 onHistory = { history(inspection.inspectionId) }, onComplete = { open(AppScreen.Complete(inspection.inspectionId)) }, onHome = { home() },
+                                allPhotos = photos,
                             )
                             LaunchedEffect(pendingTarget) {
                                 if (pendingTarget != null) { pendingId = null; pendingName = null; pendingSource = null }

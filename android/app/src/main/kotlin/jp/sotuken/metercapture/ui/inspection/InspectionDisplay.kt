@@ -10,6 +10,7 @@ import jp.sotuken.metercapture.ui.sendStatusKind
 import jp.sotuken.metercapture.ui.sendStatusLabel
 import jp.sotuken.metercapture.ui.undeliveredReason
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.json.*
@@ -138,4 +139,37 @@ fun buildHomeUiState(items: List<InspectionListItem>, legacyItems: List<QueueIte
     val sentIds = items.filter { it.inspection.state == InspectionState.SENT || it.inspection.state == InspectionState.SENT_INCOMPLETE }.map { it.inspection.inspectionId }.toSet()
     val legacy = countUndelivered(legacyItems.filter { it.inspectionId == null })
     return HomeUiState(cards.filter { it.inspectionId in inProgressIds }, cards.filter { it.inspectionId in waitingIds }, cards.filter { it.inspectionId in sentIds }, if (legacy > 0) "点検なしの写真 未着 ${legacy}枚" else null)
+}
+
+/** 指定した日付（端末タイムゾーン）に撮影されたキュー項目数を返す。読めない日時は数えない。 */
+fun countTodayPhotos(
+    items: List<QueueItem>,
+    today: LocalDate,
+    zone: ZoneId = ZoneId.systemDefault(),
+): Int = items.count { item ->
+    runCatching { Instant.parse(item.capturedAt).atZone(zone).toLocalDate() == today }.getOrDefault(false)
+}
+
+/**
+ * 保存完了直後の「今日 N枚目」を返す。
+ * - 日付基準はキュー登録日時（allPhotos に反映済みならその capturedAt、未反映なら enqueue 完了直後の savedAt）。
+ * - unconfirmedSaved に保存完了済みで Flow 未反映かもしれない (imagePath, savedAt) を渡すことで、
+ *   直前の複数枚が Flow に未反映でも欠落・二重加算にならない。
+ */
+fun todayCaptureCountAfterSave(
+    allPhotos: List<QueueItem>,
+    savedImagePath: String,
+    savedAt: Instant,
+    unconfirmedSaved: Map<String, Instant> = emptyMap(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): Int {
+    val reflected = allPhotos.firstOrNull { it.imagePath == savedImagePath }
+    val baseInstant = reflected?.capturedAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: savedAt
+    val today = baseInstant.atZone(zone).toLocalDate()
+    val existing = countTodayPhotos(allPhotos, today, zone)
+    val reflectedPaths = allPhotos.mapTo(HashSet()) { it.imagePath }
+    val pendingToday = (unconfirmedSaved + (savedImagePath to savedAt)).count { (path, at) ->
+        path !in reflectedPaths && at.atZone(zone).toLocalDate() == today
+    }
+    return existing + pendingToday
 }

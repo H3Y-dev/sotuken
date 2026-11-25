@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +33,7 @@ import jp.sotuken.metercapture.ui.components.*
 import jp.sotuken.metercapture.ui.theme.GaugeColors
 import jp.sotuken.metercapture.ui.theme.gaugeNum
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -43,6 +47,7 @@ fun InspectionCaptureScreen(
     onHistory: () -> Unit,
     onComplete: () -> Unit,
     onHome: () -> Unit,
+    allPhotos: List<QueueItem> = photos,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -75,6 +80,28 @@ fun InspectionCaptureScreen(
         health.check()
     }
     val state = buildCaptureUiState(inspection, route, photos, target, saved)
+    var shutterSeq by remember { mutableIntStateOf(0) }
+    val flashAlpha = remember { Animatable(0f) }
+    var toastSeq by remember { mutableIntStateOf(0) }
+    var toastMessage by remember { mutableStateOf<String?>(null) }
+    val latestAllPhotos by rememberUpdatedState(allPhotos)
+    val pendingSaved = remember { mutableStateMapOf<String, Instant>() }
+    LaunchedEffect(allPhotos) {
+        allPhotos.forEach { pendingSaved.remove(it.imagePath) }
+    }
+    LaunchedEffect(shutterSeq) {
+        if (shutterSeq > 0) {
+            flashAlpha.snapTo(0.85f)
+            flashAlpha.animateTo(0f, animationSpec = tween(durationMillis = 150))
+        }
+    }
+    LaunchedEffect(toastSeq) {
+        if (toastSeq > 0) {
+            delay(2_000L)
+            toastMessage = null
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(if (saved == null) "点検中の撮影" else "撮影できました", style = MaterialTheme.typography.headlineSmall)
         Text(state.header, style = MaterialTheme.typography.titleMedium)
@@ -99,7 +126,7 @@ fun InspectionCaptureScreen(
                 GaugePrimaryButton("許可", onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) })
             } else if (!scanning) {
                 Column(Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CameraCapturePanel(large = true, onError = { error = it }, onSaved = { captured ->
+                    CameraCapturePanel(large = true, onShutter = { shutterSeq++ }, onError = { toastMessage = null; error = it }, onSaved = { captured ->
                         val capturedTarget = target
                         select(capturedTarget)
                         saving = true
@@ -108,8 +135,20 @@ fun InspectionCaptureScreen(
                             try {
                                 onSaved(captured.file, (capturedTarget ?: CaptureTarget(null, null, null)).toMeta())
                                 saved = SavedCard(captured.file.absolutePath, capturedTarget?.deviceName, capturedTarget?.deviceId, Instant.ofEpochMilli(captured.capturedAtEpochMillis).toString())
+                                val savedAt = Instant.now()
+                                pendingSaved[captured.file.absolutePath] = savedAt
+                                val todayCount = todayCaptureCountAfterSave(
+                                    latestAllPhotos,
+                                    captured.file.absolutePath,
+                                    savedAt,
+                                    pendingSaved.toMap(),
+                                )
+                                toastMessage = "保存しました（今日 ${todayCount}枚目）"
+                                toastSeq++
                             } catch (e: CancellationException) { throw e
-                            } catch (e: Exception) { error = "保存に失敗しました: ${e.message}"
+                            } catch (e: Exception) {
+                                toastMessage = null
+                                error = "保存に失敗しました: ${e.message}"
                             } finally { saving = false }
                         }
                     })
@@ -136,6 +175,22 @@ fun InspectionCaptureScreen(
         GaugeSecondaryButton(if (saved == null) "この点検の履歴を見る" else "履歴を確認する", onClick = onHistory, enabled = !saving, modifier = Modifier.fillMaxWidth())
         GaugeSecondaryButton("点検完了へ", onClick = onComplete, enabled = !saving, modifier = Modifier.fillMaxWidth())
         TextButton(onClick = onHome, enabled = !saving) { Text("点検一覧") }
+    }
+    if (flashAlpha.value > 0f) Box(Modifier.fillMaxSize().background(GaugeColors.OnInk.copy(alpha = flashAlpha.value)))
+    toastMessage?.let { message ->
+        Surface(
+            color = GaugeColors.Ink,
+            contentColor = GaugeColors.OnInk,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelLarge.gaugeNum(),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+        }
+    }
     }
     if (manual) ManualDeviceDialog(target, { manual = false }) { select(it); manual = false }
 }

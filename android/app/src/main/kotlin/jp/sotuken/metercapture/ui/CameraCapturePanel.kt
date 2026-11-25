@@ -42,6 +42,7 @@ internal fun ColumnScope.CameraCapturePanel(
     onError: (String) -> Unit,
     temporaryCapture: Boolean = false,
     large: Boolean = false,
+    onShutter: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -115,11 +116,13 @@ internal fun ColumnScope.CameraCapturePanel(
     }
 
     Button(
+        shape = MaterialTheme.shapes.small,
         modifier = if (large) Modifier.fillMaxWidth().heightIn(min = 88.dp) else Modifier,
         enabled = imageCapture != null && !isCapturing,
         onClick = {
             val capture = imageCapture ?: return@Button
             isCapturing = true
+            onShutter()
             takePhoto(
                 context = context,
                 imageCapture = capture,
