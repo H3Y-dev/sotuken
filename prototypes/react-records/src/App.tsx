@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DevicesView } from "@/components/DevicesView";
 import { OverlayPreview } from "@/components/OverlayPreview";
 import { RecordsView } from "@/components/RecordsView";
+import { RoutesView } from "@/components/RoutesView";
 import { SettingsView } from "@/components/SettingsView";
 import {
   ApiError,
@@ -23,12 +24,13 @@ import { GaugeDetail } from "@/gauge/GaugeDetail";
 import "@/gauge/gauge.css";
 import { toInspection, toMeter, type Inspection } from "@/gauge/model";
 
-type Tab = "records" | "devices" | "settings" | "gauge";
+type Tab = "records" | "devices" | "routes" | "settings" | "gauge";
 
 function tabFromHash(hash: string): Tab {
   if (hash.startsWith("#/gauge")) return "gauge";
   if (hash === "#settings") return "settings";
   if (hash === "#devices") return "devices";
+  if (hash === "#routes") return "routes";
   return "records";
 }
 
@@ -132,7 +134,7 @@ export default function App() {
   }, []);
 
   const switchTab = (next: Tab) => {
-    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : next === "gauge" ? "#/gauge" : "#";
+    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : next === "routes" ? "#routes" : next === "gauge" ? "#/gauge" : "#";
     if (window.location.hash !== target) {
       setSelected(null);
       window.location.hash = target;
@@ -377,6 +379,20 @@ export default function App() {
               <Button
                 type="button"
                 size="field"
+                variant={tab === "routes" ? "secondary" : "ghost"}
+                aria-current={tab === "routes" ? "page" : undefined}
+                className={
+                  tab === "routes"
+                    ? "border border-hairline font-bold text-ink"
+                    : "text-steel"
+                }
+                onClick={() => switchTab("routes")}
+              >
+                ルート
+              </Button>
+              <Button
+                type="button"
+                size="field"
                 variant={tab === "settings" ? "secondary" : "ghost"}
                 aria-current={tab === "settings" ? "page" : undefined}
                 className={
@@ -492,6 +508,8 @@ export default function App() {
           />
         ) : tab === "devices" ? (
           <DevicesView onAuthExpired={() => setAuthExpired(true)} />
+        ) : tab === "routes" ? (
+          <RoutesView onAuthExpired={() => setAuthExpired(true)} />
         ) : (
           <SettingsView
             runtime={runtime}

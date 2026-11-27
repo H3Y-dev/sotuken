@@ -7,6 +7,9 @@ import type {
   Page,
   PairingStatus,
   Reading,
+  RouteDetail,
+  RouteInput,
+  RouteSummary,
   RuntimeStatus,
   UsbStatus,
 } from "./types";
@@ -238,6 +241,33 @@ export function updateDevice(id: string, input: DeviceInput): Promise<Device> {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export async function listRoutes(signal?: AbortSignal): Promise<RouteSummary[]> {
+  const res = await apiJson<{ items: RouteSummary[] }>("/api/v1/routes", { signal });
+  return res.items;
+}
+
+export function getRoute(id: string, signal?: AbortSignal): Promise<RouteDetail> {
+  return apiJson<RouteDetail>(`/api/v1/routes/${encodeURIComponent(id)}`, { signal });
+}
+
+export function createRoute(input: RouteInput): Promise<RouteDetail> {
+  return apiJson<RouteDetail>("/api/v1/routes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateRoute(id: string, input: RouteInput): Promise<RouteDetail> {
+  return apiJson<RouteDetail>(`/api/v1/routes/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteRoute(id: string): Promise<void> {
+  await apiRequest(`/api/v1/routes/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function downloadDeviceLabels(ids: string[]): Promise<Blob> {

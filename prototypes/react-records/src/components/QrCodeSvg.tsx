@@ -5,7 +5,13 @@ import QRCode from "qrcode";
  * CSP (default-src 'self'; img-src 'self' blob:) 下でも動作するよう、
  * インライン style 属性や data: URL を使わず単一 SVG path で描画する。
  */
-export function QrCodeSvg({ payload }: { payload: string }) {
+export function QrCodeSvg({
+  payload,
+  label = "スマホの送信先登録用QRコード",
+}: {
+  payload: string;
+  label?: string;
+}) {
   const qr = useMemo(() => {
     const model = QRCode.create(payload, { errorCorrectionLevel: "M" });
     const size = model.modules.size;
@@ -29,7 +35,7 @@ export function QrCodeSvg({ payload }: { payload: string }) {
   return (
     <svg
       role="img"
-      aria-label="スマホの送信先登録用QRコード"
+      aria-label={label}
       viewBox={`0 0 ${qr.total} ${qr.total}`}
       width={240}
       height={240}

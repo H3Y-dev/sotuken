@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, downloadInspectionCsv, fetchImageBlobUrl, fetchInspection, fetchInspections, fetchReading } from "@/api/client";
+import { ApiError, downloadInspectionCsv, fetchImageBlobUrl, fetchInspection, fetchInspections, fetchReading, listDevices, listRoutes } from "@/api/client";
 import type { InspectionListItem, InspectionProgress } from "@/api/types";
 import { download } from "@/lib/download";
 import { FakeElement, FakeEvent, setupFakeDom } from "@/lib/fakeDom.test-support";
@@ -20,6 +20,8 @@ vi.mock("@/api/client", async (importOriginal) => ({
   fetchReading: vi.fn(),
   downloadInspectionCsv: vi.fn(),
   fetchReadings: vi.fn(async () => ({ items: [], total: 0 })),
+  listRoutes: vi.fn(async () => []),
+  listDevices: vi.fn(async () => []),
   fetchRuntime: vi.fn(async () => ({ receiver_running: false })),
   fetchUsbStatus: vi.fn(async () => ({ enabled: false, devices: [] })),
 }));
@@ -399,6 +401,15 @@ describe("点検確認", () => {
     expect(container.textContent).toContain("\u70b9\u691cID\u304c\u4e0d\u6b63\u3067\u3059");
     const back = Array.from(container.querySelectorAll("a")).find((el) => el.textContent.trim() === "\u4e00\u89a7\u3078\u623b\u308b");
     expect(back?.getAttribute("href")).toBe("#/gauge");
+  });
+
+  it("#routes 直リンクでルート画面を表示し、「ルート」ボタンがナビに存在する", async () => {
+    vi.mocked(listRoutes).mockResolvedValue([]);
+    vi.mocked(listDevices).mockResolvedValue([]);
+    location.hash = "#routes";
+    await render();
+    expect(container.textContent).toContain("点検ルートの選択");
+    expect(button("ルート").getAttribute("aria-current")).toBe("page");
   });
 
   it("production CSS keeps the needle pivot and segmented progress rules", () => {

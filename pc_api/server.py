@@ -301,6 +301,12 @@ class PCAPI:
             from pc_api.device_routes import dispatch_devices
             storage = _DeviceReadStorage(self.storage) if method == 'GET' else _DeviceWriteStorage(self.storage.path)
             return dispatch_devices(storage, method, path, body)
+        if path == '/api/v1/routes' or path.startswith('/api/v1/routes/'):
+            if url.query:
+                raise APIError(400, 'invalid_request')
+            from pc_api.route_routes import dispatch_routes
+            storage = _DeviceReadStorage(self.storage) if method == 'GET' else _DeviceWriteStorage(self.storage.path)
+            return dispatch_routes(storage, method, path, body)
         if method != 'GET':
             raise APIError(400, 'invalid_request')
         if path in ('/api/v1/runtime', '/api/v1/usb/status'):
@@ -380,7 +386,12 @@ class PCAPI:
                         or (parsed_url.path.startswith('/api/v1/devices/id-') and self.command == 'PUT')
                     )
                     is_csv_write = self.command == 'POST' and bool(re.fullmatch(r'/api/v1/inspections/[^/]+/csv(?:/save)?', parsed_url.path))
-                    max_body_bytes = 16384 if is_device_write else 4096 if is_csv_write else 1024
+                    is_route_write = (
+                        (parsed_url.path == '/api/v1/routes' and self.command == 'POST')
+                        or (parsed_url.path.startswith('/api/v1/routes/') and self.command == 'PUT')
+                    )
+                    max_body_bytes = (65536 if is_route_write else 16384 if is_device_write
+                                      else 4096 if is_csv_write else 1024)
                     if int(length) > max_body_bytes:
                         raise APIError(413, 'too_large')
                     def read_json_body():
@@ -433,7 +444,7 @@ class PCAPI:
                         session_id = None
                         if parsed_url.path.startswith('/api/'):
                             session_id, _ = api.authenticate_session(self.headers, self.command)
-                            if is_device_write or is_csv_write:
+                            if is_device_write or is_csv_write or is_route_write:
                                 request_body = read_json_body()
                             elif self.command in ('POST', 'PUT', 'PATCH', 'DELETE') or int(length):
                                 if read_json_body() != {}:
