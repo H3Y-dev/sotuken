@@ -59,13 +59,16 @@ def _detect_center(img):
     return None, None
 
 
-def read_meter(img, use_vlm=True, *, local_read=False, local_checks=(), needle_angle='segment'):
+def read_meter(img, use_vlm=True, *, local_read=True, local_checks=(), needle_angle='segment'):
     """
     画像1枚を自動で読み取る。
 
     use_vlm: Falseにすると、VLM（Ollama）を使う処理をすべて飛ばす。
              VLMはモデルのロード状態で応答が変わることがあるため、測定結果を
              再現可能にして比較したいときは必ずFalseにする。
+    local_read: True（既定）のとき、針を挟む隣接目盛り数字2点から読む局所方式を
+                使い、全体方式とのクロスチェックや全体方式へのフォールバックを行う。
+                Falseにすると従来の全体方式のみで読む。
 
     戻り値: dict
         stage        : 'ok' か、失敗した段階名（center / scale / needle）

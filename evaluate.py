@@ -193,7 +193,7 @@ def _resolve_path(path, base_dir):
     return os.path.normpath(os.path.join(base_dir, path))
 
 
-def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, local_checks=(), needle_angle='segment'):
+def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=True, local_checks=(), needle_angle='segment'):
     """正解データ1件を読み取り、誤差を計算して1行分の結果を返す"""
     image_path = _resolve_path(entry['image'], base_dir)
     row = {
@@ -241,15 +241,15 @@ def evaluate_entry(entry, base_dir, use_vlm=True, *, local_read=False, local_che
         return row
 
     started = time.time()
-    options = (dict(local_read=local_read, local_checks=local_checks, needle_angle=needle_angle)
-               if local_read or local_checks or needle_angle != 'segment' else {})
-    result = meter_pipeline.read_meter(img, use_vlm=use_vlm, **options)
+    result = meter_pipeline.read_meter(
+        img, use_vlm=use_vlm, local_read=local_read,
+        local_checks=local_checks, needle_angle=needle_angle)
     row['elapsed_sec'] = round(time.time() - started, 2)
     for key in ('read_method', 'value_local', 'value_global', 'cross_check_diff_fs', 'bracket',
                 'local_checks', 'scale_confident', 'needle_confidence', 'needle_angle_source'):
         if key in result:
             row[key] = result[key]
-    if not options:
+    if not local_read:
         row['value_global'] = result.get('value')
 
     row['stage'] = result['stage']
@@ -393,7 +393,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description='アナログメーター読み取りの精度を評価する')
     parser.add_argument('groundtruth', help='正解データのJSONファイル')
-    parser.add_argument('--local-read', action='store_true', help='針を挟む数字2点で読む（誤読チェックなし）')
+    parser.add_argument('--local-read', dest='local_read', action='store_true', default=True,
+                        help='針を挟む数字2点で読む（既定: 有効）')
+    parser.add_argument('--no-local-read', dest='local_read', action='store_false',
+                        help='全体方式のみで読む（local_read を無効化）')
     parser.add_argument('--local-checks', default='', help='誤読チェック（Stage1では空のみ対応）')
     parser.add_argument('--needle-angle', choices=('segment', 'tip'), default='segment')
     parser.add_argument('--no-vlm', action='store_true',
