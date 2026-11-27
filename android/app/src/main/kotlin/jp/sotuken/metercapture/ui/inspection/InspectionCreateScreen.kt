@@ -6,6 +6,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
@@ -18,11 +22,17 @@ data class CreateUiState(val name: String, val namePlaceholder: String, val oper
 
 @Composable
 fun InspectionCreateScreen(state: CreateUiState, onNameChange: (String) -> Unit, onOperatorChange: (String) -> Unit, onPlaceChange: (String) -> Unit, onRouteSelect: (String?) -> Unit, onStart: () -> Unit, onBack: () -> Unit) {
+    var showOptionalFields by rememberSaveable { mutableStateOf(state.operatorName.isNotEmpty() || state.place.isNotEmpty()) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("点検名・担当者・場所は、空欄でも始められます。", style = MaterialTheme.typography.bodyMedium, color = GaugeColors.Steel)
         OutlinedTextField(state.name, onNameChange, label = { Text("点検名（任意）") }, placeholder = { Text(state.namePlaceholder) }, singleLine = true, enabled = !state.starting, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(state.operatorName, onOperatorChange, label = { Text("担当者（任意）") }, singleLine = true, enabled = !state.starting, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(state.place, onPlaceChange, label = { Text("場所（任意）") }, singleLine = true, enabled = !state.starting, modifier = Modifier.fillMaxWidth())
+        TextButton(onClick = { showOptionalFields = !showOptionalFields }, enabled = !state.starting) {
+            Text(if (showOptionalFields) "担当者・場所を隠す" else "担当者・場所を追加（任意）")
+        }
+        if (showOptionalFields) {
+            OutlinedTextField(state.operatorName, onOperatorChange, label = { Text("担当者（任意）") }, singleLine = true, enabled = !state.starting, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(state.place, onPlaceChange, label = { Text("場所（任意）") }, singleLine = true, enabled = !state.starting, modifier = Modifier.fillMaxWidth())
+        }
         Text("点検ルート", style = MaterialTheme.typography.titleLarge)
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(state.selectedRouteId == null, enabled = !state.starting, role = Role.RadioButton, onClick = { onRouteSelect(null) }),

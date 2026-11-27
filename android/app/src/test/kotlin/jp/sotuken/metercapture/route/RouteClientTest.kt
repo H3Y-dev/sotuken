@@ -43,4 +43,23 @@ class RouteClientTest {
     @Test fun rejectsUnexpectedRouteId() { serve(body = PC_ROUTE_JSON) { client -> runBlocking { assertTrue(client.fetchRoute("other").isFailure) } } }
     @Test fun rejectsInvalidIdBeforeNetwork() = runBlocking { assertTrue(RouteClient("http://127.0.0.1:1", "secret").fetchRoute("../escape").isFailure) }
     @Test fun connectionFailureHasMessage() = runBlocking { assertEquals("PCに接続できません", RouteClient("http://127.0.0.1:1", "secret").listRoutes().exceptionOrNull()?.message) }
+    @Test fun listDevicesSendsTokenAndParses() {
+        val devicesJson = """{"v":1,"devices":[{"device_id":"M-01","device_name":"圧力計A","unit":"MPa"}]}"""
+        val headers = serve(body = devicesJson) { client ->
+            runBlocking {
+                val rows = client.listDevices().getOrThrow()
+                assertEquals(listOf(RemoteDevice("M-01", "圧力計A", "MPa")), rows)
+            }
+        }
+        assertTrue(headers.contains("GET /devices HTTP/1.1"))
+        assertTrue(headers.any { it.equals("X-Sotuken-Token: secret", true) })
+    }
+    @Test fun parseDeviceListSkipsBlankAndDeduplicates() {
+        val json = """{"v":1,"devices":[{"device_id":"","device_name":"無名"},{"device_id":"M-01","device_name":"計器1"},{"device_id":"M-01","device_name":"重複"},{"device_id":"M-02"}]}"""
+        val rows = parseDeviceList(json)
+        assertEquals(listOf(RemoteDevice("M-01", "計器1", null), RemoteDevice("M-02", null, null)), rows)
+    }
+    @Test fun rejectsMalformedDeviceList() {
+        listOf("{}", """{"v":"1","devices":[]}""", "not json").forEach { assertNull(parseDeviceList(it)) }
+    }
 }

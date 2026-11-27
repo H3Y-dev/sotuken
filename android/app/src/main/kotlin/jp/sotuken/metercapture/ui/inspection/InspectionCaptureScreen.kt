@@ -27,6 +27,7 @@ import jp.sotuken.metercapture.inspection.Inspection
 import jp.sotuken.metercapture.inspection.RouteDevice
 import jp.sotuken.metercapture.queue.CaptureMeta
 import jp.sotuken.metercapture.queue.QueueItem
+import jp.sotuken.metercapture.route.RemoteDevice
 import jp.sotuken.metercapture.route.parseRouteJson
 import jp.sotuken.metercapture.ui.*
 import jp.sotuken.metercapture.ui.components.*
@@ -49,6 +50,7 @@ fun InspectionCaptureScreen(
     onHome: () -> Unit,
     allPhotos: List<QueueItem> = photos,
     onPhotoClick: (QueueItem) -> Unit = {},
+    onLoadRemoteDevices: (suspend () -> Result<List<RemoteDevice>>)? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -194,7 +196,7 @@ fun InspectionCaptureScreen(
         }
     }
     }
-    if (manual) ManualDeviceDialog(target, { manual = false }) { select(it); manual = false }
+    if (manual) ManualDeviceDialog(target, onLoadRemoteDevices, { manual = false }) { select(it); manual = false }
 }
 
 @Composable
@@ -208,16 +210,46 @@ private fun MissingChip(device: RouteDevice, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ManualDeviceDialog(target: CaptureTarget?, onDismiss: () -> Unit, onUse: (CaptureTarget) -> Unit) {
+private fun ManualDeviceDialog(
+    target: CaptureTarget?,
+    onLoadRemoteDevices: (suspend () -> Result<List<RemoteDevice>>)?,
+    onDismiss: () -> Unit,
+    onUse: (CaptureTarget) -> Unit,
+) {
     var name by rememberSaveable { mutableStateOf(target?.deviceName.orEmpty()) }
     var id by rememberSaveable { mutableStateOf(target?.deviceId.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var remoteDevices by remember { mutableStateOf<List<RemoteDevice>>(emptyList()) }
+    LaunchedEffect(onLoadRemoteDevices) {
+        onLoadRemoteDevices?.invoke()?.onSuccess { remoteDevices = it }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("機器名・IDを手入力する") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (remoteDevices.isNotEmpty()) {
+                    Text("PCの登録機器から選ぶ", style = MaterialTheme.typography.labelMedium, color = GaugeColors.Steel)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 140.dp).verticalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        remoteDevices.forEach { device ->
+                            val label = device.deviceName?.takeIf { it != device.deviceId }?.let { "$it (${device.deviceId})" } ?: device.deviceId
+                            AssistChip(
+                                onClick = {
+                                    name = device.deviceName ?: device.deviceId
+                                    id = device.deviceId
+                                    error = null
+                                },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(name, { name = it; error = null }, label = { Text("機器名") }, singleLine = true)
                 OutlinedTextField(id, { id = it; error = null }, label = { Text("機器ID（任意）") }, singleLine = true)
                 Text("撮影する機器のラベルと確認してください。")
