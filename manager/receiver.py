@@ -326,6 +326,27 @@ class ReceiverHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(200 if result is not None else 404, result or {"error": "ルートがありません"})
             return
 
+        if self.path == "/devices":
+            if not self._check_token():
+                return
+            from manager.storage import Storage
+            from manager.devices import list_devices
+            storage = Storage(self.server.db_path)
+            devices = [
+                {
+                    "device_id": d["device_id"],
+                    "device_name": d["device_name"],
+                    "unit": d["unit"],
+                    "min_val": d["min_value"],
+                    "max_val": d["max_value"],
+                    "ok_min": d.get("ok_min"),
+                    "ok_max": d.get("ok_max"),
+                }
+                for d in list_devices(storage)
+            ]
+            self._send_json(200, {"v": 1, "devices": devices})
+            return
+
         if self.path == "/health":
             if self.server.token and not self._check_token():
                 return
