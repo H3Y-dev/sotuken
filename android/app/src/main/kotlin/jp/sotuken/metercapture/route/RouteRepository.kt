@@ -2,6 +2,8 @@ package jp.sotuken.metercapture.route
 
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import kotlinx.serialization.json.*
 
@@ -49,7 +51,7 @@ class RouteRepository(private val file: File) {
         }.toString()
         val tmp = File(file.path + ".tmp")
         tmp.writeText(text, Charsets.UTF_8)
-        if (!tmp.renameTo(file)) throw IOException("ルートの保存に失敗しました")
+        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
         return routes
     }
 }
