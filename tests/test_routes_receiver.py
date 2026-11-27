@@ -5,6 +5,7 @@ import tempfile
 import threading
 import unittest
 
+from manager.devices import register_device
 from manager.receiver import ReceiverServer, MAX_BODY_SIZE
 from manager.routes import save_route, get_manifest
 from manager.storage import Storage
@@ -82,3 +83,24 @@ class RoutesReceiverTest(unittest.TestCase):
         self.assertEqual(response.status, 408)
         response.read()
         conn.close()
+
+    def test_devices_auth_empty_and_registered(self):
+        self.assertEqual(self.request('GET', '/devices', token=None)[0], 401)
+        self.assertEqual(self.request('GET', '/devices', token='wrong')[0], 401)
+        self.assertEqual(self.request('GET', '/devices'), (200, {'v': 1, 'devices': []}))
+
+        register_device(self.storage, 'DEV-1', '圧力計', unit='MPa', min_value=0.0, max_value=10.0)
+        status, body = self.request('GET', '/devices')
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {
+            'v': 1,
+            'devices': [{
+                'device_id': 'DEV-1',
+                'device_name': '圧力計',
+                'unit': 'MPa',
+                'min_val': 0.0,
+                'max_val': 10.0,
+                'ok_min': None,
+                'ok_max': None,
+            }],
+        })
