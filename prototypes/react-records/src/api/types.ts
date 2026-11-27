@@ -19,6 +19,14 @@ export interface Reading {
   overlay_image_id: string | null;
 }
 
+export interface ManualReadingResult {
+  reading: Reading;
+  is_alert: boolean;
+  alert_message: string | null;
+  stage: string;
+  value: number | null;
+}
+
 export interface Page<T> {
   items: T[];
   total: number;
