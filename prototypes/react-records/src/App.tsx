@@ -343,13 +343,21 @@ export default function App() {
               </span>
               点検記録
             </a>
-            <nav aria-label="画面切り替え" className="flex items-center gap-2">
+            <nav aria-label="画面切り替え" className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 size="field"
                 variant={tab === "gauge" ? "secondary" : "ghost"}
+                aria-current={tab === "gauge" ? "page" : undefined}
+                className={
+                  tab === "gauge"
+                    ? "border border-hairline font-bold text-ink"
+                    : "text-steel"
+                }
                 onClick={() => switchTab("gauge")}
-              >点検確認</Button>
+              >
+                点検確認
+              </Button>
               <Button
                 type="button"
                 size="field"
@@ -363,6 +371,21 @@ export default function App() {
                 onClick={() => switchTab("records")}
               >
                 機器の記録
+              </Button>
+              <span aria-hidden className="mx-1 hidden h-5 w-px bg-hairline sm:inline-block" />
+              <Button
+                type="button"
+                size="field"
+                variant={tab === "settings" ? "secondary" : "ghost"}
+                aria-current={tab === "settings" ? "page" : undefined}
+                className={
+                  tab === "settings"
+                    ? "border border-hairline font-bold text-ink"
+                    : "text-steel"
+                }
+                onClick={() => switchTab("settings")}
+              >
+                接続・設定
               </Button>
               <Button
                 type="button"
@@ -392,6 +415,7 @@ export default function App() {
               >
                 ルート
               </Button>
+              <span aria-hidden className="mx-1 hidden h-5 w-px bg-hairline sm:inline-block" />
               <Button
                 type="button"
                 size="field"
@@ -405,20 +429,6 @@ export default function App() {
                 onClick={() => switchTab("manual")}
               >
                 手動読み取り
-              </Button>
-              <Button
-                type="button"
-                size="field"
-                variant={tab === "settings" ? "secondary" : "ghost"}
-                aria-current={tab === "settings" ? "page" : undefined}
-                className={
-                  tab === "settings"
-                    ? "border border-hairline font-bold text-ink"
-                    : "text-steel"
-                }
-                onClick={() => switchTab("settings")}
-              >
-                接続・設定
               </Button>
             </nav>
           </div>
@@ -436,7 +446,7 @@ export default function App() {
                 }`}
               />
               {runtimeError
-                ? "所有プロセス未接続"
+                ? "PCサービス未接続"
                 : runtime?.receiver_running
                   ? "受信口 待ち受け中"
                   : "受信口 停止中"}
@@ -484,19 +494,38 @@ export default function App() {
         )}
 
         {tab === "gauge" ? (
-          <section className="gauge" aria-live="polite">
-            <Button onClick={() => { setGaugeCursor(undefined); setGaugeRefresh((v) => v + 1); }}>更新</Button>
-            {isDetail && <label><input type="checkbox" checked={gaugeAuto} onChange={(event) => setGaugeAuto(event.target.checked)} /> 自動更新</label>}
+          <section className="gauge flex flex-col gap-4" aria-live="polite">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="field"
+                onClick={() => { setGaugeCursor(undefined); setGaugeRefresh((v) => v + 1); }}
+              >
+                <RefreshCw aria-hidden />
+                更新
+              </Button>
+              {isDetail && (
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-rule bg-dial px-3 text-base text-text">
+                  <input
+                    type="checkbox"
+                    checked={gaugeAuto}
+                    onChange={(event) => setGaugeAuto(event.target.checked)}
+                    className="size-5 accent-ink"
+                  />
+                  自動更新
+                </label>
+              )}
+            </div>
             {gaugeLoading && <p>点検を読み込み中…</p>}
             {gaugeError && <>
               <p role="alert">{gaugeError}</p>
-              <Button onClick={() => setGaugeRefresh((v) => v + 1)}>再試行</Button>
+              <Button variant="outline" size="field" className="w-fit" onClick={() => setGaugeRefresh((v) => v + 1)}>再試行</Button>
             </>}
             {route.kind === "invalid" ? <>
               <p role="alert">点検IDが不正です</p>
               <a href="#/gauge">一覧へ戻る</a>
             </> : route.kind === "detail" ? <>
-              <a href="#/gauge">一覧へ戻る</a>
               {inspection && <GaugeDetail ins={inspection} exporting={csvBusy} exportError={csvError} savedFile={csvSaved} onExport={exportCsv} />}
             </> : <>
               <GaugeHome items={inspections} filter={gaugeFilter} totals={gaugeTotals} showEmpty={!gaugeLoading && !gaugeError} onFilterChange={(value) => {
@@ -504,7 +533,17 @@ export default function App() {
                 resetGaugeList();
                 setGaugeFilter(value);
               }} />
-              <Button disabled={!gaugeNext || gaugeLoading || !!gaugeError} onClick={() => setGaugeCursor(gaugeNext ?? undefined)}>次のページ</Button>
+              {(gaugeNext || gaugeLoading) && (
+                <Button
+                  variant="outline"
+                  size="field"
+                  className="w-fit"
+                  disabled={!gaugeNext || gaugeLoading || !!gaugeError}
+                  onClick={() => setGaugeCursor(gaugeNext ?? undefined)}
+                >
+                  次のページ
+                </Button>
+              )}
             </>}
           </section>
         ) : tab === "records" ? (

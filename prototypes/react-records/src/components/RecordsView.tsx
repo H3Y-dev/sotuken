@@ -111,9 +111,9 @@ export function RecordsView({
       {/* 操作バー */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-text">機器の記録</h2>
+          <h1 className="text-[28px] font-bold text-text">機器の記録</h1>
           <p className="text-base text-steel">
-            各機器の最新値と全履歴、元画像・オーバーレイを確認できます。
+            すべての点検を横断して、機器ごとの最新値・全履歴・時系列推移・画像を確認します。
           </p>
         </div>
 
@@ -242,14 +242,16 @@ export function RecordsView({
             }
           >
             <Download aria-hidden />
-            点検の結果を書き出す
+            最新値一覧をCSV出力
           </Button>
         </div>
 
         <Card className="border border-hairline bg-dial shadow-none">
           <CardContent className="p-0">
             {latest.length === 0 ? (
-              <p className="px-5 py-8 text-base text-steel">表示できる記録がありません。</p>
+              <p className="px-5 py-8 text-base text-steel">
+                {loading && rows.length === 0 ? "記録を読み込み中…" : "表示できる記録がありません。"}
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <Table className="text-base">

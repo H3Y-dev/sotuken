@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { RefreshCw, SquareX } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -74,8 +74,10 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
   const [addError, setAddError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [deleteChecked, setDeleteChecked] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const routeAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -103,10 +105,16 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      routeAbortRef.current?.abort();
+    };
   }, [load]);
 
   const openNew = useCallback(() => {
+    routeAbortRef.current?.abort();
+    routeAbortRef.current = null;
+    setLoadingDetail(false);
     setSelectedId(NEW_ROUTE);
     setDetail(null);
     setRouteName("");
@@ -128,12 +136,12 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
         openNew();
         return;
       }
-      setSelectedId(id);
-      setDetail(null);
-      setRouteName("");
-      setRouteDevices([]);
-      setSaving(false);
+      routeAbortRef.current?.abort();
       const controller = new AbortController();
+      routeAbortRef.current = controller;
+      setSelectedId(id);
+      setLoadingDetail(true);
+      setSaving(false);
       try {
         const data = await getRoute(id, controller.signal);
         if (controller.signal.aborted) return;
@@ -144,6 +152,8 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
         if (controller.signal.aborted) return;
         if (isAuthError(err)) onAuthExpired?.();
         setNotice({ kind: "error", text: routeErrorText(err) });
+      } finally {
+        if (!controller.signal.aborted) setLoadingDetail(false);
       }
     },
     [onAuthExpired, openNew],
@@ -263,10 +273,15 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="routes-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 id="routes-heading" className="text-xl font-bold text-ink">
-          ルート
-        </h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 id="routes-heading" className="text-[28px] font-bold text-text">
+            ルート
+          </h1>
+          <p className="text-base text-steel">
+            「機器登録」済みのメーターを巡回順に並べてルートを作成し、スマホ読み取り用のルートQRを発行します。
+          </p>
+        </div>
         <Button
           type="button"
           size="field"
@@ -315,12 +330,12 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
 
       <Card className="border-hairline bg-dial">
         <CardHeader className="border-b border-hairline">
-          <CardTitle className="flex flex-wrap items-center gap-2 text-ink">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-xl font-bold text-text">
             点検ルートの選択
             <Badge variant="tag" size="field" className="g-num">{routes.length}件</Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3 pt-4">
+        <CardContent className="flex flex-wrap items-center gap-3">
           <span className="font-bold text-text" id="route-selector-label">
             ルート
           </span>
@@ -328,9 +343,9 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
             <Button
               type="button"
               size="field"
-              variant={selectedId === NEW_ROUTE ? "secondary" : "outline"}
-              className={selectedId === NEW_ROUTE ? "border-hairline font-bold text-ink" : "border-hairline text-steel"}
-              aria-current={selectedId === NEW_ROUTE ? "true" : undefined}
+              variant={selectedId === NEW_ROUTE ? "default" : "outline"}
+              className={selectedId === NEW_ROUTE ? "bg-ink font-bold text-white" : "border-hairline text-steel"}
+              aria-pressed={selectedId === NEW_ROUTE}
               disabled={loading || saving || deleting}
               onClick={() => void selectRoute(NEW_ROUTE)}
             >
@@ -341,9 +356,9 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
                 key={r.route_id}
                 type="button"
                 size="field"
-                variant={selectedId === r.route_id ? "secondary" : "outline"}
-                className={selectedId === r.route_id ? "border-hairline font-bold text-ink" : "border-hairline text-steel"}
-                aria-current={selectedId === r.route_id ? "true" : undefined}
+                variant={selectedId === r.route_id ? "default" : "outline"}
+                className={selectedId === r.route_id ? "bg-ink font-bold text-white" : "border-hairline text-steel"}
+                aria-pressed={selectedId === r.route_id}
                 disabled={loading || saving || deleting}
                 onClick={() => void selectRoute(r.route_id)}
               >
@@ -351,17 +366,20 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
               </Button>
             ))}
           </div>
+          {loadingDetail && (
+            <span className="text-base text-steel">ルートを読み込み中…</span>
+          )}
         </CardContent>
       </Card>
 
       <form onSubmit={(e) => void save(e)} noValidate className="flex flex-col gap-4">
         <Card className="border-hairline bg-dial">
           <CardHeader className="border-b border-hairline">
-            <CardTitle className="text-ink">
+            <CardTitle className="text-xl font-bold text-text">
               {selectedId === NEW_ROUTE ? "新しいルート" : `ルート: ${selectedName || routeName || selectedId}`}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4 pt-4">
+          <CardContent className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <label htmlFor="route-name" className="font-bold text-text">
                 ルート名
@@ -392,39 +410,49 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
 
             <div className="flex flex-col gap-2">
               <h2 className="font-bold text-text" id="registered-device-label">登録済みの機器から追加</h2>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-steel">機器</span>
-                <div className="flex flex-wrap gap-2" role="group" aria-labelledby="registered-device-label">
-                  {devices.map((d) => (
-                    <Button
-                      key={d.device_id}
-                      type="button"
-                      size="field"
-                      variant={registeredId === d.device_id ? "secondary" : "outline"}
-                      className="border-hairline text-steel"
-                      aria-label={`${d.device_name}（${d.device_id}）`}
-                      aria-current={registeredId === d.device_id ? "true" : undefined}
-                      disabled={saving || deleting}
-                      onClick={() => {
-                        setRegisteredId(d.device_id);
-                        setAddError("");
-                      }}
-                    >
-                      {d.device_name}（{d.device_id}）
-                    </Button>
-                  ))}
+              {devices.length === 0 ? (
+                <p className="text-base text-steel">
+                  登録済みの機器がありません。
+                  <a href="#devices" className="font-bold text-ink underline underline-offset-2">
+                    「機器登録」
+                  </a>
+                  から先に登録できます。
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-steel">機器</span>
+                  <div className="flex flex-wrap gap-2" role="group" aria-labelledby="registered-device-label">
+                    {devices.map((d) => (
+                      <Button
+                        key={d.device_id}
+                        type="button"
+                        size="field"
+                        variant={registeredId === d.device_id ? "default" : "outline"}
+                        className={registeredId === d.device_id ? "bg-ink font-bold text-white" : "border-hairline text-steel"}
+                        aria-label={`${d.device_name}（${d.device_id}）`}
+                        aria-pressed={registeredId === d.device_id}
+                        disabled={saving || deleting}
+                        onClick={() => {
+                          setRegisteredId(d.device_id);
+                          setAddError("");
+                        }}
+                      >
+                        {d.device_name}（{d.device_id}）
+                      </Button>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="field"
+                    variant="outline"
+                    className="border-hairline"
+                    disabled={saving || deleting || !registeredId}
+                    onClick={addRegistered}
+                  >
+                    選んだ機器を追加
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  size="field"
-                  variant="outline"
-                  className="border-hairline"
-                  disabled={saving || deleting || !registeredId}
-                  onClick={addRegistered}
-                >
-                  選んだ機器を追加
-                </Button>
-              </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -480,7 +508,7 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
               </Alert>
             )}
 
-            <div className="border border-hairline bg-panel">
+            <div className="border border-hairline bg-dial">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -505,6 +533,7 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
                         <TableCell>
                           <Input
                             aria-label={`${device.id} の機器名`}
+                            className="h-10 min-w-[160px] bg-white text-base"
                             value={device.name}
                             maxLength={64}
                             disabled={saving || deleting}
@@ -568,9 +597,9 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
         <>
           <Card className="border-hairline bg-dial">
             <CardHeader className="border-b border-hairline">
-              <CardTitle className="text-ink">スマホへ渡すルートQR（保存済みの内容）</CardTitle>
+              <CardTitle className="text-xl font-bold text-text">スマホへ渡すルートQR（保存済みの内容）</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-wrap items-start gap-4 pt-4 text-base">
+            <CardContent className="flex flex-wrap items-start gap-4 text-base">
               {detail.qr_payload !== null ? (
                 <QrCodeSvg
                   payload={detail.qr_payload}
@@ -584,9 +613,9 @@ export function RoutesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
 
           <Card className="border-hairline bg-dial">
             <CardHeader className="border-b border-hairline">
-              <CardTitle className="text-ink">ルートの削除</CardTitle>
+              <CardTitle className="text-xl font-bold text-text">ルートの削除</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4 pt-4">
+            <CardContent className="flex flex-col gap-4">
               <label className="flex items-center gap-3 text-base text-text">
                 <Checkbox
                   checked={deleteChecked}
