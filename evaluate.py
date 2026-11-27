@@ -412,8 +412,9 @@ def main(argv=None):
                               'all を指定すると全件を評価する'))
     args = parser.parse_args(argv)
     local_checks = tuple(check.strip() for check in args.local_checks.split(',') if check.strip())
-    if local_checks:
-        parser.error('--local-checks is not implemented in Stage1; leave it empty')
+    unsupported = [c for c in local_checks if c not in ('E', 'B')]
+    if unsupported:
+        parser.error(f'unsupported --local-checks: {unsupported}')
 
     with open(args.groundtruth, encoding='utf-8') as f:
         entries = json.load(f)

@@ -87,8 +87,9 @@ def read_meter(img, use_vlm=True, *, local_read=True, local_checks=(), needle_an
     """
     if needle_angle not in ('segment', 'tip'):
         raise ValueError("needle_angle must be 'segment' or 'tip'")
-    if local_checks:
-        raise ValueError('local_checks are not implemented in stages 0 and 1')
+    unsupported_checks = [check for check in local_checks if check not in ('E', 'B')]
+    if unsupported_checks:
+        raise ValueError(f'unsupported local_checks: {unsupported_checks}')
     result = {
         'stage': None,
         'value': None,
@@ -179,7 +180,8 @@ def read_meter(img, use_vlm=True, *, local_read=True, local_checks=(), needle_an
 
     if local_read or needle_angle != 'segment':
         return _read_optional(img, center, ticks, scale, numbered_points, result,
-                              local_read=local_read, needle_angle=needle_angle)
+                              local_read=local_read, local_checks=local_checks,
+                              needle_angle=needle_angle)
 
     if scale is None:
         result['stage'] = STAGE_SCALE
@@ -220,7 +222,8 @@ def read_meter(img, use_vlm=True, *, local_read=True, local_checks=(), needle_an
     return result
 
 
-def _read_optional(img, center, ticks, scale, numbered_points, result, *, local_read, needle_angle):
+def _read_optional(img, center, ticks, scale, numbered_points, result, *,
+                   local_read, local_checks=(), needle_angle='segment'):
     """局所方式・針先角度の評価経路。既定経路の結果項目には触れない。"""
     if scale is not None:
         ticks = scale.get('ticks') or ticks
@@ -255,6 +258,13 @@ def _read_optional(img, center, ticks, scale, numbered_points, result, *, local_
             numbered_points.get('bound', []), angle,
             calibration=(numbered_points.get('calibration') or (scale or {}).get('calibration')),
             tick_spacing=spacing, tick_angles=local_angles)
+        if local is not None and local_checks:
+            local, check_statuses = local_reading.check_and_fix_local(
+                numbered_points.get('bound', []), angle, local,
+                local_checks=local_checks,
+                calibration=(numbered_points.get('calibration') or (scale or {}).get('calibration')),
+                tick_spacing=spacing, tick_angles=local_angles)
+            result['local_checks'] = check_statuses
     if local is not None:
         result.update(value=local['value'], value_local=local['value'],
                       read_method='local', bracket=local['bracket'])

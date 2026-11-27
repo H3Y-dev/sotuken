@@ -129,6 +129,90 @@ class LocalPipelineTest(unittest.TestCase):
 
     def test_future_checks_and_invalid_angle_are_rejected(self):
         with self.assertRaises(ValueError):
-            meter_pipeline.read_meter(self.img, local_checks=('E',))
+            meter_pipeline.read_meter(self.img, local_checks=('C',))
+        with self.assertRaises(ValueError):
+            meter_pipeline.read_meter(self.img, local_checks=('D',))
         with self.assertRaises(ValueError):
             meter_pipeline.read_meter(self.img, needle_angle='other')
+
+    def test_local_checks_eb_pass_on_clean_scale(self):
+        # 0, 50, 100 の3点と等間隔目盛り
+        ticks = [{'angle': i * math.pi / 10} for i in range(11)]
+        self.mocks['tick_detect.detect_scale_ticks'].return_value = ticks
+        scale_ret = {
+            'zero_pt': {'angle': 0.0}, 'full_pt': {'angle': math.pi},
+            'min_value': 0, 'max_value': 100, 'source': 'ocr_tick', 'is_confident': True,
+            'ticks': ticks,
+            'calibration': [(0.0, 0), (math.pi / 2, 50), (math.pi, 100)],
+        }
+        # 針は pi/4 (値 25)
+        self.mocks['meter_reader.detect_needle'].return_value['direction'] = (math.cos(math.pi / 4), math.sin(math.pi / 4))
+        self.mocks['meter_reader.compute_reading'].return_value = {'value': 25.0, 'ratio': 0.25, 'angle_deg': 45.0}
+        with patch('meter_pipeline.scale_value_detect.detect_scale_values', return_value=scale_ret):
+            result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True, local_checks=('E', 'B'))
+        self.assertEqual(result['read_method'], 'local')
+        self.assertAlmostEqual(result['value'], 25.0)
+        self.assertEqual(result['local_checks'], {'E': 'pass', 'B': 'pass', 'C': 'off', 'D': 'off'})
+
+    def test_local_checks_eb_fixes_108_to_100(self):
+        # 0, 50, 108(誤読、本来100) の3点と等間隔目盛り
+        ticks = [{'angle': i * math.pi / 10} for i in range(11)]
+        self.mocks['tick_detect.detect_scale_ticks'].return_value = ticks
+
+        def fake_scale(img, ticks_arg, center, use_vlm=True, diagnostics_out=None, numbered_points_out=None):
+            if numbered_points_out is not None:
+                numbered_points_out.update(
+                    bound=[
+                        {'value': 0, 'angle': 0.0, 'score': 0.9},
+                        {'value': 50, 'angle': math.pi / 2, 'score': 0.9},
+                        {'value': 108, 'angle': math.pi, 'score': 0.85},
+                    ],
+                    calibration=[(0.0, 0), (math.pi / 2, 50), (math.pi, 108)],
+                    ticks=ticks,
+                )
+            return {
+                'zero_pt': {'angle': 0.0}, 'full_pt': {'angle': math.pi},
+                'min_value': 0, 'max_value': 108, 'source': 'ocr_tick', 'is_confident': True,
+                'ticks': ticks,
+                'calibration': [(0.0, 0), (math.pi / 2, 50), (math.pi, 108)],
+            }
+
+        # 針は 3*pi/4 (50と100の中間 -> 75.0)
+        self.mocks['meter_reader.detect_needle'].return_value['direction'] = (math.cos(3 * math.pi / 4), math.sin(3 * math.pi / 4))
+        self.mocks['meter_reader.compute_reading'].return_value = {'value': 81.0, 'ratio': 0.75, 'angle_deg': 135.0}
+        with patch('meter_pipeline.scale_value_detect.detect_scale_values', side_effect=fake_scale):
+            result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True, local_checks=('E', 'B'))
+        self.assertEqual(result['local_checks'], {'E': 'fixed', 'B': 'fixed', 'C': 'off', 'D': 'off'})
+        self.assertAlmostEqual(result['value_local'], 75.0)
+
+    def test_local_checks_e_only_fails_and_falls_back_to_global(self):
+        # Eのみで108を検出した場合、修正できないのでfailになり全体方式へフォールバックする
+        ticks = [{'angle': i * math.pi / 10} for i in range(11)]
+        self.mocks['tick_detect.detect_scale_ticks'].return_value = ticks
+
+        def fake_scale(img, ticks_arg, center, use_vlm=True, diagnostics_out=None, numbered_points_out=None):
+            if numbered_points_out is not None:
+                numbered_points_out.update(
+                    bound=[
+                        {'value': 0, 'angle': 0.0, 'score': 0.9},
+                        {'value': 50, 'angle': math.pi / 2, 'score': 0.9},
+                        {'value': 108, 'angle': math.pi, 'score': 0.85},
+                    ],
+                    calibration=[(0.0, 0), (math.pi / 2, 50), (math.pi, 108)],
+                    ticks=ticks,
+                )
+            return {
+                'zero_pt': {'angle': 0.0}, 'full_pt': {'angle': math.pi},
+                'min_value': 0, 'max_value': 108, 'source': 'ocr_tick', 'is_confident': True,
+                'ticks': ticks,
+                'calibration': [(0.0, 0), (math.pi / 2, 50), (math.pi, 108)],
+            }
+
+        self.mocks['meter_reader.detect_needle'].return_value['direction'] = (math.cos(3 * math.pi / 4), math.sin(3 * math.pi / 4))
+        self.mocks['meter_reader.compute_reading'].return_value = {'value': 81.0, 'ratio': 0.75, 'angle_deg': 135.0}
+        with patch('meter_pipeline.scale_value_detect.detect_scale_values', side_effect=fake_scale):
+            result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=True, local_checks=('E',))
+        self.assertEqual(result['read_method'], 'global')
+        self.assertIsNone(result['value_local'])
+        self.assertAlmostEqual(result['value'], 81.0)
+        self.assertEqual(result['local_checks'], {'E': 'fail', 'B': 'off', 'C': 'off', 'D': 'off'})
