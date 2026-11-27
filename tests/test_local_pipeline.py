@@ -36,8 +36,8 @@ class LocalPipelineTest(unittest.TestCase):
             kwargs['numbered_points_out'].update(bound=self.points)
         return self.scale
 
-    def test_default_result_exactly_preserves_original_keys_and_values(self):
-        result = meter_pipeline.read_meter(self.img, use_vlm=False)
+    def test_global_only_preserves_original_keys_and_values(self):
+        result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=False)
         expected = dict(stage='ok', value=50, ratio=.5, angle_deg=45,
                         min_value=0, max_value=100, center=(10, 10),
                         zero_pt=(15, 10), full_pt=(10, 15), n_ticks=0,
@@ -49,6 +49,12 @@ class LocalPipelineTest(unittest.TestCase):
         expected.pop('processed_img')
         self.assertEqual(result, expected)
         self.mocks['meter_reader.detect_needle'].assert_not_called()
+
+    def test_default_uses_local_read(self):
+        result = meter_pipeline.read_meter(self.img, use_vlm=False)
+        self.assertIn('value_local', result)
+        self.assertEqual(result['read_method'], 'local')
+        self.assertAlmostEqual(result['value'], 50)
 
     def test_cross_check_threshold_and_local_adoption(self):
         for global_value, flagged in ((47.5, False), (47.4999, True)):
@@ -100,7 +106,7 @@ class LocalPipelineTest(unittest.TestCase):
         self.assertFalse(result['scale_confident'])
 
     def test_tip_only_preserves_global_method(self):
-        result = meter_pipeline.read_meter(self.img, use_vlm=False, needle_angle='tip')
+        result = meter_pipeline.read_meter(self.img, use_vlm=False, local_read=False, needle_angle='tip')
         self.assertEqual(result['read_method'], 'global')
         self.assertEqual(result['value_global'], 50)
         self.assertIsNone(result['value_local'])
