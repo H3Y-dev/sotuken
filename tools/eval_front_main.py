@@ -167,7 +167,7 @@ def compute_group_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
             err = r.get("relative_error")
         if err is None:
             continue
-        pct = abs(float(err)) * 100.0
+        pct = abs(float(err))
         fs_errors.append(pct)
         if pct <= 2.5:
             within_2_5 += 1
@@ -218,8 +218,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check-qr-only", action="store_true")
     parser.add_argument("--evaluate", action="store_true")
     parser.add_argument("--no-vlm", action="store_true", default=True)
-    parser.add_argument("--local-read", dest="local_read", action="store_true", default=False)
+    parser.add_argument("--local-read", dest="local_read", action="store_true", default=True)
     parser.add_argument("--no-local-read", dest="local_read", action="store_false")
+    parser.add_argument("--local-checks", default="", help="誤読チェックをカンマ区切りで指定（例: E,B）")
     parser.add_argument("--report", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -247,6 +248,7 @@ def main(argv: list[str] | None = None) -> int:
         tmp_gt = Path(tmpdir) / "front_main_gt.json"
         tmp_gt.write_text(json.dumps(combined, ensure_ascii=False, indent=2), encoding="utf-8")
 
+        local_checks = tuple(c.strip() for c in args.local_checks.split(",") if c.strip())
         syn_rows: list[dict[str, Any]] = []
         jsw_rows: list[dict[str, Any]] = []
         for entry in combined:
@@ -255,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
                 str(REPO_ROOT),
                 use_vlm=not args.no_vlm,
                 local_read=args.local_read,
+                local_checks=local_checks,
             )
             row["dataset_group"] = entry.get("dataset_group")
             if entry.get("dataset_group") == "3d_front":

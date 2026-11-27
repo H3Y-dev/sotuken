@@ -54,7 +54,7 @@ class LocalScalePointsTest(unittest.TestCase):
     def test_stage1_cli_rejects_future_checks_before_loading_images(self):
         from evaluate import main
         with patch('sys.stderr'), self.assertRaises(SystemExit) as error:
-            main(['does-not-exist.json', '--local-checks', 'E,B'])
+            main(['does-not-exist.json', '--local-checks', 'C,D'])
         self.assertEqual(error.exception.code, 2)
 
     def test_evaluation_counts_local_successes_and_cross_check_flags(self):

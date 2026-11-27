@@ -140,8 +140,8 @@ class TestEvalFrontMain(unittest.TestCase):
 
     def test_compute_group_metrics(self) -> None:
         rows = [
-            {"value": 10.0, "reference_error": 0.01},
-            {"value": 20.0, "reference_error": 0.04},
+            {"value": 10.0, "reference_error": 1.0},
+            {"value": 20.0, "reference_error": 4.0},
             {"value": None, "reference_error": None},
         ]
         m = compute_group_metrics(rows)
