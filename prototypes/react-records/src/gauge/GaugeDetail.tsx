@@ -247,7 +247,7 @@ export function GaugeDetail({ ins, onExport, exporting, exportError, savedFile }
   const onRoute = sort(ins.meters.filter((m) => !m.offRoute));
   const extra = sort(ins.meters.filter((m) => m.offRoute));
   const unsequenced = [...onRoute, ...extra].filter((m) => m.seq === undefined);
-  const grid = "grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4";
+  const grid = "grid grid-cols-[repeat(auto-fill,minmax(min(100%,380px),1fr))] gap-4";
 
   return (
     <section className="flex flex-col gap-3 pt-2">

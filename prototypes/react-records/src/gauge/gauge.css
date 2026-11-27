@@ -52,7 +52,6 @@
   --input: var(--g-rule);
   --ring: var(--g-ink);
 
-  min-height: 100vh;
   background: var(--g-panel);
   color: var(--g-text);
   font-family: var(--g-font-text);

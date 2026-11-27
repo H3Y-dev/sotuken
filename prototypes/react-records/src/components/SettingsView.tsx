@@ -144,9 +144,9 @@ export function SettingsView({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-text">接続・設定</h2>
+          <h1 className="text-[28px] font-bold text-text">接続・設定</h1>
           <p className="text-base text-steel">
-            PC受信口・スマホ登録QR・USB自動吸い出しの状態を確認できます。
+            最初にスマホを受信口へ登録し、Wi-Fi受信・USB自動取り込みの接続状態を確認します。
           </p>
         </div>
         <Button type="button" variant="outline" size="field" onClick={() => void onRefreshRuntime()}>
@@ -202,7 +202,7 @@ export function SettingsView({
                 <dd className="g-num font-bold text-ink">{runtime?.receiver_url || "—"}</dd>
               </div>
               <div className="flex flex-wrap justify-between gap-2">
-                <dt className="text-steel">所有者ID</dt>
+                <dt className="text-steel">起動セッションID</dt>
                 <dd className="g-num text-text" data-testid="owner-instance-id">
                   {runtime?.owner_instance_id || "—"}
                 </dd>

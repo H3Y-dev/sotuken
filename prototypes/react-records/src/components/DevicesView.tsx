@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { RefreshCw, SquareX } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -233,7 +232,6 @@ export function DevicesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [formValues, setFormValues] = useState<FormValues>(EMPTY_FORM);
@@ -300,15 +298,6 @@ export function DevicesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
     }
   };
 
-  const toggleSelect = (deviceId: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(deviceId);
-      else next.delete(deviceId);
-      return next;
-    });
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!formMode || saving) return;
@@ -351,9 +340,17 @@ export function DevicesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
   return (
     <section className="devices" aria-labelledby="devices-heading">
       <div className="devices-header">
-        <h1 id="devices-heading" className="devices-title">
-          機器登録
-        </h1>
+        <div>
+          <h1 id="devices-heading" className="devices-title">
+            機器登録
+          </h1>
+          <p className="mt-1 text-base text-steel">
+            メーターのID・名前・単位・目盛り範囲・許容範囲を登録します（ここで登録した内容を『ルート』や『点検確認』で使います）。{" "}
+            <a href="#routes" className="font-bold text-ink underline underline-offset-4">
+              登録後は「ルート」で巡回順を設定できます
+            </a>
+          </p>
+        </div>
         <div className="devices-actions">
           <Button
             type="button"
@@ -606,7 +603,6 @@ export function DevicesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>選択</TableHead>
               <TableHead>機器ID</TableHead>
               <TableHead>機器名</TableHead>
               <TableHead>単位</TableHead>
@@ -618,26 +614,19 @@ export function DevicesView({ onAuthExpired }: { onAuthExpired?: () => void }) {
           <TableBody>
             {loading && devices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="devices-empty">
+                <TableCell colSpan={6} className="devices-empty">
                   読み込み中
                 </TableCell>
               </TableRow>
             ) : devices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="devices-empty">
+                <TableCell colSpan={6} className="devices-empty">
                   登録済みの機器はありません
                 </TableCell>
               </TableRow>
             ) : (
               devices.map((d) => (
                 <TableRow key={d.device_id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(d.device_id)}
-                      onCheckedChange={(checked) => toggleSelect(d.device_id, checked === true)}
-                      aria-label={`${d.device_id} を選択`}
-                    />
-                  </TableCell>
                   <TableCell className="devices-num">{d.device_id}</TableCell>
                   <TableCell>{d.device_name}</TableCell>
                   <TableCell className={d.unit === null ? "devices-muted" : undefined}>

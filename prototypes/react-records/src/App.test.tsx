@@ -255,7 +255,7 @@ describe("点検確認", () => {
     await click(/対処が必要/);
     expect(container.textContent).not.toContain("点検 A");
     expect(container.textContent).not.toContain("点検はありません");
-    expect(button("次のページ").disabled).toBe(true);
+    expect(container.querySelectorAll("button").find((el) => el.textContent.trim() === "次のページ")).toBeUndefined();
     await click("再試行");
     expect(fetchInspections).toHaveBeenLastCalledWith("action", 50, undefined, expect.any(AbortSignal));
     expect(container.textContent).toContain("点検 C");
@@ -317,7 +317,7 @@ describe("点検確認", () => {
     location.hash = `${baseHash}/A`;
     await render();
     expect(container.textContent).toContain("点検 A");
-    const back = container.querySelectorAll("a").find((el) => el.textContent.trim() === "一覧へ戻る");
+    const back = container.querySelectorAll("a").find((el) => el.textContent.trim() === "点検の一覧へ戻る");
     expect(back?.getAttribute("href")).toBe("#/gauge");
     await go(back!.getAttribute("href")!);
     expect(location.hash).toBe("#/gauge");
@@ -415,7 +415,7 @@ describe("点検確認", () => {
   it("#manual 直リンクと「手動読み取り」ボタンで手動読み取り画面を表示する", async () => {
     location.hash = "#manual";
     await render();
-    expect(container.textContent).toContain("画像から読み取る");
+    expect(container.textContent).toContain("手元の画像1枚をその場でテスト読み取り");
     expect(container.querySelector("#manual-device-name")).not.toBeNull();
     expect(button("手動読み取り").getAttribute("aria-current")).toBe("page");
 
@@ -427,7 +427,7 @@ describe("点検確認", () => {
     await click("手動読み取り");
     await hashChanged();
     expect(location.hash).toBe("#manual");
-    expect(container.textContent).toContain("画像から読み取る");
+    expect(container.textContent).toContain("手元の画像1枚をその場でテスト読み取り");
     expect(button("手動読み取り").getAttribute("aria-current")).toBe("page");
   });
 

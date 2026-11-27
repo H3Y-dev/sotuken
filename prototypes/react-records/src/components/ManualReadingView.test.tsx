@@ -137,6 +137,9 @@ describe("ManualReadingView", () => {
 
   it("既定値でフォームを表示し、画像が選ばれるまで送信ボタンを無効にする", async () => {
     await mount();
+    expect(container.textContent).toContain("手動読み取り");
+    expect(container.textContent).toContain("手元の画像1枚をその場でテスト読み取りし、検出オーバーレイと判定を確認します。");
+    expect(container.textContent).toContain("対応形式: JPEG / PNG");
     expect((container.querySelector("#manual-device-name") as FakeElement).value).toBe("Gauge_01");
     expect((container.querySelector("#manual-threshold-min") as FakeElement).value).toBe("0");
     expect((container.querySelector("#manual-threshold-max") as FakeElement).value).toBe("40");
@@ -198,11 +201,16 @@ describe("ManualReadingView", () => {
     expect(formData.get("threshold_max")).toBe("30");
     expect(formData.get("image")).toBe(file);
     expect(container.textContent).toContain("読み取り結果");
+    expect(container.textContent).toContain("正常");
     expect(container.textContent).toContain("21.50");
     expect(container.textContent).toContain("測定値は設定した範囲内です。");
     expect(byAlt(container, "検出結果オーバーレイ")?.getAttribute("src")).toBe(
       "/api/v1/images/overlay-1",
     );
+
+    await act(async () => findByText(container, "クリア").click());
+    expect(container.querySelector('[data-testid="manual-result"]')).toBeNull();
+    expect(findByText(container, "読み取る").disabled).toBe(true);
   });
 
   it("送信中はボタンを無効にし「読み取り中…」を表示する", async () => {
@@ -232,7 +240,7 @@ describe("ManualReadingView", () => {
     await submit();
     expect(container.textContent).toContain("設定した範囲を外れています: 上限閾値 (40) を超過しています！");
     expect(container.textContent).not.toContain("測定値は設定した範囲内です。");
-    expect(container.textContent).toContain("low_confidence");
+    expect(container.textContent).toContain("正常");
     expect(container.textContent).toContain("55.00");
   });
 

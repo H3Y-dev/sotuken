@@ -59,7 +59,7 @@ function Row({ ins }: { ins: Inspection }) {
       <a href={`#/gauge/${encodeURIComponent(ins.id)}`} className="group block rounded-lg no-underline">
         <Card
           data-kind={kind}
-          className="g-edge grid grid-cols-[104px_minmax(240px,1fr)_360px_130px_190px_24px] items-center gap-x-6 rounded-lg px-5 py-4 text-base ring-hairline group-hover:ring-ink"
+          className="g-edge grid grid-cols-1 items-center gap-x-6 gap-y-3 rounded-lg px-5 py-4 text-base ring-hairline group-hover:ring-ink md:grid-cols-[104px_minmax(240px,1fr)_minmax(200px,360px)_130px_190px_24px]"
         >
           <div className="flex flex-col">
             <span className="text-steel">{day(ins.startedAt)}</span>
@@ -87,12 +87,12 @@ function Row({ ins }: { ins: Inspection }) {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <ul className="flex gap-1" aria-label="機器ごとの結果">
+          <div className="flex flex-wrap items-center gap-3">
+            <ul className="flex flex-wrap gap-1" aria-label="機器ごとの結果">
               {route.map(dial)}
             </ul>
             {extra.length > 0 && (
-              <ul className="flex gap-1 border-l-2 border-dashed border-rule pl-3" aria-label="ルート外の機器">
+              <ul className="flex flex-wrap gap-1 border-l-2 border-dashed border-rule pl-3" aria-label="ルート外の機器">
                 {extra.map(dial)}
               </ul>
             )}
@@ -130,12 +130,12 @@ export function GaugeHome({ items = [], filter = "all", onFilterChange, totals, 
   const list = items;
 
   return (
-    <section className="flex flex-col gap-5 pt-8">
+    <section className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-[28px] leading-tight font-bold">点検の一覧</h1>
           <p className="text-steel">
-            新しい順。抜け・要確認がある点検は左端に印が付きます。文字盤は1台ずつの結果です。
+            巡回点検ごとの撮影・到着・読み取り・記録の揃い具合を確認し、抜けや要確認に対処します。
           </p>
         </div>
         <ToggleGroup
@@ -158,7 +158,22 @@ export function GaugeHome({ items = [], filter = "all", onFilterChange, totals, 
           <Row key={ins.id} ins={ins} />
         ))}
       </ul>
-      {showEmpty && list.length === 0 && <p role="status">点検はありません</p>}
+      {showEmpty && list.length === 0 && (
+        <div role="status" className="flex flex-col gap-2 rounded-lg border border-hairline bg-card px-5 py-6 text-base text-steel">
+          <p className="font-bold text-ink">点検はありません</p>
+          <p>
+            スマホの受信設定は{" "}
+            <a href="#settings" className="font-bold text-ink underline underline-offset-4">
+              接続・設定
+            </a>
+            、巡回ルートの準備は{" "}
+            <a href="#routes" className="font-bold text-ink underline underline-offset-4">
+              ルート
+            </a>{" "}
+            から行えます。
+          </p>
+        </div>
+      )}
     </section>
   );
 }

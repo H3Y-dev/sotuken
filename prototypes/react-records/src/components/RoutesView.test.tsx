@@ -167,6 +167,15 @@ describe("RoutesView", () => {
       .map((b) => b.textContent.trim());
     expect(options).toEqual(["新規作成", "Aライン（2台）", "Bライン（1台）"]);
     expect(container.textContent).toContain("ルート");
+    expect(container.textContent).toContain("「機器登録」済みのメーターを巡回順に並べてルートを作成し、スマホ読み取り用のルートQRを発行します。");
+  });
+
+  it("登録済み機器が0件のときは #devices への案内を表示する", async () => {
+    mockApi.listDevices.mockResolvedValue([]);
+    await mount();
+    expect(container.textContent).toContain("登録済みの機器がありません。「機器登録」から先に登録できます。");
+    const link = container.querySelectorAll("a").find((a) => a.getAttribute("href") === "#devices");
+    expect(link).toBeDefined();
   });
 
   it("ルートを選択すると詳細を取得し、QR・ルートID・更新時刻を表示する", async () => {
@@ -271,7 +280,7 @@ describe("RoutesView", () => {
       devices: [{ id: "D-01", name: "冷却水温" }],
     });
     expect(mockApi.listRoutes).toHaveBeenCalledTimes(2);
-    expect(container.querySelectorAll("button").find((b) => b.textContent.trim() === "新ルート（1台）")?.getAttribute("aria-current")).toBe("true");
+    expect(container.querySelectorAll("button").find((b) => b.textContent.trim() === "新ルート（1台）")?.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).toContain("ルート「新ルート」を保存しました。");
   });
 
@@ -326,7 +335,7 @@ describe("RoutesView", () => {
 
     await click("ルートを削除");
     expect(mockApi.deleteRoute).toHaveBeenCalledWith("route-a");
-    expect(container.querySelectorAll("button").find((b) => b.textContent.trim() === "新規作成")?.getAttribute("aria-current")).toBe("true");
+    expect(container.querySelectorAll("button").find((b) => b.textContent.trim() === "新規作成")?.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).toContain("ルートを削除しました。");
     expect(container.querySelector('[data-testid="route-qr"]')).toBeNull();
   });
