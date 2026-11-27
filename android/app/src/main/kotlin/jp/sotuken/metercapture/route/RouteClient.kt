@@ -12,6 +12,20 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 
 data class RouteSummary(val routeId: String, val name: String, val count: Int, val updatedAt: String)
+data class RemoteDevice(val deviceId: String, val deviceName: String?, val unit: String? = null)
+
+fun parseDeviceList(text: String): List<RemoteDevice>? = runCatching {
+    val obj = Json.parseToJsonElement(text).jsonObject
+    val version = obj.getValue("v").jsonPrimitive
+    require(!version.isString && version.doubleOrNull == 1.0)
+    obj.getValue("devices").jsonArray.mapNotNull { element ->
+        val row = element.jsonObject
+        val id = row["device_id"]?.jsonPrimitive?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val name = row["device_name"]?.jsonPrimitive?.takeIf { it.isString }?.content?.let { normalizeInspectionText(it) }
+        val unit = row["unit"]?.jsonPrimitive?.takeIf { it.isString }?.content?.let { normalizeInspectionText(it) }
+        RemoteDevice(id, name, unit)
+    }.distinctBy { it.deviceId }
+}.getOrNull()
 
 fun parseRouteList(text: String): List<RouteSummary>? = runCatching {
     val obj = Json.parseToJsonElement(text).jsonObject
@@ -30,6 +44,7 @@ fun parseRouteList(text: String): List<RouteSummary>? = runCatching {
 class RouteClient(private val baseUrl: String, private val token: String,
     private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }) {
     suspend fun listRoutes(): Result<List<RouteSummary>> = request("/routes") { parseRouteList(it) }
+    suspend fun listDevices(): Result<List<RemoteDevice>> = request("/devices") { parseDeviceList(it) }
 
     suspend fun fetchRoute(routeId: String): Result<RouteDoc> {
         if (!INSPECTION_ID_PATTERN.matches(routeId)) return Result.failure(IllegalArgumentException("ルートの内容が正しくありません"))

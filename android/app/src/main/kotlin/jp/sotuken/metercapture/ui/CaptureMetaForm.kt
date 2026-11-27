@@ -51,6 +51,7 @@ internal fun CaptureMetaForm(
     operatorValue: String,
     onOperatorValueChange: (String) -> Unit,
     deviceNameCandidates: List<String>,
+    showOperatorValue: Boolean = false,
 ) {
     val isOperatorValueInvalid = operatorValue.isNotEmpty() && parseOperatorValue(operatorValue) == null
 
@@ -72,24 +73,26 @@ internal fun CaptureMetaForm(
                 onValueChange = onDeviceNameChange,
                 label = { Text("機器名（任意）") },
                 singleLine = true,
-                modifier = Modifier.weight(2f),
+                modifier = if (showOperatorValue) Modifier.weight(2f) else Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
-                value = operatorValue,
-                onValueChange = { text ->
-                    if (isOperatorValueInput(text)) onOperatorValueChange(text)
-                },
-                label = { Text("真値（任意）") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = isOperatorValueInvalid,
-                supportingText = if (isOperatorValueInvalid) {
-                    { Text("数値ではないため、真値なしで保存されます") }
-                } else {
-                    null
-                },
-                modifier = Modifier.weight(1f),
-            )
+            if (showOperatorValue) {
+                OutlinedTextField(
+                    value = operatorValue,
+                    onValueChange = { text ->
+                        if (isOperatorValueInput(text)) onOperatorValueChange(text)
+                    },
+                    label = { Text("真値（任意）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = isOperatorValueInvalid,
+                    supportingText = if (isOperatorValueInvalid) {
+                        { Text("数値ではないため、真値なしで保存されます") }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         if (suggestions.isNotEmpty()) {

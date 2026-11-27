@@ -180,6 +180,16 @@ fun InspectionApp(queueStore: QueueStore, inspectionStore: InspectionStore, rout
                                 onHistory = { history(inspection.inspectionId) }, onComplete = { open(AppScreen.Complete(inspection.inspectionId)) }, onHome = { home() },
                                 allPhotos = photos,
                                 onPhotoClick = { selectedPhoto = it },
+                                onLoadRemoteDevices = {
+                                    val sendTarget = settings.sendTarget()
+                                    if (!sendTarget.isConfigured()) Result.failure(IllegalStateException("PCに接続できません"))
+                                    else {
+                                        val token = sendTarget.token.orEmpty()
+                                        val candidates = sendTarget.candidateUrls
+                                        val reachable = pickReachableUrl(candidates) { HttpSender.health(it, token) }
+                                        RouteClient(reachable.url ?: candidates.first(), token).listDevices()
+                                    }
+                                },
                             )
                             LaunchedEffect(pendingTarget) {
                                 if (pendingTarget != null) { pendingId = null; pendingName = null; pendingSource = null }
