@@ -412,6 +412,25 @@ describe("点検確認", () => {
     expect(button("ルート").getAttribute("aria-current")).toBe("page");
   });
 
+  it("#manual 直リンクと「手動読み取り」ボタンで手動読み取り画面を表示する", async () => {
+    location.hash = "#manual";
+    await render();
+    expect(container.textContent).toContain("画像から読み取る");
+    expect(container.querySelector("#manual-device-name")).not.toBeNull();
+    expect(button("手動読み取り").getAttribute("aria-current")).toBe("page");
+
+    await click("ルート");
+    await hashChanged();
+    expect(location.hash).toBe("#routes");
+    expect(button("手動読み取り").getAttribute("aria-current")).toBeNull();
+
+    await click("手動読み取り");
+    await hashChanged();
+    expect(location.hash).toBe("#manual");
+    expect(container.textContent).toContain("画像から読み取る");
+    expect(button("手動読み取り").getAttribute("aria-current")).toBe("page");
+  });
+
   it("production CSS keeps the needle pivot and segmented progress rules", () => {
     const outDir = mkdtempSync(join(tmpdir(), "gauge-css-"));
     try {

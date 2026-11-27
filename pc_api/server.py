@@ -145,7 +145,8 @@ def _is_json_content_type(header_value):
 
 class PCAPI:
     def __init__(self, db_path='manager.db', *, incoming_dir=None, image_dirs=(), static_dir=None,
-                 owner_port=8767, internal_key='', port=8766, clock=time.monotonic):
+                 owner_port=8767, internal_key='', port=8766, clock=time.monotonic,
+                 images_dir=None, overlays_dir=None, reader_func=None):
         self.storage = ReadOnlyStorage(db_path)
         self.incoming_dir = Path(incoming_dir).resolve() if incoming_dir is not None and str(incoming_dir).strip() else None
         self.image_dirs = tuple(Path(p).resolve() for p in image_dirs if str(p).strip())
@@ -154,6 +155,11 @@ class PCAPI:
             raise ValueError('image_dirs must be non-empty paths (incoming, images, overlays).')
         if any(root == root.parent for root in self.image_dirs):
             raise ValueError('A drive/filesystem root is not allowed as an image root.')
+        self.images_dir = (Path(images_dir).resolve() if images_dir is not None
+                           else self._default_image_root('images'))
+        self.overlays_dir = (Path(overlays_dir).resolve() if overlays_dir is not None
+                             else self._default_image_root('overlays'))
+        self.reader_func = reader_func
         self.static_dir = Path(static_dir).resolve() if static_dir else None
         self.owner_port, self.internal_key, self.port = owner_port, internal_key, port
         self.sessions = SessionStore(clock=clock)
@@ -161,6 +167,12 @@ class PCAPI:
         # Separate role namespace: API and owner may share a DB, two APIs may not.
         self.lock = OwnerLock(self.storage.path, str(self.storage.path) + '.pc-api')
         self.httpd = self.thread = None
+
+    def _default_image_root(self, name):
+        for root in self.image_dirs:
+            if root.name == name:
+                return root
+        return self.image_dirs[0]
 
     def _require_same_origin(self, headers):
         if headers.get_all('Origin', []) != [f'http://127.0.0.1:{self.port}']:
@@ -170,7 +182,7 @@ class PCAPI:
         if not _is_json_content_type(headers.get('Content-Type')):
             raise APIError(400, 'invalid_request')
 
-    def authenticate_session(self, headers, method):
+    def authenticate_session(self, headers, method, *, require_json=True):
         """Validate session cookie, and for mutating methods also Origin, CSRF, and JSON Content-Type."""
         if 'X-Sotuken-Token' in headers:
             raise APIError(401, 'unauthenticated')
@@ -183,7 +195,7 @@ class PCAPI:
             csrf_headers = headers.get_all('X-CSRF-Token', [])
             if len(csrf_headers) != 1 or not self.sessions.verify_csrf(session_id, csrf_headers[0]):
                 raise APIError(403, 'forbidden_origin')
-            if method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            if require_json and method in ('POST', 'PUT', 'PATCH', 'DELETE'):
                 self._require_json_content_type(headers)
         return session_id, csrf_token
 
@@ -307,6 +319,11 @@ class PCAPI:
             from pc_api.route_routes import dispatch_routes
             storage = _DeviceReadStorage(self.storage) if method == 'GET' else _DeviceWriteStorage(self.storage.path)
             return dispatch_routes(storage, method, path, body)
+        if path == '/api/v1/manual-readings':
+            if url.query or method != 'POST':
+                raise APIError(400, 'invalid_request')
+            from pc_api.manual_routes import dispatch_manual_reading
+            return dispatch_manual_reading(self, body)
         if method != 'GET':
             raise APIError(400, 'invalid_request')
         if path in ('/api/v1/runtime', '/api/v1/usb/status'):
@@ -390,7 +407,10 @@ class PCAPI:
                         (parsed_url.path == '/api/v1/routes' and self.command == 'POST')
                         or (parsed_url.path.startswith('/api/v1/routes/') and self.command == 'PUT')
                     )
-                    max_body_bytes = (65536 if is_route_write else 16384 if is_device_write
+                    is_manual_upload = (
+                        parsed_url.path == '/api/v1/manual-readings' and self.command == 'POST')
+                    max_body_bytes = (20 * 1024 * 1024 if is_manual_upload
+                                      else 65536 if is_route_write else 16384 if is_device_write
                                       else 4096 if is_csv_write else 1024)
                     if int(length) > max_body_bytes:
                         raise APIError(413, 'too_large')
@@ -443,8 +463,16 @@ class PCAPI:
                         request_body = None
                         session_id = None
                         if parsed_url.path.startswith('/api/'):
-                            session_id, _ = api.authenticate_session(self.headers, self.command)
-                            if is_device_write or is_csv_write or is_route_write:
+                            session_id, _ = api.authenticate_session(
+                                self.headers, self.command, require_json=not is_manual_upload)
+                            if is_manual_upload:
+                                content_type = self.headers.get('Content-Type', '')
+                                if not content_type.lower().startswith('multipart/form-data'):
+                                    raise APIError(400, 'invalid_request')
+                                raw = self.rfile.read(int(length))
+                                body_read = len(raw)
+                                request_body = (content_type, raw)
+                            elif is_device_write or is_csv_write or is_route_write:
                                 request_body = read_json_body()
                             elif self.command in ('POST', 'PUT', 'PATCH', 'DELETE') or int(length):
                                 if read_json_body() != {}:
@@ -554,6 +582,7 @@ def main():
     try:
         api = PCAPI(args.db, incoming_dir=args.incoming_dir,
                     image_dirs=[args.incoming_dir, args.images_dir, args.overlays_dir],
+                    images_dir=args.images_dir, overlays_dir=args.overlays_dir,
                     static_dir=args.static_dir, owner_port=args.owner_port, port=args.port,
                     internal_key=Path(args.internal_key_file).read_text(encoding='utf-8').strip())
     except ValueError as exc:

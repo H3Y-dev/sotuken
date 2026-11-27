@@ -4,6 +4,7 @@ import type {
   Filters,
   InspectionListPage,
   InspectionProgress,
+  ManualReadingResult,
   Page,
   PairingStatus,
   Reading,
@@ -146,6 +147,29 @@ async function apiJson<T>(
 ): Promise<T> {
   const res = await apiRequest(path, options);
   return (await res.json()) as T;
+}
+
+export function imageUrl(imageId: string): string {
+  return `/api/v1/images/${encodeURIComponent(imageId)}`;
+}
+
+export async function submitManualReading(
+  formData: FormData,
+  signal?: AbortSignal,
+): Promise<ManualReadingResult> {
+  const headers: Record<string, string> = {};
+  if (csrfToken) {
+    headers["X-CSRF-Token"] = csrfToken;
+  }
+  const res = await fetch("/api/v1/manual-readings", {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+    signal,
+  });
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as ManualReadingResult;
 }
 
 export async function downloadInspectionCsv(id: string, save = false, signal?: AbortSignal): Promise<{ blob: Blob; name: string }> {

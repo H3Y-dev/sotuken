@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Cog, RefreshCw, SquareX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DevicesView } from "@/components/DevicesView";
+import { ManualReadingView } from "@/components/ManualReadingView";
 import { OverlayPreview } from "@/components/OverlayPreview";
 import { RecordsView } from "@/components/RecordsView";
 import { RoutesView } from "@/components/RoutesView";
@@ -24,13 +25,14 @@ import { GaugeDetail } from "@/gauge/GaugeDetail";
 import "@/gauge/gauge.css";
 import { toInspection, toMeter, type Inspection } from "@/gauge/model";
 
-type Tab = "records" | "devices" | "routes" | "settings" | "gauge";
+type Tab = "records" | "devices" | "routes" | "manual" | "settings" | "gauge";
 
 function tabFromHash(hash: string): Tab {
   if (hash.startsWith("#/gauge")) return "gauge";
   if (hash === "#settings") return "settings";
   if (hash === "#devices") return "devices";
   if (hash === "#routes") return "routes";
+  if (hash === "#manual") return "manual";
   return "records";
 }
 
@@ -134,7 +136,7 @@ export default function App() {
   }, []);
 
   const switchTab = (next: Tab) => {
-    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : next === "routes" ? "#routes" : next === "gauge" ? "#/gauge" : "#";
+    const target = next === "settings" ? "#settings" : next === "devices" ? "#devices" : next === "routes" ? "#routes" : next === "manual" ? "#manual" : next === "gauge" ? "#/gauge" : "#";
     if (window.location.hash !== target) {
       setSelected(null);
       window.location.hash = target;
@@ -393,6 +395,20 @@ export default function App() {
               <Button
                 type="button"
                 size="field"
+                variant={tab === "manual" ? "secondary" : "ghost"}
+                aria-current={tab === "manual" ? "page" : undefined}
+                className={
+                  tab === "manual"
+                    ? "border border-hairline font-bold text-ink"
+                    : "text-steel"
+                }
+                onClick={() => switchTab("manual")}
+              >
+                手動読み取り
+              </Button>
+              <Button
+                type="button"
+                size="field"
                 variant={tab === "settings" ? "secondary" : "ghost"}
                 aria-current={tab === "settings" ? "page" : undefined}
                 className={
@@ -510,6 +526,8 @@ export default function App() {
           <DevicesView onAuthExpired={() => setAuthExpired(true)} />
         ) : tab === "routes" ? (
           <RoutesView onAuthExpired={() => setAuthExpired(true)} />
+        ) : tab === "manual" ? (
+          <ManualReadingView onAuthExpired={() => setAuthExpired(true)} />
         ) : (
           <SettingsView
             runtime={runtime}
