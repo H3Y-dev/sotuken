@@ -156,3 +156,29 @@ export interface Device extends DeviceInput {
   device_id: string;
   provisional: boolean;
 }
+
+export interface RouteDevice {
+  id: string;
+  name: string;
+}
+
+export interface RouteSummary {
+  route_id: string;
+  name: string;
+  count: number;
+  updated_at: string;
+}
+
+export interface RouteDetail {
+  v?: number;
+  route_id: string;
+  name: string;
+  devices: RouteDevice[];
+  updated_at: string;
+  qr_payload: string | null;
+}
+
+export interface RouteInput {
+  name: string;
+  devices: RouteDevice[];
+}
